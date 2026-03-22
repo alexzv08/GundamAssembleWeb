@@ -1,5 +1,5 @@
-import { GameState, GameAction, PlayerId, Unit } from '../types'
-import { hexKey, hexDistance, findPath, getReachableHexes, checkLineOfSight } from './hexGrid'
+import type { GameState, GameAction, PlayerId, Unit } from '../types'
+import  { hexKey, hexDistance, findPath, getReachableHexes, checkLineOfSight } from './hexGrid'
 import { advanceToken, getNextActivation } from './timeline'
 
 // ─── RESULTADO DE UNA ACCIÓN ──────────────────────────────────────────────────

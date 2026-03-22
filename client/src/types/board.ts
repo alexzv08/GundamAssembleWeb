@@ -1,5 +1,4 @@
-import { TerrainType, Unit } from './units'
-import { HexCoord } from './units'
+import type { TerrainType, HexCoord } from './units'
 
 // Un hexágono del tablero
 export interface Hex {

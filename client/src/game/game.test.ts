@@ -7,7 +7,10 @@ import {
   advanceToken, getUnitRound, resetForPhase2, reorderSlotForTie
 } from './timeline'
 import { BoardMap } from '../types'
-
+import {
+  checkGameOver, resolveObjectiveControl,
+  transitionToPhase2, awardObjectiveVP
+} from './victory'
 // ─── BOARD DE PRUEBA ──────────────────────────────────────────────────────────
 function makeBoard(): BoardMap {
   const board: BoardMap = {}
@@ -262,5 +265,257 @@ describe('applyDash', () => {
     const result = applyDash(state, 'rx78', { q: -1, r: 0 }, 'player1')
     expect(result.success).toBe(true)
     expect(result.newState!.units['rx78'].position).toEqual({ q: -1, r: 0 })
+  })
+})
+
+// ─── VICTORY ──────────────────────────────────────────────────────────────────
+describe('checkGameOver', () => {
+  it('no termina si ambos jugadores tienen unidades', () => {
+    const state = makeGameState()
+    expect(checkGameOver(state).isOver).toBe(false)
+  })
+
+  it('gana player1 si player2 no tiene unidades vivas', () => {
+    const state = makeGameState()
+    state.units['zaku2'].currentHp = 0
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBe('player1')
+  })
+
+  it('gana player2 si player1 no tiene unidades vivas', () => {
+    const state = makeGameState()
+    state.units['rx78'].currentHp = 0
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBe('player2')
+  })
+
+  it('empate si ambos sin unidades', () => {
+    const state = makeGameState()
+    state.units['rx78'].currentHp  = 0
+    state.units['zaku2'].currentHp = 0
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBeNull()
+  })
+
+  it('gana por VP al acabar fase 2', () => {
+    const state = makeGameState()
+    state.phase = 'phase2'
+    state.players.player1.vp = 6
+    state.players.player2.vp = 3
+    // Vaciar el timeline para simular fin de fase
+    state.timeline = createEmptyTimeline()
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBe('player1')
+  })
+
+  it('empate por VP al acabar fase 2', () => {
+    const state = makeGameState()
+    state.phase = 'phase2'
+    state.players.player1.vp = 5
+    state.players.player2.vp = 5
+    state.timeline = createEmptyTimeline()
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBeNull()
+  })
+})
+
+describe('resolveObjectiveControl', () => {
+  it('player1 controla objetivo si tiene más unidades adyacentes', () => {
+    const state = makeGameState()
+
+    // Añadir objetivo en hex (1,0)
+    state.board['1,0'] = {
+      coord: { q: 1, r: 0 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null,
+      upgradeToken: null, garrisonToken: null,
+      objectiveToken: { id: 'obj1', vpValue: 2, controlledBy: null }
+    }
+
+    // rx78 está en (0,0) — adyacente a (1,0)
+    // zaku2 está en (2,0) — también adyacente a (1,0)
+    // Empate → nadie controla
+
+    const { results } = resolveObjectiveControl(state)
+    expect(results[0].controlledBy).toBeNull()
+  })
+
+  it('player1 controla si tiene más unidades', () => {
+    const state = makeGameState()
+
+    // Objetivo en (0,1)
+    state.board['0,1'] = {
+      coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null,
+      upgradeToken: null, garrisonToken: null,
+      objectiveToken: { id: 'obj2', vpValue: 3, controlledBy: null }
+    }
+
+    // rx78 en (0,0) → adyacente a (0,1) ✓
+    // zaku2 en (2,0) → NO adyacente a (0,1)
+    const { results } = resolveObjectiveControl(state)
+    expect(results[0].controlledBy).toBe('player1')
+  })
+})
+
+describe('transitionToPhase2', () => {
+  it('cambia la fase a phase2', () => {
+    const state = makeGameState()
+    const newState = transitionToPhase2(state)
+    expect(newState.phase).toBe('phase2')
+  })
+
+  it('resetea el timeline', () => {
+    const state = makeGameState()
+    const newState = transitionToPhase2(state)
+    // rx78 tiene startingTl=2, debe volver al round 2
+    expect(getUnitRound(newState.timeline, 'rx78')).toBe(2)
+  })
+})
+
+describe('awardObjectiveVP', () => {
+  it('otorga VP al jugador que controla el objetivo', () => {
+    const state = makeGameState()
+
+    state.board['0,1'] = {
+      coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null, upgradeToken: null, garrisonToken: null,
+      objectiveToken: { id: 'obj1', vpValue: 3, controlledBy: 'player1' }
+    }
+
+    const { newState, vpAwarded } = awardObjectiveVP(state)
+    expect(vpAwarded.player1).toBe(3)
+    expect(vpAwarded.player2).toBe(0)
+    expect(newState.players.player1.vp).toBe(3)
+  })
+})
+
+// ─── VICTORY ──────────────────────────────────────────────────────────────────
+describe('checkGameOver', () => {
+  it('no termina si ambos jugadores tienen unidades', () => {
+    const state = makeGameState()
+    expect(checkGameOver(state).isOver).toBe(false)
+  })
+
+  it('gana player1 si player2 no tiene unidades vivas', () => {
+    const state = makeGameState()
+    state.units['zaku2'].currentHp = 0
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBe('player1')
+  })
+
+  it('gana player2 si player1 no tiene unidades vivas', () => {
+    const state = makeGameState()
+    state.units['rx78'].currentHp = 0
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBe('player2')
+  })
+
+  it('empate si ambos sin unidades', () => {
+    const state = makeGameState()
+    state.units['rx78'].currentHp  = 0
+    state.units['zaku2'].currentHp = 0
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBeNull()
+  })
+
+  it('gana por VP al acabar fase 2', () => {
+    const state = makeGameState()
+    state.phase = 'phase2'
+    state.players.player1.vp = 6
+    state.players.player2.vp = 3
+    // Vaciar el timeline para simular fin de fase
+    state.timeline = createEmptyTimeline()
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBe('player1')
+  })
+
+  it('empate por VP al acabar fase 2', () => {
+    const state = makeGameState()
+    state.phase = 'phase2'
+    state.players.player1.vp = 5
+    state.players.player2.vp = 5
+    state.timeline = createEmptyTimeline()
+    const result = checkGameOver(state)
+    expect(result.isOver).toBe(true)
+    expect(result.winner).toBeNull()
+  })
+})
+
+describe('resolveObjectiveControl', () => {
+  it('player1 controla objetivo si tiene más unidades adyacentes', () => {
+    const state = makeGameState()
+
+    // Añadir objetivo en hex (1,0)
+    state.board['1,0'] = {
+      coord: { q: 1, r: 0 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null,
+      upgradeToken: null, garrisonToken: null,
+      objectiveToken: { id: 'obj1', vpValue: 2, controlledBy: null }
+    }
+
+    // rx78 está en (0,0) — adyacente a (1,0)
+    // zaku2 está en (2,0) — también adyacente a (1,0)
+    // Empate → nadie controla
+
+    const { results } = resolveObjectiveControl(state)
+    expect(results[0].controlledBy).toBeNull()
+  })
+
+  it('player1 controla si tiene más unidades', () => {
+    const state = makeGameState()
+
+    // Objetivo en (0,1)
+    state.board['0,1'] = {
+      coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null,
+      upgradeToken: null, garrisonToken: null,
+      objectiveToken: { id: 'obj2', vpValue: 3, controlledBy: null }
+    }
+
+    // rx78 en (0,0) → adyacente a (0,1) ✓
+    // zaku2 en (2,0) → NO adyacente a (0,1)
+    const { results } = resolveObjectiveControl(state)
+    expect(results[0].controlledBy).toBe('player1')
+  })
+})
+
+describe('transitionToPhase2', () => {
+  it('cambia la fase a phase2', () => {
+    const state = makeGameState()
+    const newState = transitionToPhase2(state)
+    expect(newState.phase).toBe('phase2')
+  })
+
+  it('resetea el timeline', () => {
+    const state = makeGameState()
+    const newState = transitionToPhase2(state)
+    // rx78 tiene startingTl=2, debe volver al round 2
+    expect(getUnitRound(newState.timeline, 'rx78')).toBe(2)
+  })
+})
+
+describe('awardObjectiveVP', () => {
+  it('otorga VP al jugador que controla el objetivo', () => {
+    const state = makeGameState()
+
+    state.board['0,1'] = {
+      coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null, upgradeToken: null, garrisonToken: null,
+      objectiveToken: { id: 'obj1', vpValue: 3, controlledBy: 'player1' }
+    }
+
+    const { newState, vpAwarded } = awardObjectiveVP(state)
+    expect(vpAwarded.player1).toBe(3)
+    expect(vpAwarded.player2).toBe(0)
+    expect(newState.players.player1.vp).toBe(3)
   })
 })

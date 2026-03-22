@@ -1,7 +1,7 @@
-import { Unit } from './units'
-import { BoardMap } from './board'
-import { Timeline } from './timeline'
-import { TacticsState } from './tactics'
+import type { Unit } from './units'
+import type { BoardMap } from './board'
+import type { Timeline } from './timeline'
+import type { TacticsState } from './tactics'
 
 export type PlayerId = 'player1' | 'player2'
 export type GamePhase = 'setup' | 'phase1' | 'phase2' | 'finished'

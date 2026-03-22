@@ -1,4 +1,4 @@
-import { Timeline, TimelineSlot, TimelineToken, GameState, PlayerId } from '../types'
+import type { Timeline, TimelineSlot, TimelineToken, GameState, PlayerId } from '../types'
 
 // ─── CREAR TIMELINE VACÍO ─────────────────────────────────────────────────────
 export function createEmptyTimeline(): Timeline {
