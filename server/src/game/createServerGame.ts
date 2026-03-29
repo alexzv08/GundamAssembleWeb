@@ -1,6 +1,7 @@
-import { GameState, BoardMap, Unit } from '../types'
+import { GameState, BoardMap } from '../types'
 import { createEmptyTimeline, placeInitialToken } from './timeline'
 import { offsetToAxial, hexKey } from './hexGrid'
+import { createUnit, SQUADS } from './units'
 
 export function createServerGame(player1Name: string, player2Name: string): GameState {
     const board: BoardMap = {}
@@ -24,8 +25,7 @@ export function createServerGame(player1Name: string, player2Name: string): Game
 
             board[key] = {
                 coord, terrain, elevation,
-                occupiedBy: null, upgradeToken: null,
-                garrisonToken: null,
+                occupiedBy: null, upgradeToken: null, garrisonToken: null,
                 objectiveToken: (col === 7 && row === 7)
                     ? { id: 'obj_center', vpValue: 3, controlledBy: null }
                     : null,
@@ -33,61 +33,58 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         }
     }
 
-    const p1Coord = offsetToAxial(0, 0)
-    const p2Coord = offsetToAxial(13, 14)
+    const fedPositions = [
+        offsetToAxial(0, 6),
+        offsetToAxial(0, 7),
+        offsetToAxial(0, 8),
+    ]
+    const zeonPositions = [
+        offsetToAxial(13, 6),
+        offsetToAxial(13, 7),
+        offsetToAxial(13, 8),
+    ]
 
-    board[hexKey(p1Coord)].occupiedBy = 'rx78'
-    board[hexKey(p2Coord)].occupiedBy = 'zaku2'
+    const p1Units = SQUADS.federation.map((defId, i) =>
+        createUnit(defId, 'player1', fedPositions[i])
+    )
+    const p2Units = SQUADS.zeon.map((defId, i) =>
+        createUnit(defId, 'player2', zeonPositions[i])
+    )
+    const allUnits = [...p1Units, ...p2Units]
 
-    const rx78: Unit = {
-        id: 'rx78', name: 'RX-78-2 Gundam', unitType: 'Mobile Suit',
-        traits: ['Federation', 'Prototype'],
-        maxHp: 5, vp: 4, startingTl: 2, currentHp: 5, energy: 0,
-        position: p1Coord,
-        weapons: [
-            { name: 'Beam Rifle', range: 3, strength: 3, tlCost: 2 },
-            { name: 'Beam Saber', range: 1, strength: 4, tlCost: 1 },
-        ],
-        abilities: [], statusEffects: [], upgrades: [],
-        playerId: 'player1', activated: false,
-    }
-
-    const zaku2: Unit = {
-        id: 'zaku2', name: "Char's Zaku II", unitType: 'Mobile Suit',
-        traits: ['Zeon', 'Ace'],
-        maxHp: 4, vp: 3, startingTl: 3, currentHp: 4, energy: 0,
-        position: p2Coord,
-        weapons: [
-            { name: 'Zaku Machine Gun', range: 2, strength: 4, tlCost: 2 },
-            { name: 'Heat Hawk', range: 1, strength: 3, tlCost: 1 },
-        ],
-        abilities: [], statusEffects: [], upgrades: [],
-        playerId: 'player2', activated: false,
-    }
+    allUnits.forEach(u => {
+        if (u.position) board[hexKey(u.position)].occupiedBy = u.id
+    })
 
     let timeline = createEmptyTimeline()
-    timeline = placeInitialToken(timeline, { unitId: 'rx78', playerId: 'player1' }, 2)
-    timeline = placeInitialToken(timeline, { unitId: 'zaku2', playerId: 'player2' }, 3)
+    allUnits.forEach(u => {
+        timeline = placeInitialToken(timeline, { unitId: u.id, playerId: u.playerId }, u.startingTl)
+    })
+
+    const firstToken = timeline.slots.find(s => s.tokens.length > 0)?.tokens[0]
 
     return {
         gameId: Math.random().toString(36).substring(2, 10),
         phase: 'phase1',
-        activePlayerId: 'player1',
-        activeUnitId: 'rx78',
+        activePlayerId: firstToken?.playerId ?? 'player1',
+        activeUnitId: firstToken?.unitId ?? p1Units[0].id,
         roundNumber: 1,
-        board, units: { rx78, zaku2 }, timeline,
+        board,
+        units: Object.fromEntries(allUnits.map(u => [u.id, u])),
+        timeline,
         players: {
             player1: {
                 id: 'player1', name: player1Name, vp: 0,
                 tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
-                squadUnitIds: ['rx78']
+                squadUnitIds: p1Units.map(u => u.id),
             },
             player2: {
                 id: 'player2', name: player2Name, vp: 0,
                 tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
-                squadUnitIds: ['zaku2']
+                squadUnitIds: p2Units.map(u => u.id),
             },
         },
-        actionLog: [], winner: null,
+        actionLog: [],
+        winner: null,
     }
 }

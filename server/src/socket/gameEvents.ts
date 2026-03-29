@@ -89,6 +89,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         io.to(room.id).emit('GAME_STATE_UPDATE', {
             gameState: room.gameState,
             action,
+            actionType: action.type,
             diceRolls: rolls,
         })
     })

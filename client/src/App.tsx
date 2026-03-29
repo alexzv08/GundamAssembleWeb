@@ -4,14 +4,23 @@ import { GameScene } from './three/GameScene'
 import type { GameState } from './types'
 import { hexKey, getReachableHexes, hexDistance } from './game/hexGrid'
 
-// ─── SOCKET ───────────────────────────────────────────────────────────────────
 const socket: Socket = io('http://localhost:3001')
 
-type SelectionMode = 'none' | 'moving' | 'attacking'
+type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing'
 type AppScreen = 'lobby' | 'waiting' | 'playing'
 
+const btnStyle = (bg: string, border?: string) => ({
+  padding: '6px 12px',
+  background: bg,
+  color: 'white',
+  border: border ?? 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontSize: 12,
+  whiteSpace: 'nowrap' as const,
+})
+
 export default function App() {
-  // ── Pantalla actual ──────────────────────────────────────────────────────
   const [screen, setScreen] = useState<AppScreen>('lobby')
   const [playerName, setPlayerName] = useState('')
   const [roomId, setRoomId] = useState('')
@@ -19,8 +28,6 @@ export default function App() {
   const [myPlayerId, setMyPlayerId] = useState<'player1' | 'player2' | null>(null)
   const [connected, setConnected] = useState(false)
   const [lobbyError, setLobbyError] = useState('')
-
-  // ── Estado de juego ──────────────────────────────────────────────────────
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('none')
@@ -28,6 +35,8 @@ export default function App() {
   const [attackableHexes, setAttackableHexes] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState('')
   const [diceResult, setDiceResult] = useState<number[] | null>(null)
+  const [hasMoved, setHasMoved] = useState(false)
+  const [hasUsedPrimary, setHasUsedPrimary] = useState(false)
 
   // ─── SOCKET EVENTS ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -51,10 +60,26 @@ export default function App() {
       setMessage('¡Partida iniciada!')
     })
 
-    socket.on('GAME_STATE_UPDATE', ({ gameState, diceRolls }: { gameState: GameState; diceRolls?: number[] }) => {
-      setGameState(gameState)
+    socket.on('GAME_STATE_UPDATE', ({ gameState: newState, diceRolls, actionType }: {
+      gameState: GameState;
+      diceRolls?: number[]
+      actionType?: string
+    }) => {
+      setGameState(newState)
       if (diceRolls) setDiceResult(diceRolls)
-      clearSelection()
+
+      // Solo resetear hasMoved y hasUsedPrimary si cambia la unidad activa
+      setSelectedUnitId(prev => {
+        if (newState.activeUnitId !== prev) {
+          setHasMoved(false)
+          setHasUsedPrimary(false)
+          setReachableHexes(new Set())
+          setAttackableHexes(new Set())
+          setSelectionMode('none')
+          return null
+        }
+        return prev
+      })
     })
 
     socket.on('GAME_OVER', ({ gameState, winner, reason }: { gameState: GameState; winner: string | null; reason: string }) => {
@@ -94,6 +119,8 @@ export default function App() {
     setReachableHexes(new Set())
     setAttackableHexes(new Set())
     setDiceResult(null)
+    setHasMoved(false)
+    setHasUsedPrimary(false)
   }, [])
 
   const calcReachable = useCallback((unitId: string, state: GameState) => {
@@ -122,42 +149,59 @@ export default function App() {
     return attackable
   }, [])
 
-  // ─── ACCIONES DE JUEGO ────────────────────────────────────────────────────
+  // ─── ACCIONES ─────────────────────────────────────────────────────────────
   const handleUnitClick = useCallback((unitId: string) => {
     if (!gameState || !myPlayerId) return
     const unit = gameState.units[unitId]
     if (!unit) return
 
-    // Atacar unidad enemiga
     if (selectionMode === 'attacking' && selectedUnitId && unit.playerId !== myPlayerId) {
       socket.emit('GAME_ACTION', {
         action: { type: 'ATTACK', unitId: selectedUnitId, weaponIndex: 0, targetId: unitId }
       })
+      setHasUsedPrimary(true)
       clearSelection()
       return
     }
 
-    // Seleccionar unidad propia
     if (unit.playerId !== myPlayerId) { setMessage('Esa unidad no es tuya'); return }
     if (gameState.activePlayerId !== myPlayerId) { setMessage('No es tu turno'); return }
     if (unitId !== gameState.activeUnitId) { setMessage('Esta unidad no puede actuar ahora'); return }
 
     setSelectedUnitId(unitId)
-    setSelectionMode('moving')
-    setReachableHexes(calcReachable(unitId, gameState))
+    setSelectionMode('none')
+    setReachableHexes(hasMoved ? new Set() : calcReachable(unitId, gameState))
     setAttackableHexes(new Set())
     setMessage(`${unit.name} seleccionado`)
-  }, [gameState, myPlayerId, selectionMode, selectedUnitId, calcReachable, clearSelection])
+  }, [gameState, myPlayerId, selectionMode, selectedUnitId, hasMoved, calcReachable, clearSelection])
 
   const handleHexClick = useCallback((key: string) => {
-    if (!gameState || !selectedUnitId || selectionMode !== 'moving') return
+    if (!gameState || !selectedUnitId) return
     if (!reachableHexes.has(key)) return
     const [q, r] = key.split(',').map(Number)
-    socket.emit('GAME_ACTION', {
-      action: { type: 'ADVANCE', unitId: selectedUnitId, to: { q, r } }
-    })
-    clearSelection()
-  }, [gameState, selectedUnitId, selectionMode, reachableHexes, clearSelection])
+
+    if (selectionMode === 'moving') {
+      socket.emit('GAME_ACTION', {
+        action: { type: 'ADVANCE', unitId: selectedUnitId, to: { q, r } }
+      })
+      setHasMoved(true)
+      const newAttackable = calcAttackable(selectedUnitId, gameState)
+      setAttackableHexes(newAttackable)
+      setReachableHexes(new Set())
+      setSelectionMode('none')
+      setMessage(newAttackable.size > 0 ? 'Puedes atacar u otras acciones' : 'Pasa turno')
+    }
+
+    if (selectionMode === 'dashing') {
+      socket.emit('GAME_ACTION', {
+        action: { type: 'DASH', unitId: selectedUnitId, to: { q, r } }
+      })
+      setHasUsedPrimary(true)
+      setReachableHexes(new Set())
+      setSelectionMode('none')
+      setMessage('Dash realizado')
+    }
+  }, [gameState, selectedUnitId, selectionMode, reachableHexes, calcAttackable])
 
   const handleAttackMode = useCallback(() => {
     if (!gameState || !selectedUnitId) return
@@ -166,7 +210,7 @@ export default function App() {
     setSelectionMode('attacking')
     setAttackableHexes(attackable)
     setReachableHexes(new Set())
-    setMessage('Selecciona un enemigo para atacar')
+    setMessage('Selecciona un enemigo')
   }, [gameState, selectedUnitId, calcAttackable])
 
   const handleEndTurn = useCallback(() => {
@@ -193,7 +237,6 @@ export default function App() {
         <div style={{ fontSize: 13, color: '#666', marginBottom: 32 }}>
           {connected ? '🟢 Conectado' : '🔴 Desconectado'}
         </div>
-
         <input
           value={playerName}
           onChange={e => setPlayerName(e.target.value)}
@@ -204,7 +247,6 @@ export default function App() {
             color: 'white', fontSize: 14, boxSizing: 'border-box',
           }}
         />
-
         <button
           onClick={() => { if (playerName.trim()) socket.emit('CREATE_ROOM', { playerName: playerName.trim() }) }}
           style={{
@@ -215,7 +257,6 @@ export default function App() {
         >
           Crear sala
         </button>
-
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <input
             value={roomInput}
@@ -242,7 +283,6 @@ export default function App() {
             Unirse
           </button>
         </div>
-
         {lobbyError && (
           <div style={{ color: '#ef5350', fontSize: 13, marginTop: 8 }}>{lobbyError}</div>
         )}
@@ -250,7 +290,7 @@ export default function App() {
     </div>
   )
 
-  // ─── ESPERANDO OPONENTE ───────────────────────────────────────────────────
+  // ─── ESPERANDO ────────────────────────────────────────────────────────────
   if (screen === 'waiting') return (
     <div style={{
       width: '100vw', height: '100vh', background: '#0d0d1a',
@@ -261,9 +301,7 @@ export default function App() {
         <div style={{ fontSize: 36, fontWeight: 'bold', color: '#f5c518', marginBottom: 16, letterSpacing: 8 }}>
           {roomId}
         </div>
-        <div style={{ color: '#aaa', marginBottom: 8 }}>
-          Comparte este código con tu oponente
-        </div>
+        <div style={{ color: '#aaa', marginBottom: 8 }}>Comparte este código con tu oponente</div>
         <div style={{ color: '#666', fontSize: 13 }}>Esperando jugador 2...</div>
       </div>
     </div>
@@ -284,7 +322,7 @@ export default function App() {
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '8px 16px', background: 'rgba(0,0,0,0.8)', color: 'white',
-        fontSize: 14, zIndex: 10, gap: 16,
+        fontSize: 14, zIndex: 10, gap: 16, flexShrink: 0,
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ color: '#4fc3f7', fontWeight: 'bold' }}>
@@ -331,7 +369,7 @@ export default function App() {
       </div>
 
       {/* Canvas 3D */}
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
         <GameScene
           gameState={gameState}
           selectedUnitId={selectedUnitId}
@@ -345,29 +383,75 @@ export default function App() {
       {/* HUD inferior */}
       {!isFinished && isMyTurn && selectedUnitId && gameState.units[selectedUnitId] && (
         <div style={{
-          padding: '8px 16px', background: 'rgba(0,0,0,0.85)', color: 'white',
-          fontSize: 13, display: 'flex', gap: 12, alignItems: 'center', zIndex: 10,
+          padding: '8px 16px', background: 'rgba(0,0,0,0.9)', color: 'white',
+          fontSize: 13, display: 'flex', gap: 8, alignItems: 'center',
+          zIndex: 10, flexWrap: 'wrap', borderTop: '1px solid #333', flexShrink: 0,
         }}>
           {(() => {
             const u = gameState.units[selectedUnitId]
             return (
               <>
-                <span style={{ fontWeight: 'bold', color: '#4fc3f7' }}>{u.name}</span>
+                <span style={{ fontWeight: 'bold', color: '#4fc3f7', marginRight: 8 }}>{u.name}</span>
                 <span style={{ color: '#aaa' }}>HP {u.currentHp}/{u.maxHp}</span>
-                <span style={{ color: '#aaa' }}>Energía: {u.energy}</span>
+                <span style={{ color: '#aaa' }}>⚡ {u.energy}</span>
+                <span style={{
+                  color: hasMoved ? '#555' : '#4caf50', fontSize: 11,
+                  border: `1px solid ${hasMoved ? '#333' : '#4caf50'}`,
+                  borderRadius: 4, padding: '2px 6px',
+                }}>
+                  {hasMoved ? 'Movido' : 'Puede mover'}
+                </span>
+                <span style={{
+                  color: hasUsedPrimary ? '#555' : '#f5c518', fontSize: 11,
+                  border: `1px solid ${hasUsedPrimary ? '#333' : '#f5c518'}`,
+                  borderRadius: 4, padding: '2px 6px',
+                }}>
+                  {hasUsedPrimary ? 'Acción usada' : 'Acción disponible'}
+                </span>
                 <div style={{ flex: 1 }} />
-                <button onClick={handleAttackMode} style={{
-                  padding: '6px 16px', background: '#c62828', color: 'white',
-                  border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-                }}>⚔ Atacar</button>
-                <button onClick={handleEndTurn} style={{
-                  padding: '6px 16px', background: '#333', color: 'white',
-                  border: '1px solid #555', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-                }}>Pasar turno →</button>
-                <button onClick={clearSelection} style={{
-                  padding: '6px 12px', background: 'transparent', color: '#aaa',
-                  border: '1px solid #444', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-                }}>✕</button>
+
+                {!hasMoved && (
+                  <button onClick={() => {
+                    setSelectionMode('moving')
+                    setReachableHexes(calcReachable(selectedUnitId, gameState))
+                    setAttackableHexes(new Set())
+                    setMessage('Elige hex para mover')
+                  }} style={btnStyle('#1565c0')}>🚶 Mover</button>
+                )}
+
+                {!hasUsedPrimary && (
+                  <button onClick={() => {
+                    setSelectionMode('dashing')
+                    const unit = gameState.units[selectedUnitId]
+                    if (!unit.position) return
+                    const obstacles = new Set(
+                      Object.values(gameState.units)
+                        .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId !== unit.playerId)
+                        .map(u2 => hexKey(u2.position!))
+                    )
+                    const reachable = getReachableHexes(unit.position, gameState.board, obstacles, 2)
+                    setReachableHexes(new Set(reachable.map(h => hexKey(h))))
+                    setAttackableHexes(new Set())
+                    setMessage('Dash: elige hex (2 hexes, cuesta 2 TL)')
+                  }} style={btnStyle('#6a1b9a')}>💨 Dash</button>
+                )}
+
+                {!hasUsedPrimary && (
+                  <button onClick={handleAttackMode} style={btnStyle('#c62828')}>⚔ Atacar</button>
+                )}
+
+                {!hasUsedPrimary && (
+                  <button onClick={() => {
+                    socket.emit('GAME_ACTION', {
+                      action: { type: 'ENERGIZE', unitId: selectedUnitId }
+                    })
+                    setHasUsedPrimary(true)
+                    setMessage('Energize: +1 energía, -2 TL')
+                  }} style={btnStyle('#e65100')}>⚡ Energize</button>
+                )}
+
+                <button onClick={handleEndTurn} style={btnStyle('#333', '1px solid #555')}>Pasar →</button>
+                <button onClick={clearSelection} style={btnStyle('transparent', '1px solid #444')}>✕</button>
               </>
             )
           })()}
