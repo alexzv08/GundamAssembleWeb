@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "type": "unit-cards",
+  "cards": [
+    {
+      "uid": 1771805974872,
+      "unitName": "Gundam",
+      "pilot": "Amuro Ray",
+      "faction": "Earth Federation",
+      "cardId": "DM01-U01",
+      "hp": "11",
+      "vp": "05",
+      "tl": "02",
+      "weapons": [
+        {
+          "name": "Beam Saber",
+          "cost": "2",
+          "range": "1",
+          "str": "02",
+          "effect": "[After Attack Roll] Destroy 1 [Shield] Upgrade on the target.",
+          "crit": "[After Combat Damage] Gain a [Strength] Upgrade.",
+          "dots": 1
+        },
+        {
+          "name": "Beam Rifle",
+          "cost": "4",
+          "range": "4",
+          "str": "05",
+          "effect": "",
+          "crit": "[Crit] +2 [Damage].",
+          "dots": 4
+        }
+      ],
+      "abilities": [
+        {
+          "name": "White Base Unity",
+          "type": "burst",
+          "tags": "Energy, Command",
+          "effect": "If another allied unit within [Range 3] has 1 or fewer Upgrades, it gains an Upgrade of your choice."
+        },
+        {
+          "name": "Newtype Instincts",
+          "type": "ongoing",
+          "tags": "Ongoing",
+          "effect": "[After Attack Roll] if this unit is attacking, it rerolls one miss."
+        }
+      ],
+      "art": null,
+      "artX": 0,
+      "artY": 0,
+      "artZoom": 100
+    },
+    {
+      "uid": 1771805974873,
+      "unitName": "Guncannon",
+      "pilot": "Kai Shiden",
+      "faction": "Earth Federation",
+      "cardId": "DM01-U02",
+      "hp": "10",
+      "vp": "04",
+      "tl": "02",
+      "weapons": [
+        {
+          "name": "Beam Rifle",
+          "cost": "2",
+          "range": "3",
+          "str": "02",
+          "effect": "",
+          "crit": "Slow the target.",
+          "dots": 3
+        },
+        {
+          "name": "Shoulder Cannons",
+          "cost": "3",
+          "range": "3",
+          "str": "04",
+          "effect": "",
+          "crit": "[After Combat Damage] Dash at [TL 0]. Then, Rescue an adjacent allied Garrison at [TL 0].",
+          "dots": 3
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Critical Shot",
+          "type": "burst",
+          "tags": "Energy, Command",
+          "effect": "Fracture an enemy unit within [Range 3]."
+        },
+        {
+          "name": "Federation Courage",
+          "type": "ongoing",
+          "tags": "Ongoing",
+          "effect": "While this unit has 2 or more Upgrades, its attacks count 7's and 8's as [Crit]."
+        }
+      ],
+      "art": null,
+      "artX": 0,
+      "artY": 0,
+      "artZoom": 100
+    },
+    {
+      "uid": 1771805974874,
+      "unitName": "Guntank",
+      "pilot": "Hayato Kobayashi",
+      "faction": "Earth Federation",
+      "cardId": "DM01-U03",
+      "hp": "09",
+      "vp": "03",
+      "tl": "03",
+      "weapons": [
+        {
+          "name": "4-Tube Missile Launcher",
+          "cost": "2",
+          "range": "3",
+          "str": "02",
+          "effect": "This attack deals +1 [Damage] when targeting enemies on or adjacent to an objective.",
+          "crit": "[After Combat Damage] Fracture the target.",
+          "dots": 3
+        },
+        {
+          "name": "Low-Recoil Cannons",
+          "cost": "4",
+          "range": "4",
+          "str": "04",
+          "effect": "This attack ignores Line of Sight.",
+          "crit": "Slow the target",
+          "dots": 4
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Saturated Fire",
+          "type": "burst",
+          "tags": "Energy, Command",
+          "effect": "Roll 5 dice. For each [Crit], deal 1 [Damage] to each enemy unit within [Range 4]"
+        },
+        {
+          "name": "Targeted Shot",
+          "type": "ongoing",
+          "tags": "Ongoing",
+          "effect": "While this unit has 2 or more Upgrades, its attacks gain +1 [Accuracy]."
+        }
+      ],
+      "art": null,
+      "artX": 0,
+      "artY": 0,
+      "artZoom": 100
+    },
+    {
+      "uid": 1771805974875,
+      "unitName": "Char's Zaku II",
+      "pilot": "Char Aznable",
+      "faction": "Zeon",
+      "cardId": "DM01-U04",
+      "hp": "08",
+      "vp": "05",
+      "tl": "01",
+      "weapons": [
+        {
+          "name": "Heat Hawk",
+          "cost": "2",
+          "range": "1",
+          "str": "03",
+          "effect": "",
+          "crit": "[After Combat Damage] Fracture the target.",
+          "dots": 1
+        },
+        {
+          "name": "Machine Gun",
+          "cost": "3",
+          "range": "2",
+          "str": "05",
+          "effect": "",
+          "crit": "[After Combat Damage] Dash at [TL 0].",
+          "dots": 2
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Burst Attack",
+          "type": "burst",
+          "tags": "Energy, Command",
+          "effect": "Make a Heat Hawk attack at [TL 0]."
+        },
+        {
+          "name": "Three Times Faster",
+          "type": "ongoing",
+          "tags": "Ongoing",
+          "effect": "When this unit Dashes: It moves up to 1 additional hex."
+        },
+        {
+          "name": "Char Kick",
+          "type": "response",
+          "tags": "Response",
+          "effect": "After this unit Dashes: Deal 1 [Damage] to an adjacent enemy."
+        }
+      ],
+      "art": null,
+      "artX": 0,
+      "artY": 0,
+      "artZoom": 100
+    },
+    {
+      "uid": 1771805974876,
+      "unitName": "Zaku II [Line Breaker]",
+      "pilot": "Mass Produced",
+      "faction": "Zeon",
+      "cardId": "DM01-U05",
+      "hp": "09",
+      "vp": "04",
+      "tl": "02",
+      "weapons": [
+        {
+          "name": "Cracker Grenade",
+          "cost": "2",
+          "range": "3",
+          "str": "02",
+          "effect": "[After Combat Damage] Deal 2 [Damage] to each enemy adjacent to the target.",
+          "crit": "+1 [Damage]",
+          "dots": 3
+        },
+        {
+          "name": "Bazooka",
+          "cost": "3",
+          "range": "3",
+          "str": "04",
+          "effect": "",
+          "crit": "+1 [Damage] for each Garrison you've Rescued.",
+          "dots": 3
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Zeon Zealotry",
+          "type": "burst",
+          "tags": "Energy, Command",
+          "effect": "Move 5 towards a damaged enemy unit, ignoring terrain penalties."
+        },
+        {
+          "name": "Rescue the Mechanics",
+          "type": "response",
+          "tags": "Response",
+          "effect": "After this unit Rescues a Garrison: Another allied unit gains 2 hit points. (cannot gain more hit points than max hit points)"
+        }
+      ],
+      "art": null,
+      "artX": 0,
+      "artY": 0,
+      "artZoom": 100
+    },
+    {
+      "uid": 1771805974877,
+      "unitName": "Zaku II [Enforcer]",
+      "pilot": "Mass Produced",
+      "faction": "Zeon",
+      "cardId": "DM01-U06",
+      "hp": "11",
+      "vp": "04",
+      "tl": "02",
+      "weapons": [
+        {
+          "name": "Shoulder Bash",
+          "cost": "2",
+          "range": "1",
+          "str": "03",
+          "effect": "",
+          "crit": "Push 2 the target",
+          "dots": 1
+        },
+        {
+          "name": "Heat Hawk",
+          "cost": "4",
+          "range": "1",
+          "str": "05",
+          "effect": "[After Attack Roll] Destroy 1 Upgrade on the target.",
+          "crit": "Slow the target.",
+          "dots": 1
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Domination",
+          "type": "burst",
+          "tags": "Energy, Command",
+          "effect": "Capture an objective this unit is on or adjacent to."
+        },
+        {
+          "name": "Suppressing Presence",
+          "type": "ongoing",
+          "tags": "Ongoing",
+          "effect": "This unit gains +1 [Strength] when attacking damaged enemy units."
+        }
+      ],
+      "art": null,
+      "artX": 0,
+      "artY": 0,
+      "artZoom": 100
+    }
+  ]
+}

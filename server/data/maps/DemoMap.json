@@ -1,0 +1,937 @@
+{
+  "version": 1,
+  "cols": 14,
+  "rows": 15,
+  "grid": [
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 3
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 2
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "space",
+        "elevation": 1
+      }
+    ],
+    [
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      },
+      {
+        "terrain": "desert",
+        "elevation": 1
+      }
+    ]
+  ]
+}

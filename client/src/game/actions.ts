@@ -1,5 +1,5 @@
 import type { GameState, GameAction, PlayerId, Unit } from '../types'
-import  { hexKey, hexDistance, findPath, getReachableHexes, checkLineOfSight } from './hexGrid'
+import { hexKey, hexDistance, findPath, getReachableHexes, checkLineOfSight, gridDistance } from './hexGrid'
 import { advanceToken, getNextActivation } from './timeline'
 
 // ─── RESULTADO DE UNA ACCIÓN ──────────────────────────────────────────────────
@@ -170,7 +170,7 @@ export function applyAttack(
     }
 
     // Comprobar rango
-    const dist = hexDistance(attacker.position, target.position)
+    const dist = gridDistance(attacker.position, target.position)
     if (dist > weapon.range) return { success: false, error: 'Objetivo fuera de rango' }
 
     // Comprobar LOS (solo si rango > 1)
