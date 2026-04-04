@@ -68,6 +68,6 @@ export interface StatusEffect {
 
 // Tokens de mejora recogidos del tablero
 export interface Upgrade {
-    type: 'attack' | 'movement' | 'shield'
+    type: 'attack' | 'movement' | 'shield' | 'energy'
     value: number
 }

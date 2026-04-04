@@ -1,14 +1,14 @@
-import type { BoardMap } from '../types'
+import type { BoardMap } from '../types/board'
 import { HexTile } from './HexTile'
 import { hexKey } from '../game/hexGrid'
 
-
 interface GameBoardProps {
     board: BoardMap
-    selectedHex?: string | null        // hexKey del hex seleccionado
-    reachableHexes?: Set<string>       // hexes a los que se puede mover
-    attackableHexes?: Set<string>      // hexes en rango de ataque
+    selectedHex?: string | null
+    reachableHexes?: Set<string>
+    attackableHexes?: Set<string>
     onHexClick?: (key: string) => void
+    onTokenHover?: (info: string | null) => void
 }
 
 export function GameBoard({
@@ -17,6 +17,7 @@ export function GameBoard({
     reachableHexes = new Set(),
     attackableHexes = new Set(),
     onHexClick,
+    onTokenHover,
 }: GameBoardProps) {
     return (
         <group>
@@ -28,6 +29,7 @@ export function GameBoard({
                     isReachable={reachableHexes.has(key)}
                     isAttackable={attackableHexes.has(key)}
                     onClick={() => onHexClick?.(key)}
+                    onTokenHover={onTokenHover}
                 />
             ))}
         </group>

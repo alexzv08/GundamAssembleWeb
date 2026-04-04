@@ -1,25 +1,16 @@
 import { useState, useCallback, useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
-import type { GameState } from './types'
-import { hexKey, getReachableHexes, hexDistance, gridDistance } from './game/hexGrid'
+import type { GameState } from './types/gameState'
+import { hexKey, getReachableHexes, gridDistance } from './game/hexGrid'
 import { useGameData } from './game/useGameData'
+import { UnitPanel } from './components/ui/UnitPanel'
+import { TimelineBar } from './components/ui/TimelineBar'
 
 const socket: Socket = io('http://localhost:3001')
 
 type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing'
 type AppScreen = 'lobby' | 'waiting' | 'playing'
-
-const btnStyle = (bg: string, border?: string) => ({
-  padding: '6px 12px',
-  background: bg,
-  color: 'white',
-  border: border ?? 'none',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontSize: 12,
-  whiteSpace: 'nowrap' as const,
-})
 
 export default function App() {
   const gameData = useGameData()
@@ -33,6 +24,7 @@ export default function App() {
   const [lobbyError, setLobbyError] = useState('')
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
+  const [panelUnitId, setPanelUnitId] = useState<string | null>(null)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('none')
   const [reachableHexes, setReachableHexes] = useState<Set<string>>(new Set())
   const [attackableHexes, setAttackableHexes] = useState<Set<string>>(new Set())
@@ -41,6 +33,7 @@ export default function App() {
   const [hasMoved, setHasMoved] = useState(false)
   const [hasUsedPrimary, setHasUsedPrimary] = useState(false)
   const [selectedWeaponIndex, setSelectedWeaponIndex] = useState<number | null>(null)
+  const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
 
   // ─── SOCKET EVENTS ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -153,13 +146,26 @@ export default function App() {
     return attackable
   }, [])
 
+  const calcCanRescue = useCallback((unitId: string, state: GameState, playerId: 'player1' | 'player2') => {
+    const unit = state.units[unitId]
+    if (!unit?.position) return false
+    for (const hex of Object.values(state.board)) {
+      if (!hex.garrisonToken) continue
+      if (hex.garrisonToken.owner !== playerId) continue
+      const dist = gridDistance(unit.position, hex.coord)
+      if (dist <= 1) return true
+    }
+    return false
+  }, [])
+
   // ─── ACCIONES ─────────────────────────────────────────────────────────────
   const handleUnitClick = useCallback((unitId: string) => {
     if (!gameState || !myPlayerId) return
     const unit = gameState.units[unitId]
     if (!unit) return
 
-    // Atacar unidad enemiga
+    setPanelUnitId(unitId)
+
     if (selectionMode === 'attacking' && selectedUnitId && unit.playerId !== myPlayerId) {
       const wIdx = selectedWeaponIndex ?? 0
       socket.emit('GAME_ACTION', {
@@ -229,6 +235,26 @@ export default function App() {
     })
     clearSelection()
   }, [selectedUnitId, clearSelection])
+
+  const handleRescue = useCallback(() => {
+    if (!selectedUnitId || !gameState || !myPlayerId) return
+    const unit = gameState.units[selectedUnitId]
+    if (!unit?.position) return
+
+    for (const hex of Object.values(gameState.board)) {
+      if (!hex.garrisonToken) continue
+      if (hex.garrisonToken.owner !== myPlayerId) continue
+      const dist = gridDistance(unit.position, hex.coord)
+      if (dist <= 1) {
+        socket.emit('GAME_ACTION', {
+          action: { type: 'RESCUE', unitId: selectedUnitId, garrisonId: hex.garrisonToken.id }
+        })
+        setHasUsedPrimary(true)
+        setMessage('Garrison rescatada — +2 VP')
+        return
+      }
+    }
+  }, [selectedUnitId, gameState, myPlayerId])
 
   // ─── LOADING ──────────────────────────────────────────────────────────────
   if (!gameData.loaded) return (
@@ -345,63 +371,40 @@ export default function App() {
   const activePlayer = gameState.players[gameState.activePlayerId]
   const isMyTurn = gameState.activePlayerId === myPlayerId
   const isFinished = gameState.phase === 'finished'
-  const selectedUnit = selectedUnitId ? gameState.units[selectedUnitId] : null
+  const panelUnit = panelUnitId
+    ? gameState.units[panelUnitId]
+    : activeUnit ?? null
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
 
-      {/* HUD superior */}
+      {/* Timeline + VP */}
+      <TimelineBar gameState={gameState} myPlayerId={myPlayerId} />
+
+      {/* Mensaje central */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '8px 16px', background: 'rgba(0,0,0,0.8)', color: 'white',
-        fontSize: 14, zIndex: 10, gap: 16, flexShrink: 0,
+        textAlign: 'center', padding: '4px 16px',
+        background: 'rgba(0,0,0,0.6)', color: 'white',
+        fontSize: 12, zIndex: 10, flexShrink: 0,
+        borderBottom: '1px solid #111',
+        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16,
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ color: '#4fc3f7', fontWeight: 'bold' }}>
-            {gameState.players.player1.name}
-            {myPlayerId === 'player1' && <span style={{ color: '#666', fontSize: 11 }}> (tú)</span>}
+        <span style={{ color: gameState.activePlayerId === 'player1' ? '#4fc3f7' : '#ef9a9a' }}>
+          {activeUnit?.name ?? '—'}
+        </span>
+        <span style={{ color: isMyTurn ? '#4caf50' : '#888' }}>
+          {isFinished ? '— FIN —' : isMyTurn ? '⚡ Tu turno' : `Turno de ${activePlayer.name}`}
+        </span>
+        {message && <span style={{ color: '#f5c518' }}>{message}</span>}
+        {diceResult && (
+          <span style={{ color: '#aaa' }}>
+            [{diceResult.join(', ')}] — {diceResult.filter(r => r >= 4).length} impactos
           </span>
-          <span style={{ color: '#f5c518' }}>{gameState.players.player1.vp} VP</span>
-          {Object.values(gameState.units).filter(u => u.playerId === 'player1').map(u => (
-            <span key={u.id} style={{ fontSize: 12, color: u.currentHp > 0 ? '#aaa' : '#555' }}>
-              {u.name} — HP {u.currentHp}/{u.maxHp}
-            </span>
-          ))}
-        </div>
-
-        <div style={{ textAlign: 'center', flex: 1 }}>
-          <div style={{ color: isMyTurn ? '#4caf50' : '#ef9a9a', fontSize: 12, marginBottom: 2 }}>
-            {isFinished ? '— FIN —' : isMyTurn ? '⚡ Tu turno' : `Turno de ${activePlayer.name}`}
-          </div>
-          {activeUnit && !isFinished && (
-            <div style={{ color: activeUnit.playerId === 'player1' ? '#4fc3f7' : '#ef9a9a', fontWeight: 'bold' }}>
-              {activeUnit.name}
-            </div>
-          )}
-          <div style={{ fontSize: 12, color: '#f5c518', marginTop: 4 }}>{message}</div>
-          {diceResult && (
-            <div style={{ fontSize: 12, color: '#aaa' }}>
-              Dados: [{diceResult.join(', ')}] — {diceResult.filter(r => r >= 4).length} impactos
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-          <span style={{ color: '#ef9a9a', fontWeight: 'bold' }}>
-            {gameState.players.player2.name}
-            {myPlayerId === 'player2' && <span style={{ color: '#666', fontSize: 11 }}> (tú)</span>}
-          </span>
-          <span style={{ color: '#f5c518' }}>{gameState.players.player2.vp} VP</span>
-          {Object.values(gameState.units).filter(u => u.playerId === 'player2').map(u => (
-            <span key={u.id} style={{ fontSize: 12, color: u.currentHp > 0 ? '#aaa' : '#555' }}>
-              {u.name} — HP {u.currentHp}/{u.maxHp}
-            </span>
-          ))}
-        </div>
+        )}
       </div>
 
       {/* Canvas 3D */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         <GameScene
           gameState={gameState}
           selectedUnitId={selectedUnitId}
@@ -409,50 +412,34 @@ export default function App() {
           attackableHexes={attackableHexes}
           onHexClick={handleHexClick}
           onUnitClick={handleUnitClick}
+          onTokenHover={setTokenTooltip}
         />
-      </div>
 
-      {/* HUD inferior */}
-      {!isFinished && isMyTurn && selectedUnitId && selectedUnit && (
-        <div style={{
-          padding: '8px 16px', background: 'rgba(0,0,0,0.9)', color: 'white',
-          fontSize: 13, display: 'flex', gap: 8, alignItems: 'center',
-          zIndex: 10, flexWrap: 'wrap', borderTop: '1px solid #333', flexShrink: 0,
-        }}>
-          {/* Info unidad */}
-          <span style={{ fontWeight: 'bold', color: '#4fc3f7', marginRight: 4 }}>{selectedUnit.name}</span>
-          <span style={{ color: '#aaa' }}>HP {selectedUnit.currentHp}/{selectedUnit.maxHp}</span>
-          <span style={{ color: '#aaa' }}>⚡ {selectedUnit.energy}</span>
-          <span style={{
-            color: hasMoved ? '#555' : '#4caf50', fontSize: 11,
-            border: `1px solid ${hasMoved ? '#333' : '#4caf50'}`,
-            borderRadius: 4, padding: '2px 6px',
-          }}>
-            {hasMoved ? 'Movido' : 'Puede mover'}
-          </span>
-          <span style={{
-            color: hasUsedPrimary ? '#555' : '#f5c518', fontSize: 11,
-            border: `1px solid ${hasUsedPrimary ? '#333' : '#f5c518'}`,
-            borderRadius: 4, padding: '2px 6px',
-          }}>
-            {hasUsedPrimary ? 'Acción usada' : 'Acción disponible'}
-          </span>
-
-          <div style={{ flex: 1 }} />
-
-          {/* Mover */}
-          {!hasMoved && (
-            <button onClick={() => {
+        {/* Panel de unidad */}
+        {panelUnit && !isFinished && (
+          <UnitPanel
+            unit={panelUnit}
+            isActive={gameState.activeUnitId === panelUnit.id}
+            isMyUnit={panelUnit.playerId === myPlayerId}
+            isMyTurn={isMyTurn}
+            isSelected={panelUnit?.id === selectedUnitId}
+            hasMoved={hasMoved}
+            hasUsedPrimary={hasUsedPrimary}
+            selectedWeaponIndex={selectedWeaponIndex}
+            canRescue={
+              selectedUnitId && myPlayerId
+                ? calcCanRescue(selectedUnitId, gameState, myPlayerId)
+                : false
+            }
+            onMove={() => {
+              if (!selectedUnitId) return
               setSelectionMode('moving')
               setReachableHexes(calcReachable(selectedUnitId, gameState))
               setAttackableHexes(new Set())
               setMessage('Elige hex para mover')
-            }} style={btnStyle('#1565c0')}>🚶 Mover</button>
-          )}
-
-          {/* Dash */}
-          {!hasUsedPrimary && (
-            <button onClick={() => {
+            }}
+            onDash={() => {
+              if (!selectedUnitId) return
               setSelectionMode('dashing')
               const unit = gameState.units[selectedUnitId]
               if (!unit.position) return
@@ -465,41 +452,65 @@ export default function App() {
               setReachableHexes(new Set(reachable.map(h => hexKey(h))))
               setAttackableHexes(new Set())
               setMessage('Dash: elige hex (2 hexes, cuesta 2 TL)')
-            }} style={btnStyle('#6a1b9a')}>💨 Dash</button>
-          )}
-
-          {/* Armas — un botón por arma */}
-          {!hasUsedPrimary && selectedUnit.weapons.map((weapon, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleAttackMode(idx)}
-              style={btnStyle(
-                selectedWeaponIndex === idx ? '#b71c1c' : '#c62828',
-                selectedWeaponIndex === idx ? '2px solid #ff5252' : undefined
-              )}
-            >
-              ⚔ {weapon.name} (R{weapon.range} S{weapon.strength} TL{weapon.tlCost})
-            </button>
-          ))}
-
-          {/* Energize */}
-          {!hasUsedPrimary && (
-            <button onClick={() => {
-              socket.emit('GAME_ACTION', {
-                action: { type: 'ENERGIZE', unitId: selectedUnitId }
-              })
+            }}
+            onAttack={(idx) => handleAttackMode(idx)}
+            onEnergize={() => {
+              if (!selectedUnitId) return
+              socket.emit('GAME_ACTION', { action: { type: 'ENERGIZE', unitId: selectedUnitId } })
               setHasUsedPrimary(true)
               setMessage('Energize: +1 energía, -2 TL')
-            }} style={btnStyle('#e65100')}>⚡ Energize</button>
-          )}
+            }}
+            onRescue={handleRescue}
+            onEndTurn={handleEndTurn}
+            onCancel={clearSelection}
+          />
+        )}
 
-          {/* Pasar turno */}
-          <button onClick={handleEndTurn} style={btnStyle('#333', '1px solid #555')}>Pasar →</button>
-
-          {/* Cancelar */}
-          <button onClick={clearSelection} style={btnStyle('transparent', '1px solid #444')}>✕</button>
+        {/* Leyenda de tokens */}
+        <div style={{
+          position: 'absolute', bottom: 16, right: 16,
+          background: 'rgba(10,10,20,0.92)', border: '1px solid #333',
+          borderRadius: 8, padding: '8px 12px', color: 'white',
+          fontSize: 11, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 4,
+        }}>
+          <div style={{ color: '#666', fontSize: 10, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Leyenda
+          </div>
+          {[
+            { color: '#f5c518', shape: 'circle', label: 'Objetivo' },
+            { color: '#4fc3f7', shape: 'square', label: 'Garrison Federación' },
+            { color: '#ef9a9a', shape: 'square', label: 'Garrison Zeon' },
+            { color: '#ef9a9a', shape: 'diamond', label: '⚔ Ataque' },
+            { color: '#4fc3f7', shape: 'diamond', label: '🛡 Escudo' },
+            { color: '#81c784', shape: 'diamond', label: '👟 Movimiento' },
+            { color: '#f5c518', shape: 'diamond', label: '⚡ Energía' },
+            { color: '#555', shape: 'diamond', label: '❓ Token oculto' },
+          ].map(({ color, shape, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                width: 10, height: 10,
+                background: color,
+                borderRadius: shape === 'circle' ? '50%' : 0,
+                transform: shape === 'diamond' ? 'rotate(45deg)' : 'none',
+                flexShrink: 0,
+              }} />
+              <span style={{ color: color === '#555' ? '#888' : color }}>{label}</span>
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* Tooltip de token */}
+        {tokenTooltip && (
+          <div style={{
+            position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(10,10,20,0.95)', border: '1px solid #f5c518',
+            borderRadius: 8, padding: '8px 16px', color: '#f5c518',
+            fontSize: 13, zIndex: 20, whiteSpace: 'nowrap', pointerEvents: 'none',
+          }}>
+            {tokenTooltip}
+          </div>
+        )}
+      </div>
 
       {/* Fin de partida */}
       {isFinished && (
@@ -524,7 +535,12 @@ export default function App() {
               {gameState.players.player2.name}: {gameState.players.player2.vp} VP
             </div>
             <button
-              onClick={() => { setScreen('lobby'); setGameState(null); setMyPlayerId(null) }}
+              onClick={() => {
+                setScreen('lobby')
+                setGameState(null)
+                setMyPlayerId(null)
+                setPanelUnitId(null)
+              }}
               style={{
                 padding: '10px 28px', background: '#1565c0', color: 'white',
                 border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 15,

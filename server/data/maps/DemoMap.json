@@ -933,5 +933,164 @@
         "elevation": 1
       }
     ]
-  ]
+  ],
+  "scenario": {
+    "name": "Batalla del Desierto",
+    "description": "Controla el paso central y rescata a tus aliados para la victoria.",
+    "vpToWin": 0,
+    "objectives": [
+      {
+        "col": 6,
+        "row": 7,
+        "id": "obj_north",
+        "vpValue": 2
+      },
+      {
+        "col": 7,
+        "row": 7,
+        "id": "obj_center",
+        "vpValue": 3
+      },
+      {
+        "col": 8,
+        "row": 7,
+        "id": "obj_south",
+        "vpValue": 2
+      }
+    ],
+    "garrisons": [
+      {
+        "col": 1,
+        "row": 3,
+        "id": "garrison_p1_a",
+        "owner": "player1",
+        "hp": 1
+      },
+      {
+        "col": 1,
+        "row": 11,
+        "id": "garrison_p1_b",
+        "owner": "player1",
+        "hp": 1
+      },
+      {
+        "col": 12,
+        "row": 3,
+        "id": "garrison_p2_a",
+        "owner": "player2",
+        "hp": 1
+      },
+      {
+        "col": 12,
+        "row": 11,
+        "id": "garrison_p2_b",
+        "owner": "player2",
+        "hp": 1
+      }
+    ],
+    "upgrades": [
+      {
+        "col": 3,
+        "row": 7,
+        "id": "upg_1",
+        "type": "attack",
+        "value": 1
+      },
+      {
+        "col": 10,
+        "row": 7,
+        "id": "upg_2",
+        "type": "attack",
+        "value": 1
+      },
+      {
+        "col": 6,
+        "row": 3,
+        "id": "upg_3",
+        "type": "shield",
+        "value": 1
+      },
+      {
+        "col": 7,
+        "row": 11,
+        "id": "upg_4",
+        "type": "shield",
+        "value": 1
+      },
+      {
+        "col": 4,
+        "row": 5,
+        "id": "upg_5",
+        "type": "movement",
+        "value": 1
+      },
+      {
+        "col": 9,
+        "row": 9,
+        "id": "upg_6",
+        "type": "movement",
+        "value": 1
+      },
+      {
+        "col": 6,
+        "row": 5,
+        "id": "upg_7",
+        "type": "energy",
+        "value": 1
+      },
+      {
+        "col": 7,
+        "row": 9,
+        "id": "upg_8",
+        "type": "energy",
+        "value": 1
+      }
+    ],
+    "deployZones": {
+      "player1": [
+        {
+          "col": 0,
+          "row": 5
+        },
+        {
+          "col": 0,
+          "row": 6
+        },
+        {
+          "col": 0,
+          "row": 7
+        },
+        {
+          "col": 0,
+          "row": 8
+        },
+        {
+          "col": 0,
+          "row": 9
+        }
+      ],
+      "player2": [
+        {
+          "col": 13,
+          "row": 5
+        },
+        {
+          "col": 13,
+          "row": 6
+        },
+        {
+          "col": 13,
+          "row": 7
+        },
+        {
+          "col": 13,
+          "row": 8
+        },
+        {
+          "col": 13,
+          "row": 9
+        }
+      ]
+    }
+  }
 }

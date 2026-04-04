@@ -1,9 +1,10 @@
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import { Suspense } from 'react'
-import type { GameState } from '../types'
+import type { GameState } from '../types/gameState'
 import { GameBoard } from './GameBoard'
 import { UnitMesh } from './UnitMesh'
+import { hexKey } from '../game/hexGrid'
 
 interface GameSceneProps {
   gameState: GameState
@@ -12,6 +13,7 @@ interface GameSceneProps {
   attackableHexes: Set<string>
   onHexClick: (key: string) => void
   onUnitClick: (unitId: string) => void
+  onTokenHover?: (info: string | null) => void
 }
 
 export function GameScene({
@@ -21,25 +23,16 @@ export function GameScene({
   attackableHexes,
   onHexClick,
   onUnitClick,
+  onTokenHover,
 }: GameSceneProps) {
   const selectedUnit = selectedUnitId ? gameState.units[selectedUnitId] : null
   const selectedHexKey = selectedUnit?.position
-    ? `${selectedUnit.position.q},${selectedUnit.position.r}`
+    ? hexKey(selectedUnit.position)
     : null
 
   return (
-    <Canvas
-      style={{ width: '100%', height: '100%' }}
-      shadows
-    >
-      {/* Cámara isométrica */}
-      <PerspectiveCamera
-        makeDefault
-        position={[0, 12, 10]}
-        fov={45}
-      />
-
-      {/* Controles de órbita — el jugador puede rotar y hacer zoom */}
+    <Canvas style={{ width: '100%', height: '100%' }} shadows>
+      <PerspectiveCamera makeDefault position={[9, 20, 28]} fov={45} />
       <OrbitControls
         enablePan={true}
         enableZoom={true}
@@ -48,19 +41,11 @@ export function GameScene({
         maxDistance={40}
         maxPolarAngle={Math.PI / 2.2}
         target={[9, 0, 12]}
-        />
-
-      {/* Iluminación */}
-      <ambientLight intensity={0.6} />
-      <directionalLight
-        position={[10, 20, 10]}
-        intensity={1.2}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
       />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
       <directionalLight position={[-10, 10, -10]} intensity={0.3} />
 
-      {/* Tablero */}
       <Suspense fallback={null}>
         <GameBoard
           board={gameState.board}
@@ -68,9 +53,9 @@ export function GameScene({
           reachableHexes={reachableHexes}
           attackableHexes={attackableHexes}
           onHexClick={onHexClick}
+          onTokenHover={onTokenHover}
         />
 
-        {/* Unidades */}
         {Object.values(gameState.units).map(unit => (
           <UnitMesh
             key={unit.id}

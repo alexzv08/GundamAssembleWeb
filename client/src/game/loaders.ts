@@ -7,22 +7,16 @@ import { offsetToAxial, hexKey } from './hexGrid'
 export function loadMapFromJSON(mapData: MapData): BoardMap {
     const board: BoardMap = {}
 
-    // El JSON está organizado como grid[row][col]
     for (let row = 0; row < mapData.rows; row++) {
         for (let col = 0; col < mapData.cols; col++) {
             const cell = mapData.grid[row][col]
             const coord = offsetToAxial(col, row)
             const key = hexKey(coord)
-
-            // Convertir elevation: en el JSON es 1-based, internamente 0-based
             const elevation = cell.elevation - 1
-
-            // Normalizar terrain
-            const terrain = normalizeTerrrain(cell.terrain, elevation)
 
             board[key] = {
                 coord,
-                terrain,
+                terrain: normalizeTerrrain(cell.terrain, elevation),
                 elevation,
                 occupiedBy: null,
                 upgradeToken: null,
@@ -30,6 +24,29 @@ export function loadMapFromJSON(mapData: MapData): BoardMap {
                 objectiveToken: null,
             }
         }
+    }
+
+    // Colocar tokens del escenario si existe
+    if ((mapData as any).scenario) {
+        const s = (mapData as any).scenario
+
+        s.objectives?.forEach((obj: any) => {
+            const coord = offsetToAxial(obj.col, obj.row)
+            const key = hexKey(coord)
+            if (board[key]) board[key].objectiveToken = { id: obj.id, vpValue: obj.vpValue, controlledBy: null }
+        })
+
+        s.garrisons?.forEach((gar: any) => {
+            const coord = offsetToAxial(gar.col, gar.row)
+            const key = hexKey(coord)
+            if (board[key]) board[key].garrisonToken = { id: gar.id, owner: gar.owner, hp: gar.hp }
+        })
+
+        s.upgrades?.forEach((upg: any) => {
+            const coord = offsetToAxial(upg.col, upg.row)
+            const key = hexKey(coord)
+            if (board[key]) board[key].upgradeToken = { type: upg.type, value: upg.value, revealed: false }
+        })
     }
 
     return board
@@ -43,13 +60,12 @@ function normalizeTerrrain(terrain: string, elevation: number): 'normal' | 'wate
     return 'normal'
 }
 
-// ─── CARGAR UNIDAD DESDE JSON ─────────────────────────────────────────────────
 export function loadUnitFromJSON(
     card: UnitCardData,
     playerId: 'player1' | 'player2',
     position: { q: number; r: number },
     instanceId?: string
-): Unit {
+) {
     return {
         id: instanceId ?? `${card.cardId}_${playerId}`,
         name: card.unitName,

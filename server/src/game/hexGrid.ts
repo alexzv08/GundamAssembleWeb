@@ -35,12 +35,12 @@ export function hexDistance(a: HexCoord, b: HexCoord): number {
 // ─── VECINOS ──────────────────────────────────────────────────────────────────
 // Los 6 vecinos en coordenadas axiales — siempre correcto independientemente del layout
 const AXIAL_DIRECTIONS: HexCoord[] = [
-  { q:  1, r:  0 },
-  { q:  1, r: -1 },
-  { q:  0, r: -1 },
-  { q: -1, r:  0 },
-  { q: -1, r:  1 },
-  { q:  0, r:  1 },
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
 ]
 
 export function getNeighbors(coord: HexCoord): HexCoord[] {
@@ -81,7 +81,7 @@ function cubeRound(fq: number, fr: number, fs: number): HexCoord {
   const dr = Math.abs(r - fr)
   const ds = Math.abs(s - fs)
   if (dq > dr && dq > ds) q = -r - s
-  else if (dr > ds)        r = -q - s
+  else if (dr > ds) r = -q - s
   return { q, r }
 }
 
@@ -154,19 +154,19 @@ export function findPath(
   maxDistance: number
 ): HexCoord[] | null {
   const startKey = hexKey(start)
-  const goalKey  = hexKey(goal)
+  const goalKey = hexKey(goal)
 
   if (obstacles.has(goalKey)) return null
-  if (!board[goalKey])        return null
+  if (!board[goalKey]) return null
 
   type Node = { coord: HexCoord; cost: number; estimated: number }
   const open: Node[] = [{ coord: start, cost: 0, estimated: hexDistance(start, goal) }]
-  const cameFrom  = new Map<string, string>()
+  const cameFrom = new Map<string, string>()
   const costSoFar = new Map<string, number>([[startKey, 0]])
 
   while (open.length > 0) {
     open.sort((a, b) => (a.cost + a.estimated) - (b.cost + b.estimated))
-    const current    = open.shift()!
+    const current = open.shift()!
     const currentKey = hexKey(current.coord)
 
     if (currentKey === goalKey) {
@@ -184,11 +184,11 @@ export function findPath(
       if (!board[neighborKey]) continue
       if (obstacles.has(neighborKey) && neighborKey !== goalKey) continue
 
-      const hex        = board[neighborKey]
+      const hex = board[neighborKey]
       const currentHex = board[currentKey]
       const elevationCost = Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
-      const waterCost     = currentHex?.terrain === 'water' ? 1 : 0
-      const newCost       = (costSoFar.get(currentKey) ?? 0) + 1 + elevationCost + waterCost
+      const waterCost = currentHex?.terrain === 'water' ? 1 : 0
+      const newCost = (costSoFar.get(currentKey) ?? 0) + 1 + elevationCost + waterCost
 
       if (newCost > maxDistance) continue
       if (!costSoFar.has(neighborKey) || newCost < costSoFar.get(neighborKey)!) {
@@ -220,17 +220,17 @@ export function getReachableHexes(
 
     for (const neighbor of getNeighbors(coord)) {
       const key = hexKey(neighbor)
-      if (visited.has(key))   continue
-      if (!board[key])        continue
+      if (visited.has(key)) continue
+      if (!board[key]) continue
       if (obstacles.has(key)) continue
 
       visited.add(key)
 
-      const hex        = board[key]
+      const hex = board[key]
       const currentHex = board[hexKey(coord)]
       const elevationCost = Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
-      const waterCost     = currentHex?.terrain === 'water' ? 1 : 0
-      const cost          = 1 + elevationCost + waterCost
+      const waterCost = currentHex?.terrain === 'water' ? 1 : 0
+      const cost = 1 + elevationCost + waterCost
 
       if (movesLeft - cost >= 0) {
         reachable.push(neighbor)
@@ -239,5 +239,26 @@ export function getReachableHexes(
     }
   }
 
+
+
+
   return reachable
+}
+
+// Distancia correcta entre dos posiciones en nuestro sistema offset
+export function gridDistance(
+  a: HexCoord,
+  b: HexCoord
+): number {
+  // Convertir offset a axial real antes de calcular distancia
+  const toAxial = (coord: HexCoord) => {
+    const q = coord.q
+    const r = coord.r - (coord.q - (coord.q & 1)) / 2
+    return { q, r }
+  }
+  const ac = toAxial(a)
+  const bc = toAxial(b)
+  const dq = ac.q - bc.q
+  const dr = ac.r - bc.r
+  return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr))
 }

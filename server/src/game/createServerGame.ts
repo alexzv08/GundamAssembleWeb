@@ -4,9 +4,20 @@ import { offsetToAxial, hexKey } from './hexGrid'
 import fs from 'fs'
 import path from 'path'
 
-// Tipos del JSON
+// ─── TIPOS DEL JSON ───────────────────────────────────────────────────────────
 interface MapCell { terrain: string; elevation: number }
-interface MapJSON { cols: number; rows: number; grid: MapCell[][] }
+interface ScenarioObjective { col: number; row: number; id: string; vpValue: number }
+interface ScenarioGarrison { col: number; row: number; id: string; owner: 'player1' | 'player2'; hp: number }
+interface ScenarioUpgrade { col: number; row: number; id: string; type: 'attack' | 'movement' | 'shield' | 'energy'; value: number }
+interface ScenarioZone { col: number; row: number }
+interface Scenario {
+    name: string
+    objectives: ScenarioObjective[]
+    garrisons: ScenarioGarrison[]
+    upgrades: ScenarioUpgrade[]
+    deployZones: { player1: ScenarioZone[]; player2: ScenarioZone[] }
+}
+interface MapJSON { cols: number; rows: number; grid: MapCell[][]; scenario?: Scenario }
 interface WeaponJSON { name: string; cost: string; range: string; str: string; effect: string; crit: string }
 interface AbilityJSON { name: string; type: string; tags: string; effect: string }
 interface UnitJSON { unitName: string; pilot: string; faction: string; cardId: string; hp: string; vp: string; tl: string; weapons: WeaponJSON[]; abilities: AbilityJSON[] }
@@ -28,8 +39,9 @@ export function createServerGame(player1Name: string, player2Name: string): Game
     const mapData = loadJSON<MapJSON>(path.join(dataDir, 'maps/DemoMap.json'))
     const unitData = loadJSON<UnitsJSON>(path.join(dataDir, 'units/unit_library.json'))
 
-    // Construir tablero
+    // ─── CONSTRUIR TABLERO ────────────────────────────────────────────────────
     const board: BoardMap = {}
+
     for (let row = 0; row < mapData.rows; row++) {
         for (let col = 0; col < mapData.cols; col++) {
             const cell = mapData.grid[row][col]
@@ -38,18 +50,47 @@ export function createServerGame(player1Name: string, player2Name: string): Game
             const elevation = cell.elevation - 1
 
             board[key] = {
-                coord, elevation,
+                coord,
+                elevation,
                 terrain: elevation >= 3 ? 'elevation_3'
                     : elevation >= 2 ? 'elevation_2'
                         : elevation >= 1 ? 'elevation_1'
                             : cell.terrain === 'water' ? 'water' : 'normal',
-                occupiedBy: null, upgradeToken: null,
-                garrisonToken: null, objectiveToken: null,
+                occupiedBy: null,
+                upgradeToken: null,
+                garrisonToken: null,
+                objectiveToken: null,
             }
         }
     }
 
-    // Posiciones de inicio
+    // ─── COLOCAR TOKENS DEL ESCENARIO ─────────────────────────────────────────
+    if (mapData.scenario) {
+        const s = mapData.scenario
+
+        s.objectives.forEach(obj => {
+            const key = hexKey(offsetToAxial(obj.col, obj.row))
+            if (board[key]) board[key].objectiveToken = {
+                id: obj.id, vpValue: obj.vpValue, controlledBy: null,
+            }
+        })
+
+        s.garrisons.forEach(gar => {
+            const key = hexKey(offsetToAxial(gar.col, gar.row))
+            if (board[key]) board[key].garrisonToken = {
+                id: gar.id, owner: gar.owner, hp: gar.hp,
+            }
+        })
+
+        s.upgrades.forEach(upg => {
+            const key = hexKey(offsetToAxial(upg.col, upg.row))
+            if (board[key]) board[key].upgradeToken = {
+                type: upg.type, value: upg.value, revealed: false,
+            }
+        })
+    }
+
+    // ─── POSICIONES DE INICIO ─────────────────────────────────────────────────
     const fedPositions = [offsetToAxial(0, 6), offsetToAxial(0, 7), offsetToAxial(0, 8)]
     const zeonPositions = [offsetToAxial(13, 6), offsetToAxial(13, 7), offsetToAxial(13, 8)]
 
@@ -81,8 +122,10 @@ export function createServerGame(player1Name: string, player2Name: string): Game
             description: a.effect,
             energyCost: a.tags.includes('Energy') ? 1 : undefined,
         })),
-        statusEffects: [], upgrades: [],
-        playerId, activated: false,
+        statusEffects: [],
+        upgrades: [],
+        playerId,
+        activated: false,
     })
 
     const p1Units = fedCards.map((c, i) => createUnit(c, 'player1', fedPositions[i]))
@@ -93,6 +136,7 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         if (u.position) board[hexKey(u.position)].occupiedBy = u.id
     })
 
+    // ─── TIMELINE ─────────────────────────────────────────────────────────────
     let timeline = createEmptyTimeline()
     allUnits.forEach(u => {
         timeline = placeInitialToken(timeline, { unitId: u.id, playerId: u.playerId }, u.startingTl)
@@ -100,6 +144,7 @@ export function createServerGame(player1Name: string, player2Name: string): Game
 
     const firstToken = timeline.slots.find(s => s.tokens.length > 0)?.tokens[0]
 
+    // ─── GAME STATE ───────────────────────────────────────────────────────────
     return {
         gameId: Math.random().toString(36).substring(2, 10),
         phase: 'phase1',
@@ -113,14 +158,15 @@ export function createServerGame(player1Name: string, player2Name: string): Game
             player1: {
                 id: 'player1', name: player1Name, vp: 0,
                 tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
-                squadUnitIds: p1Units.map(u => u.id)
+                squadUnitIds: p1Units.map(u => u.id),
             },
             player2: {
                 id: 'player2', name: player2Name, vp: 0,
                 tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
-                squadUnitIds: p2Units.map(u => u.id)
+                squadUnitIds: p2Units.map(u => u.id),
             },
         },
-        actionLog: [], winner: null,
+        actionLog: [],
+        winner: null,
     }
 }

@@ -14,7 +14,7 @@ export interface Hex {
 }
 
 export interface UpgradeToken {
-    type: 'attack' | 'movement' | 'shield'
+    type: 'attack' | 'movement' | 'shield' | 'energy'
     value: number
     revealed: boolean
 }

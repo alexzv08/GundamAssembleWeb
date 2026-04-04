@@ -61,6 +61,9 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             }
         }
 
+
+        console.log('ACTION:', JSON.stringify(action))
+        console.log('PLAYER:', playerId)
         const result = applyAction(room.gameState, action, playerId, rolls)
 
         if (!result.success) {
