@@ -3,12 +3,14 @@ import { axialToOffset } from '../game/hexGrid'
 export const HEX_SIZE = 1
 export const HEX_HEIGHT = 0.2
 
+// Pointy-top hex geometry
+// col step = sqrt(3)*R, row step = 1.5*R, odd rows shift right by sqrt(3)*R/2
 export function hexToWorld(q: number, r: number, elevation: number = 0): [number, number, number] {
     const { col, row } = axialToOffset(q, r)
-    const width = Math.sqrt(3) * HEX_SIZE
-    const height = 2 * HEX_SIZE
-    const x = col * (height * 0.75)
-    const z = row * width + (col % 2) * (width / 2)
+    const SQ3 = Math.sqrt(3)
+    // Pointy-top odd-r: filas impares desplazadas a la derecha
+    const x = col * SQ3 * HEX_SIZE + (row % 2 === 1 ? SQ3 / 2 * HEX_SIZE : 0)
+    const z = row * 1.5 * HEX_SIZE
     const y = elevation * 0.3
     return [x, y, z]
 }

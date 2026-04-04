@@ -122,12 +122,17 @@ export default function App() {
   const calcReachable = useCallback((unitId: string, state: GameState) => {
     const unit = state.units[unitId]
     if (!unit?.position) return new Set<string>()
+    console.log('Unit position:', unit.position)
+    console.log('Board keys sample:', Object.keys(state.board).slice(0, 5))
     const obstacles = new Set(
       Object.values(state.units)
         .filter(u => u.id !== unitId && u.currentHp > 0 && u.position && u.playerId !== unit.playerId)
         .map(u => hexKey(u.position!))
     )
     const reachable = getReachableHexes(unit.position, state.board, obstacles, 3)
+    console.log('Unit at:', unit.position)
+    console.log('Reachable count:', reachable.length)
+    console.log('Reachable:', reachable.slice(0, 6))
     return new Set(reachable.map(h => hexKey(h)))
   }, [])
 

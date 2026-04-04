@@ -1,15 +1,13 @@
-import { GameState, GameAction, PlayerId, Unit } from '../types'
-import { hexKey, hexDistance, findPath, getReachableHexes, checkLineOfSight, gridDistance } from './hexGrid'
+import { GameState, GameAction, PlayerId } from '../types'
+import { hexKey, findPath, checkLineOfSight, gridDistance, getNeighbors } from './hexGrid'
 import { advanceToken, getNextActivation } from './timeline'
 
-// ─── RESULTADO DE UNA ACCIÓN ──────────────────────────────────────────────────
 export interface ActionResult {
     success: boolean
     newState?: GameState
     error?: string
 }
 
-// ─── VALIDACIÓN GENERAL ───────────────────────────────────────────────────────
 function validateTurn(state: GameState, unitId: string, playerId: PlayerId): string | null {
     if (state.activePlayerId !== playerId) return 'No es tu turno'
     if (state.activeUnitId !== unitId) return 'No es el turno de esta unidad'
@@ -20,7 +18,6 @@ function validateTurn(state: GameState, unitId: string, playerId: PlayerId): str
     return null
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
 function getMovementObstacles(state: GameState, movingUnitId: string): Set<string> {
     const obstacles = new Set<string>()
     for (const unit of Object.values(state.units)) {
@@ -59,6 +56,35 @@ function advanceToNextActivation(state: GameState): GameState {
     return { ...state, activeUnitId: next.unitId, activePlayerId: next.playerId }
 }
 
+// ─── SPAWN ────────────────────────────────────────────────────────────────────
+function spawnUnitIfNeeded(state: GameState, unitId: string): GameState {
+    const unit = state.units[unitId]
+    if (unit.position !== null) return state
+
+    const deployHex = state.players[unit.playerId].deployHex
+    if (!deployHex) return state
+
+    const deployKey = hexKey(deployHex)
+    if (state.board[deployKey] && !state.board[deployKey].occupiedBy) {
+        const newState = cloneState(state)
+        newState.units[unitId].position = deployHex
+        newState.board[deployKey].occupiedBy = unitId
+        return newState
+    }
+
+    for (const neighbor of getNeighbors(deployHex)) {
+        const key = hexKey(neighbor)
+        if (state.board[key] && !state.board[key].occupiedBy) {
+            const newState = cloneState(state)
+            newState.units[unitId].position = neighbor
+            newState.board[key].occupiedBy = unitId
+            return newState
+        }
+    }
+
+    return state
+}
+
 // ─── ADVANCE ─────────────────────────────────────────────────────────────────
 export function applyAdvance(
     state: GameState,
@@ -92,7 +118,6 @@ export function applyAdvance(
     newUnit.position = to
     if (newState.board[destKey]) newState.board[destKey].occupiedBy = unitId
 
-    // Recoger upgrade token
     const destHex = newState.board[destKey]
     if (destHex?.upgradeToken && !destHex.upgradeToken.revealed) {
         destHex.upgradeToken.revealed = true
@@ -150,7 +175,6 @@ export function applyAttack(
     }
 
     const hasDisarm = attacker.statusEffects.some(e => e.type === 'disarm')
-
     const attackerHex = state.board[hexKey(attacker.position)]
     const targetHex = state.board[hexKey(target.position)]
     const elevDiff = (attackerHex?.elevation ?? 0) - (targetHex?.elevation ?? 0)
@@ -165,7 +189,6 @@ export function applyAttack(
 
     let hits = 0
     let critEffectTriggered = false
-
     for (const roll of diceRolls) {
         if (roll === 1) continue
         if (roll >= 9) {
@@ -201,6 +224,7 @@ export function applyAttack(
             newTarget.position = null
         }
         newState.timeline = advanceToken(newState.timeline, targetId, 2)
+        newTarget.currentHp = newTarget.maxHp
     }
 
     newState.actionLog.push({ type: 'ATTACK', unitId, weaponIndex, targetId })
@@ -273,29 +297,19 @@ export function applyRescue(
     const unit = state.units[unitId]
     if (!unit.position) return { success: false, error: 'La unidad no está en el tablero' }
 
-    console.log('RESCUE - unitId:', unitId, 'garrisonId:', garrisonId, 'playerId:', playerId)
-
-    // Buscar garrison en el tablero
     const garrisonHexEntry = Object.entries(state.board).find(
         ([_, hex]) => hex.garrisonToken?.id === garrisonId
     )
-
-    console.log('RESCUE - garrison found:', !!garrisonHexEntry)
-
     if (!garrisonHexEntry) return { success: false, error: 'Garrison no encontrada' }
 
     const [garrisonKey, garrisonHex] = garrisonHexEntry
     const garrison = garrisonHex.garrisonToken!
-
-    console.log('RESCUE - garrison owner:', garrison.owner, 'playerId:', playerId)
 
     if (garrison.owner !== playerId) {
         return { success: false, error: 'Solo puedes rescatar garrisons aliadas' }
     }
 
     const dist = gridDistance(unit.position, garrisonHex.coord)
-    console.log('RESCUE - distance:', dist, 'unit pos:', unit.position, 'garrison coord:', garrisonHex.coord)
-
     if (dist > 1) {
         return { success: false, error: 'La garrison no está adyacente' }
     }
@@ -305,8 +319,6 @@ export function applyRescue(
     newState.players[playerId].vp += 2
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'RESCUE', unitId, garrisonId })
-
-    console.log('RESCUE - VP after rescue:', newState.players[playerId].vp)
 
     return { success: true, newState }
 }
@@ -335,21 +347,47 @@ export function applyAction(
     playerId: PlayerId,
     diceRolls?: number[]
 ): ActionResult {
+    // Spawn de la unidad activa si no tiene posición
+    if (state.activeUnitId) {
+        const activeUnit = state.units[state.activeUnitId]
+        if (activeUnit && activeUnit.position === null && activeUnit.playerId === playerId) {
+            state = spawnUnitIfNeeded(state, state.activeUnitId)
+        }
+    }
+
+    let result: ActionResult
+
     switch (action.type) {
         case 'ADVANCE':
-            return applyAdvance(state, action.unitId, action.to, playerId)
+            result = applyAdvance(state, action.unitId, action.to, playerId); break
         case 'ATTACK':
             if (!diceRolls) return { success: false, error: 'Faltan los dados para el ataque' }
-            return applyAttack(state, action.unitId, action.weaponIndex, action.targetId, playerId, diceRolls)
+            result = applyAttack(state, action.unitId, action.weaponIndex, action.targetId, playerId, diceRolls); break
         case 'DASH':
-            return applyDash(state, action.unitId, action.to, playerId)
+            result = applyDash(state, action.unitId, action.to, playerId); break
         case 'ENERGIZE':
-            return applyEnergize(state, action.unitId, playerId)
+            result = applyEnergize(state, action.unitId, playerId); break
         case 'RESCUE':
-            return applyRescue(state, action.unitId, action.garrisonId, playerId)
+            result = applyRescue(state, action.unitId, action.garrisonId, playerId); break
         case 'END_ACTIVATION':
-            return applyEndActivation(state, action.unitId, playerId)
+            result = applyEndActivation(state, action.unitId, playerId); break
         default:
             return { success: false, error: 'Acción desconocida' }
     }
+
+    // Spawn de la siguiente unidad activa si no tiene posición
+    // Spawn de la siguiente unidad activa si no tiene posición
+    if (result.success && result.newState?.activeUnitId) {
+        const nextUnit = result.newState.units[result.newState.activeUnitId]
+        console.log('NEXT UNIT:', result.newState.activeUnitId, 'position:', nextUnit?.position)
+        if (nextUnit && nextUnit.position === null) {
+            console.log('SPAWNING next unit...')
+            result.newState = spawnUnitIfNeeded(result.newState, result.newState.activeUnitId)
+            console.log('After spawn:', result.newState.units[result.newState.activeUnitId!]?.position)
+        }
+    }
+
+    return result
+
+    return result
 }

@@ -32,7 +32,7 @@ export function GameScene({
 
   return (
     <Canvas style={{ width: '100%', height: '100%' }} shadows>
-      <PerspectiveCamera makeDefault position={[9, 20, 28]} fov={45} />
+      <PerspectiveCamera makeDefault position={[12, 20, 24]} fov={45} />
       <OrbitControls
         enablePan={true}
         enableZoom={true}
@@ -40,7 +40,7 @@ export function GameScene({
         minDistance={5}
         maxDistance={40}
         maxPolarAngle={Math.PI / 2.2}
-        target={[9, 0, 12]}
+        target={[12, 0, 16]}
       />
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />

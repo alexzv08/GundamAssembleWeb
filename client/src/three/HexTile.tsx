@@ -50,7 +50,7 @@ export function HexTile({
                 onPointerEnter={(e) => { e.stopPropagation(); setHovered(true); onHover?.() }}
                 onPointerLeave={() => setHovered(false)}
             >
-                <cylinderGeometry args={[HEX_SIZE * 0.96, HEX_SIZE * 0.96, height, 6, 1, false, Math.PI / 6]} />
+                <cylinderGeometry args={[HEX_SIZE * 0.96, HEX_SIZE * 0.96, height, 6, 1, false, 0]} />
                 <meshStandardMaterial
                     color={color}
                     roughness={0.8}
@@ -59,6 +59,17 @@ export function HexTile({
                     opacity={isReachable || isAttackable ? 0.75 : 1}
                 />
             </mesh>
+
+            {hex.deployZone && (
+                <mesh position={[x, y + 0.05, z]} rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[HEX_SIZE * 0.7, 0.06, 8, 6]} />
+                    <meshStandardMaterial
+                        color={hex.deployZone === 'player1' ? '#4fc3f7' : '#ef5350'}
+                        emissive={hex.deployZone === 'player1' ? '#4fc3f7' : '#ef5350'}
+                        emissiveIntensity={0.8}
+                    />
+                </mesh>
+            )}
 
             {/* Objetivo */}
             {hex.objectiveToken && (
@@ -70,7 +81,7 @@ export function HexTile({
                     }}
                     onPointerLeave={() => onTokenHover?.(null)}
                 >
-                    <cylinderGeometry args={[0.3, 0.3, 0.08, 6, 1, false, Math.PI / 6]} />
+                    <cylinderGeometry args={[0.3, 0.3, 0.08, 6, 1, false, 0]} />
                     <meshStandardMaterial color={objColor} emissive={objColor} emissiveIntensity={0.4} />
                 </mesh>
             )}

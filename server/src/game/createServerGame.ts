@@ -4,11 +4,10 @@ import { offsetToAxial, hexKey } from './hexGrid'
 import fs from 'fs'
 import path from 'path'
 
-// ─── TIPOS DEL JSON ───────────────────────────────────────────────────────────
 interface MapCell { terrain: string; elevation: number }
 interface ScenarioObjective { col: number; row: number; id: string; vpValue: number }
 interface ScenarioGarrison { col: number; row: number; id: string; owner: 'player1' | 'player2'; hp: number }
-interface ScenarioUpgrade { col: number; row: number; id: string; type: 'attack' | 'movement' | 'shield' | 'energy'; value: number }
+interface ScenarioUpgrade { col: number; row: number; id: string; type: 'attack' | 'movement' | 'shield' | 'energy' | 'random'; value: number }
 interface ScenarioZone { col: number; row: number }
 interface Scenario {
     name: string
@@ -32,6 +31,26 @@ function normalizeAbilityType(type: string): 'CMD' | 'ONG' | 'RSP' {
     if (type === 'ongoing') return 'ONG'
     if (type === 'response') return 'RSP'
     return 'CMD'
+}
+
+const UPGRADE_TYPES: ('attack' | 'movement' | 'shield')[] = ['attack', 'movement', 'shield']
+
+function getNeighbors(coord: { q: number; r: number }): { q: number; r: number }[] {
+    const { q, r } = coord
+    const isOdd = r & 1
+    if (isOdd) {
+        return [
+            { q: q + 1, r: r }, { q: q - 1, r: r },
+            { q: q, r: r - 1 }, { q: q + 1, r: r - 1 },
+            { q: q, r: r + 1 }, { q: q + 1, r: r + 1 },
+        ]
+    } else {
+        return [
+            { q: q + 1, r: r }, { q: q - 1, r: r },
+            { q: q - 1, r: r - 1 }, { q: q, r: r - 1 },
+            { q: q - 1, r: r + 1 }, { q: q, r: r + 1 },
+        ]
+    }
 }
 
 export function createServerGame(player1Name: string, player2Name: string): GameState {
@@ -60,11 +79,15 @@ export function createServerGame(player1Name: string, player2Name: string): Game
                 upgradeToken: null,
                 garrisonToken: null,
                 objectiveToken: null,
+                deployZone: null,
             }
         }
     }
 
     // ─── COLOCAR TOKENS DEL ESCENARIO ─────────────────────────────────────────
+    const deployP1 = mapData.scenario?.deployZones?.player1 ?? []
+    const deployP2 = mapData.scenario?.deployZones?.player2 ?? []
+
     if (mapData.scenario) {
         const s = mapData.scenario
 
@@ -84,20 +107,33 @@ export function createServerGame(player1Name: string, player2Name: string): Game
 
         s.upgrades.forEach(upg => {
             const key = hexKey(offsetToAxial(upg.col, upg.row))
-            if (board[key]) board[key].upgradeToken = {
-                type: upg.type, value: upg.value, revealed: false,
+            if (board[key]) {
+                const resolvedType = upg.type === 'random'
+                    ? UPGRADE_TYPES[Math.floor(Math.random() * UPGRADE_TYPES.length)]
+                    : upg.type as 'attack' | 'movement' | 'shield' | 'energy'
+                board[key].upgradeToken = { type: resolvedType, value: upg.value, revealed: false }
             }
         })
     }
 
-    // ─── POSICIONES DE INICIO ─────────────────────────────────────────────────
-    const fedPositions = [offsetToAxial(0, 6), offsetToAxial(0, 7), offsetToAxial(0, 8)]
-    const zeonPositions = [offsetToAxial(13, 6), offsetToAxial(13, 7), offsetToAxial(13, 8)]
+    // Marcar zonas de despliegue
+    deployP1.forEach(z => {
+        const key = hexKey(offsetToAxial(z.col, z.row))
+        if (board[key]) board[key].deployZone = 'player1'
+    })
+    deployP2.forEach(z => {
+        const key = hexKey(offsetToAxial(z.col, z.row))
+        if (board[key]) board[key].deployZone = 'player2'
+    })
+
+    // ─── POSICIONES DE DEPLOY ─────────────────────────────────────────────────
+    const p1Deploy = deployP1[0] ? offsetToAxial(deployP1[0].col, deployP1[0].row) : { q: 0, r: 7 }
+    const p2Deploy = deployP2[0] ? offsetToAxial(deployP2[0].col, deployP2[0].row) : { q: 13, r: 7 }
 
     const fedCards = unitData.cards.filter(c => c.faction === 'Earth Federation').slice(0, 3)
     const zeonCards = unitData.cards.filter(c => c.faction === 'Zeon').slice(0, 3)
 
-    const createUnit = (card: UnitJSON, playerId: 'player1' | 'player2', pos: { q: number; r: number }) => ({
+    const createUnit = (card: UnitJSON, playerId: 'player1' | 'player2') => ({
         id: `${card.cardId}_${playerId}`,
         name: card.unitName,
         unitType: 'Mobile Suit',
@@ -107,7 +143,7 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         startingTl: parseInt(card.tl),
         currentHp: parseInt(card.hp),
         energy: 0,
-        position: pos,
+        position: null as { q: number; r: number } | null,
         weapons: card.weapons.map(w => ({
             name: w.name,
             range: parseInt(w.range),
@@ -128,13 +164,9 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         activated: false,
     })
 
-    const p1Units = fedCards.map((c, i) => createUnit(c, 'player1', fedPositions[i]))
-    const p2Units = zeonCards.map((c, i) => createUnit(c, 'player2', zeonPositions[i]))
+    const p1Units = fedCards.map(c => createUnit(c, 'player1'))
+    const p2Units = zeonCards.map(c => createUnit(c, 'player2'))
     const allUnits = [...p1Units, ...p2Units]
-
-    allUnits.forEach(u => {
-        if (u.position) board[hexKey(u.position)].occupiedBy = u.id
-    })
 
     // ─── TIMELINE ─────────────────────────────────────────────────────────────
     let timeline = createEmptyTimeline()
@@ -143,6 +175,18 @@ export function createServerGame(player1Name: string, player2Name: string): Game
     })
 
     const firstToken = timeline.slots.find(s => s.tokens.length > 0)?.tokens[0]
+
+    // ─── SPAWN PRIMERA UNIDAD ACTIVA ──────────────────────────────────────────
+    // La primera unidad que va a activarse aparece en su hex de deploy
+    if (firstToken) {
+        const firstUnit = allUnits.find(u => u.id === firstToken.unitId)
+        const deployHex = firstToken.playerId === 'player1' ? p1Deploy : p2Deploy
+        const deployKey = hexKey(deployHex)
+        if (firstUnit && board[deployKey] && !board[deployKey].occupiedBy) {
+            firstUnit.position = deployHex
+            board[deployKey].occupiedBy = firstUnit.id
+        }
+    }
 
     // ─── GAME STATE ───────────────────────────────────────────────────────────
     return {
@@ -157,11 +201,13 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         players: {
             player1: {
                 id: 'player1', name: player1Name, vp: 0,
+                deployHex: p1Deploy,
                 tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
                 squadUnitIds: p1Units.map(u => u.id),
             },
             player2: {
                 id: 'player2', name: player2Name, vp: 0,
+                deployHex: p2Deploy,
                 tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
                 squadUnitIds: p2Units.map(u => u.id),
             },

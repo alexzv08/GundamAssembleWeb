@@ -10,87 +10,114 @@ export function keyToHex(key: string): HexCoord {
   return { q, r }
 }
 
-// Convierte col/row de grid rectangular a coordenadas axiales (flat-top, odd-q offset)
+// Pointy-top odd-r: q=col, r=row (identidad directa)
 export function offsetToAxial(col: number, row: number): HexCoord {
-  const q = col
-  const r = row - (col - (col & 1)) / 2
-  return { q, r }
+  return { q: col, r: row }
 }
 
-// Convierte coordenadas axiales a col/row
 export function axialToOffset(q: number, r: number): { col: number; row: number } {
-  const col = q
-  const row = r + (q - (q & 1)) / 2
-  return { col, row }
+  return { col: q, row: r }
 }
 
 // ─── DISTANCIA ────────────────────────────────────────────────────────────────
-// Fórmula exacta de redblobgames para coordenadas axiales
+// Convierte offset odd-r a cúbico para calcular distancia correcta
+function offsetToCube(q: number, r: number) {
+  const x = q - (r - (r & 1)) / 2
+  const z = r
+  const y = -x - z
+  return { x, y, z }
+}
+
 export function hexDistance(a: HexCoord, b: HexCoord): number {
-  const dq = a.q - b.q
-  const dr = a.r - b.r
-  return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr))
+  const ac = offsetToCube(a.q, a.r)
+  const bc = offsetToCube(b.q, b.r)
+  return Math.max(
+    Math.abs(ac.x - bc.x),
+    Math.abs(ac.y - bc.y),
+    Math.abs(ac.z - bc.z)
+  )
+}
+
+export function gridDistance(a: HexCoord, b: HexCoord): number {
+  return hexDistance(a, b)
 }
 
 // ─── VECINOS ──────────────────────────────────────────────────────────────────
-// Los 6 vecinos en coordenadas axiales — siempre correcto independientemente del layout
-const AXIAL_DIRECTIONS: HexCoord[] = [
-  { q: 1, r: 0 },
-  { q: 1, r: -1 },
-  { q: 0, r: -1 },
-  { q: -1, r: 0 },
-  { q: -1, r: 1 },
-  { q: 0, r: 1 },
-]
-
+// Pointy-top odd-r offset: filas impares desplazadas a la derecha
 export function getNeighbors(coord: HexCoord): HexCoord[] {
-  return AXIAL_DIRECTIONS.map(dir => ({
-    q: coord.q + dir.q,
-    r: coord.r + dir.r,
-  }))
+  const { q, r } = coord
+  const isOdd = r & 1
+
+  if (isOdd) {
+    return [
+      { q: q + 1, r: r },
+      { q: q - 1, r: r },
+      { q: q, r: r - 1 },
+      { q: q + 1, r: r - 1 },
+      { q: q, r: r + 1 },
+      { q: q + 1, r: r + 1 },
+    ]
+  } else {
+    return [
+      { q: q + 1, r: r },
+      { q: q - 1, r: r },
+      { q: q - 1, r: r - 1 },
+      { q: q, r: r - 1 },
+      { q: q - 1, r: r + 1 },
+      { q: q, r: r + 1 },
+    ]
+  }
 }
 
 // ─── HEXES EN RANGO ───────────────────────────────────────────────────────────
 export function hexesInRange(origin: HexCoord, range: number): HexCoord[] {
   const results: HexCoord[] = []
-  for (let q = -range; q <= range; q++) {
-    for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
-      if (q === 0 && r === 0) continue
-      results.push({ q: origin.q + q, r: origin.r + r })
+  const visited = new Set<string>([hexKey(origin)])
+  const queue: { coord: HexCoord; dist: number }[] = [{ coord: origin, dist: 0 }]
+
+  while (queue.length > 0) {
+    const { coord, dist } = queue.shift()!
+    if (dist >= range) continue
+    for (const n of getNeighbors(coord)) {
+      const key = hexKey(n)
+      if (visited.has(key)) continue
+      visited.add(key)
+      results.push(n)
+      queue.push({ coord: n, dist: dist + 1 })
     }
   }
   return results
 }
 
 // ─── LÍNEA DE HEXES ───────────────────────────────────────────────────────────
-function hexLerp(a: HexCoord, b: HexCoord, t: number): HexCoord {
-  const aq = a.q, ar = a.r, as_ = -a.q - a.r
-  const bq = b.q, br = b.r, bs_ = -b.q - b.r
-  return cubeRound(
-    aq + (bq - aq) * t,
-    ar + (br - ar) * t,
-    as_ + (bs_ - as_) * t
-  )
+function cubeToOffset(x: number, z: number): HexCoord {
+  const q = x + (z - (z & 1)) / 2
+  const r = z
+  return { q, r }
 }
 
-function cubeRound(fq: number, fr: number, fs: number): HexCoord {
-  let q = Math.round(fq)
-  let r = Math.round(fr)
-  const s = Math.round(fs)
-  const dq = Math.abs(q - fq)
-  const dr = Math.abs(r - fr)
-  const ds = Math.abs(s - fs)
-  if (dq > dr && dq > ds) q = -r - s
-  else if (dr > ds) r = -q - s
-  return { q, r }
+function cubeRound(x: number, y: number, z: number) {
+  let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z)
+  const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z)
+  if (dx > dy && dx > dz) rx = -ry - rz
+  else if (dy > dz) ry = -rx - rz
+  else rz = -rx - ry
+  return { x: rx, y: ry, z: rz }
 }
 
 export function hexLineDraw(a: HexCoord, b: HexCoord): HexCoord[] {
   const dist = hexDistance(a, b)
   if (dist === 0) return [a]
+  const ac = offsetToCube(a.q, a.r)
+  const bc = offsetToCube(b.q, b.r)
   const results: HexCoord[] = []
   for (let i = 0; i <= dist; i++) {
-    results.push(hexLerp(a, b, i / dist))
+    const t = i / dist
+    const rx = ac.x + (bc.x - ac.x) * t
+    const ry = ac.y + (bc.y - ac.y) * t
+    const rz = ac.z + (bc.z - ac.z) * t
+    const rounded = cubeRound(rx, ry, rz)
+    results.push(cubeToOffset(rounded.x, rounded.z))
   }
   return results
 }
@@ -239,26 +266,5 @@ export function getReachableHexes(
     }
   }
 
-
-
-
   return reachable
-}
-
-// Distancia correcta entre dos posiciones en nuestro sistema offset
-export function gridDistance(
-  a: HexCoord,
-  b: HexCoord
-): number {
-  // Convertir offset a axial real antes de calcular distancia
-  const toAxial = (coord: HexCoord) => {
-    const q = coord.q
-    const r = coord.r - (coord.q - (coord.q & 1)) / 2
-    return { q, r }
-  }
-  const ac = toAxial(a)
-  const bc = toAxial(b)
-  const dq = ac.q - bc.q
-  const dr = ac.r - bc.r
-  return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr))
 }

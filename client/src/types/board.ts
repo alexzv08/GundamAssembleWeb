@@ -11,10 +11,11 @@ export interface Hex {
     upgradeToken: UpgradeToken | null
     garrisonToken: GarrisonToken | null
     objectiveToken: ObjectiveToken | null
+    deployZone: 'player1' | 'player2' | null
 }
 
 export interface UpgradeToken {
-    type: 'attack' | 'movement' | 'shield'
+    type: 'attack' | 'movement' | 'shield' | 'energy'
     value: number
     revealed: boolean
 }
