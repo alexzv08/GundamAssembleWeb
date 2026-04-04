@@ -63,6 +63,8 @@ export function createServerGame(player1Name: string, player2Name: string): Game
 
     for (let row = 0; row < mapData.rows; row++) {
         for (let col = 0; col < mapData.cols; col++) {
+            // Ignorar col 13 en filas impares (pointy-top odd-r)
+            if (row % 2 === 1 && col === mapData.cols - 1) continue
             const cell = mapData.grid[row][col]
             const coord = offsetToAxial(col, row)
             const key = hexKey(coord)

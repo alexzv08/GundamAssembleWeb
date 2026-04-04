@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gundam Hex Map Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ui-bg:      #07090f;
+  --sidebar-bg: #090c16;
+  --panel-bg:   #0c1020;
+  --border:     #141c30;
+  --border2:    #1e2840;
+  --text-dim:   #2e3c58;
+  --text-mid:   #5a6e90;
+  --text-bright:#c0cce0;
+  --accent:     #c0392b;
+  --gold:       #d4a828;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--ui-bg);
+  font-family: 'Rajdhani', sans-serif;
+  color: var(--text-mid);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.topbar {
+  height: 48px;
+  background: #050710;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.topbar-title { font-size: 15px; font-weight: 700; letter-spacing: 5px; text-transform: uppercase; color: var(--text-bright); }
+.topbar-sep { width: 1px; height: 20px; background: var(--border2); }
+.topbar-sub { font-size: 9px; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; }
+.topbar-coord { margin-left: auto; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; min-width: 130px; text-align: right; }
+
+.workspace { display: flex; flex: 1; overflow: hidden; }
+
+.sidebar {
+  width: 224px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 14px 12px 20px;
+  gap: 14px;
+}
+
+.section-title {
+  font-size: 8px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--text-dim);
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.pill-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.pill {
+  flex: 1; padding: 6px 4px;
+  background: var(--panel-bg);
+  border: 1.5px solid var(--border2);
+  border-radius: 5px;
+  text-align: center;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.pill:hover { border-color: #304070; color: #6080b0; }
+.pill.active       { border-color: #3060c0; color: #80aaff; background: #0a1428; }
+.pill.active.erase { border-color: #903030; color: #e07060; background: #140a08; }
+.pill.active.token-p1  { border-color: #1a8080; color: #40d0d0; background: #081818; }
+.pill.active.token-p2  { border-color: #803030; color: #e06060; background: #180808; }
+.pill.active.token-obj { border-color: #806020; color: #e0c040; background: #181008; }
+.pill.active.token-upg { border-color: #408040; color: #80d080; background: #081808; }
+.pill.active.token-dep1 { border-color: #205080; color: #4090d0; background: #080f18; }
+.pill.active.token-dep2 { border-color: #702020; color: #d04040; background: #180808; }
+
+.terrain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.terrain-tile {
+  background: var(--panel-bg); border: 2px solid var(--border2); border-radius: 8px;
+  padding: 8px 6px 6px; cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; transition: border-color .15s, background .15s; user-select: none;
+}
+.terrain-tile:hover { border-color: #304070; background: #0e1628; }
+.terrain-tile.active { border-color: #4a80e0; background: #0a1830; }
+.terrain-tile canvas { display: block; border-radius: 3px; }
+.terrain-name { font-size: 8px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+.terrain-tile.active .terrain-name { color: #80aaff; }
+
+.elev-row { display: flex; gap: 5px; }
+.elev-btn {
+  flex: 1; padding: 8px 4px; background: var(--panel-bg); border: 2px solid var(--border2);
+  border-radius: 6px; text-align: center; font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px; font-weight: 700; letter-spacing: 1px; color: var(--text-dim);
+  cursor: pointer; transition: border-color .15s, color .15s, background .15s; user-select: none;
+}
+.elev-btn:hover { background: #0e1628; }
+.elev-btn.active { border-color: var(--gold); color: #f0d060; background: #14100a; }
+
+/* Token sub-selector */
+.token-sub { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.token-opt {
+  padding: 6px 8px; border-radius: 5px; border: 1.5px solid var(--border2);
+  background: var(--panel-bg); cursor: pointer; font-size: 9px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim);
+  transition: all .15s; user-select: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.token-opt:hover { border-color: #304070; color: #6080b0; }
+.token-opt.active { background: #0a1428; }
+.token-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+.legend { display: flex; flex-direction: column; gap: 5px; }
+.legend-row { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-dim); }
+
+.actions { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+.act-btn {
+  width: 100%; padding: 8px 12px; border: none; border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+  transition: opacity .2s, transform .1s; user-select: none;
+}
+.act-btn:hover { opacity: .85; transform: translateY(-1px); }
+.act-btn:active { transform: translateY(0); }
+.btn-export-json { background: linear-gradient(135deg,#105a10,#1a9020); color:#fff; }
+.btn-export-png  { background: linear-gradient(135deg,#7a1010,#c0392b); color:#fff; }
+.btn-fill   { background: linear-gradient(135deg,#103a10,#2a8030); color:#fff; }
+.btn-save   { background: linear-gradient(135deg,#0a2050,#1a4a90); color:#fff; }
+.btn-load   { background: transparent; border: 1px solid var(--border2); color: var(--text-dim); }
+.btn-clear  { background: transparent; border: 1px solid var(--border2); color: var(--text-dim); }
+
+.map-area { flex: 1; background: #040608; overflow: auto; display: flex; align-items: flex-start; justify-content: flex-start; padding: 24px; }
+#hexCanvas { cursor: crosshair; display: block; border: 1px solid var(--border); box-shadow: 0 8px 48px rgba(0,0,0,0.9); }
+
+.toast {
+  position: fixed; bottom: 18px; right: 18px;
+  background: #1a4a1a; color: #80d080;
+  padding: 9px 16px; border-radius: 7px;
+  font-family: 'Barlow Condensed', sans-serif; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.7); transform: translateY(80px); transition: transform .3s; z-index: 9999;
+}
+.toast.show { transform: translateY(0); }
+.toast.error { background: #4a1a1a; color: #d08080; }
+
+.export-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.85);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 10000; gap: 14px;
+}
+.export-overlay.show { display: flex; }
+.spinner { width: 36px; height: 36px; border: 3px solid #1a2040; border-top-color: #c0392b; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.exp-lbl { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #666; }
+
+/* Scenario info panel */
+.scenario-info {
+  background: var(--panel-bg); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 8px 10px; font-size: 9px; letter-spacing: 1px; color: var(--text-dim);
+  line-height: 1.8;
+}
+.scenario-info b { color: var(--text-mid); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-title">Hex Map Editor</span>
+  <div class="topbar-sep"></div>
+  <span class="topbar-sub">14 × 15 · Flat-Top · Gundam Assemble</span>
+  <div class="topbar-coord" id="coordDisplay"></div>
+</div>
+
+<div class="workspace">
+  <div class="sidebar">
+
+    <div>
+      <div class="section-title">Tool Mode</div>
+      <div class="pill-row">
+        <div class="pill active" id="modePaint" onclick="setMode('paint')">✏ Paint</div>
+        <div class="pill erase"  id="modeErase" onclick="setMode('erase')">✕ Erase</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Terrain</div>
+      <div class="terrain-grid" id="terrainGrid"></div>
+    </div>
+
+    <div>
+      <div class="section-title">Hazards</div>
+      <div class="terrain-grid" id="hazardGrid"></div>
+    </div>
+
+    <div>
+      <div class="section-title">Elevation</div>
+      <div class="elev-row">
+        <div class="elev-btn active" id="eL1" onclick="setElevation(1)">L1</div>
+        <div class="elev-btn"        id="eL2" onclick="setElevation(2)">L2</div>
+        <div class="elev-btn"        id="eL3" onclick="setElevation(3)">L3</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Scenario Tokens</div>
+      <div class="pill-row" style="margin-bottom:8px;">
+        <div class="pill token-p1"  id="modeGarP1"  onclick="setMode('garrison_p1')">🔵 Garrison P1</div>
+        <div class="pill token-p2"  id="modeGarP2"  onclick="setMode('garrison_p2')">🔴 Garrison P2</div>
+      </div>
+      <div class="pill-row" style="margin-bottom:8px;">
+        <div class="pill token-obj" id="modeObj"    onclick="setMode('objective')">🎯 Objective</div>
+        <div class="pill"           id="modeRemove" onclick="setMode('remove_token')" style="border-color:#602020;color:#a05050;">✕ Remove</div>
+      </div>
+      <div class="section-title" style="margin-top:4px;">Upgrade Tokens</div>
+      <div class="token-sub" id="upgOptions">
+        <div class="token-opt active" id="upg_random" onclick="setUpgradeType('random')">
+          <div class="token-dot" style="background:#888888;"></div>❓ Upgrade (random)
+        </div>
+        <div class="token-opt" id="upg_energy" onclick="setUpgradeType('energy')">
+          <div class="token-dot" style="background:#e0c040;"></div>⚡ Energy (visible)
+        </div>
+      </div>
+      <div class="pill-row" style="margin-top:8px;">
+        <div class="pill token-upg" id="modeUpg" onclick="setMode('upgrade')">+ Place Upgrade</div>
+      </div>
+      <div class="section-title" style="margin-top:8px;">Deploy Zones</div>
+      <div class="pill-row">
+        <div class="pill token-dep1" id="modeDep1" onclick="setMode('deploy_p1')">P1 Deploy</div>
+        <div class="pill token-dep2" id="modeDep2" onclick="setMode('deploy_p2')">P2 Deploy</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Scenario Summary</div>
+      <div class="scenario-info" id="scenarioInfo">No tokens placed yet.</div>
+    </div>
+
+    <div>
+      <div class="section-title">Legend</div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="actions">
+      <button class="act-btn btn-export-json" onclick="exportJSON()">📦 Export Game JSON</button>
+      <button class="act-btn btn-export-png"  onclick="exportPNG()">🖼 Export PNG</button>
+      <button class="act-btn btn-fill"        onclick="fillAll()">⬛ Fill All Cells</button>
+      <button class="act-btn btn-clear"       onclick="clearMap()">↺ Reset Map</button>
+      <button class="act-btn btn-save"        onclick="saveMapJSON()">💾 Save Editor State</button>
+      <button class="act-btn btn-load"        onclick="document.getElementById('loadMapInput').click()">📂 Load Map</button>
+      <input type="file" id="loadMapInput" accept=".json" style="display:none" onchange="loadMapJSON(event)">
+    </div>
+
+  </div>
+
+  <div class="map-area">
+    <canvas id="hexCanvas"></canvas>
+  </div>
+</div>
+
+<div class="export-overlay" id="exportOverlay">
+  <div class="spinner"></div>
+  <div class="exp-lbl" id="expLbl">Rendering…</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  SEEDED PRNG
+// ═══════════════════════════════════════════════════
+function seeded(seed) {
+  let s = seed | 0;
+  return function() {
+    s = (s ^ (s << 13)) | 0;
+    s = (s ^ (s >> 7))  | 0;
+    s = (s ^ (s << 17)) | 0;
+    return (s >>> 0) / 0xFFFFFFFF;
+  };
+}
+
+// ═══════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════
+const COLS = 14;
+const ROWS = 15;
+
+function inBounds(r, c) {
+  return r >= 0 && r < ROWS && c >= 0 && c < COLS && (r % 2 === 0 || c < COLS - 1);
+}
+
+// Pointy-top hex geometry (same as original)
+const R          = 32;
+const R_PRINT_PX = 50 * (300 / 25.4) / Math.sqrt(3);
+const EXPORT_SCALE = R_PRINT_PX / R;
+
+const SQ3      = Math.sqrt(3);
+const HW       = SQ3 * R;
+const COL_STEP = HW;
+const ROW_STEP = R * 1.5;
+const PAD      = 22;
+
+const CANVAS_W = Math.ceil(PAD * 2 + COL_STEP * COLS + HW / 2) + 4;
+const CANVAS_H = Math.ceil(PAD * 2 + ROW_STEP * ROWS + R * 0.5) + 4;
+
+const ELEV_COLOR = { 1: null, 2: '#e8a020', 3: '#40d0ff' };
+const ELEV_WIDTH = { 1: 1.2,  2: 3.0,      3: 4.5 };
+const ELEV_RING1 = { 2: 'rgba(232,160,32,0.35)', 3: 'rgba(64,208,255,0.4)' };
+const ELEV_RING2 = { 3: 'rgba(64,220,255,0.22)' };
+const ELEV_TINT  = { 2: 'rgba(160,110,0,0.18)', 3: 'rgba(0,180,255,0.20)' };
+
+// ═══════════════════════════════════════════════════
+//  TERRAIN DEFINITIONS
+// ═══════════════════════════════════════════════════
+const TERRAINS = {
+  plains: { label:'Plains',  bg:'#2e3a18', border:'#5a7030', draw:drawPlains },
+  space:  { label:'Space',   bg:'#060810', border:'#2a3060', draw:drawSpace  },
+  desert: { label:'Desert',  bg:'#3a2e10', border:'#8a6a28', draw:drawDesert },
+};
+const HAZARDS = {
+  water:  { label:'Water',   bg:'#0a1e38', border:'#1a5880', draw:drawWater  },
+  fire:   { label:'Fire',    bg:'#2e0e06', border:'#a82808', draw:drawFire   },
+};
+const ALL_TILES = { ...TERRAINS, ...HAZARDS };
+
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+let grid = [];
+let mode = 'paint';
+let activeTerrain   = 'plains';
+let activeElevation = 1;
+let activeUpgrade   = 'random';
+let painting = false;
+
+// Scenario tokens: keyed by "col,row"
+let tokens = {};
+// Token types: garrison_p1, garrison_p2, objective, upgrade_attack, upgrade_shield, upgrade_movement, upgrade_energy, deploy_p1, deploy_p2
+
+let tokenIdCounter = 1;
+
+function initGrid() {
+  grid = [];
+  tokens = {};
+  tokenIdCounter = 1;
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      grid[r][c] = { terrain: 'plains', elevation: 1 };
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  HEX GEOMETRY (flat-top, odd-col offset down)
+// ═══════════════════════════════════════════════════
+function hexCenter(row, col) {
+  const x = PAD + HW / 2 + col * COL_STEP + (row % 2 === 1 ? HW / 2 : 0);
+  const y = PAD + R       + row * ROW_STEP;
+  return { x, y };
+}
+
+function hexVerts(cx, cy, r) {
+  const v = [];
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 180 * (60 * i - 30); // pointy-top: start at -30°
+    v.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  }
+  return v;
+}
+
+function tracePoly(ctx, verts) {
+  ctx.beginPath();
+  ctx.moveTo(verts[0].x, verts[0].y);
+  for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath();
+}
+
+// ═══════════════════════════════════════════════════
+//  TERRAIN DRAW FUNCTIONS
+// ═══════════════════════════════════════════════════
+function drawPlains(ctx, cx, cy, r) {
+  const patches = [
+    {dx:-0.3,dy:-0.2,r:0.55,c:'rgba(68,90,30,0.55)'},
+    {dx: 0.2,dy:-0.3,r:0.48,c:'rgba(80,108,36,0.5)'},
+    {dx:-0.1,dy: 0.3,r:0.50,c:'rgba(60,80,25,0.55)'},
+    {dx: 0.3,dy: 0.2,r:0.45,c:'rgba(75,100,32,0.5)'},
+  ];
+  patches.forEach(p => {
+    ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(cx + p.dx*r, cy + p.dy*r, p.r*r, 0, Math.PI*2); ctx.fill();
+  });
+  const rng = seeded(cx*7+cy*13);
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < 18; i++) {
+    const bx = cx+(rng()-0.5)*r*1.5, by = cy+(rng()-0.5)*r*1.5;
+    const len = r*(0.12+rng()*0.18), lean = (rng()-0.5)*0.5;
+    const green = Math.floor(100+rng()*60);
+    ctx.strokeStyle = `rgba(50,${green},20,0.75)`;
+    ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+lean*len,by-len); ctx.stroke();
+  }
+  const g = ctx.createRadialGradient(cx-r*0.1,cy-r*0.2,0,cx,cy,r);
+  g.addColorStop(0,'rgba(140,180,60,0.18)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g; ctx.fill();
+}
+
+function drawSpace(ctx, cx, cy, r) {
+  const nebula = [
+    {dx:-0.2,dy:-0.1,r:0.7,c:'rgba(40,30,100,0.45)'},
+    {dx: 0.2,dy: 0.1,r:0.6,c:'rgba(20,50,90,0.35)'},
+    {dx:-0.1,dy: 0.3,r:0.5,c:'rgba(60,20,80,0.30)'},
+  ];
+  nebula.forEach(n => {
+    const g = ctx.createRadialGradient(cx+n.dx*r,cy+n.dy*r,0,cx+n.dx*r,cy+n.dy*r,n.r*r);
+    g.addColorStop(0,n.c); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fill();
+  });
+  const rng = seeded(cx*3+cy*17);
+  for (let i = 0; i < 28; i++) {
+    const sx=cx+(rng()-0.5)*r*1.7, sy=cy+(rng()-0.5)*r*1.7;
+    const sr=r*(0.012+rng()*0.030);
+    const bright=140+Math.floor(rng()*115), blue=200+Math.floor(rng()*55);
+    ctx.fillStyle=`rgba(${bright},${bright},${blue},${0.5+rng()*0.5})`;
+    ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawDesert(ctx, cx, cy, r) {
+  const rng = seeded(cx*11+cy*5);
+  const sandTones=['rgba(160,128,48,0.55)','rgba(175,140,55,0.5)','rgba(148,116,40,0.52)','rgba(185,150,62,0.45)'];
+  for (let i=0;i<14;i++){
+    const px=cx+(rng()-0.5)*r*1.6, py=cy+(rng()-0.5)*r*1.6, pr2=r*(0.2+rng()*0.45);
+    ctx.fillStyle=sandTones[Math.floor(rng()*sandTones.length)];
+    ctx.beginPath(); ctx.arc(px,py,pr2,0,Math.PI*2); ctx.fill();
+  }
+  const span=r*0.75;
+  [{dy:-0.28,col:'rgba(210,175,75,0.70)',w:1.6,flip:1},{dy:0.00,col:'rgba(195,158,60,0.60)',w:1.3,flip:-1},{dy:0.28,col:'rgba(210,175,75,0.55)',w:1.1,flip:1}]
+  .forEach(({dy,col,w,flip})=>{
+    const y0=cy+dy*r;
+    ctx.strokeStyle=col; ctx.lineWidth=w;
+    ctx.beginPath(); ctx.moveTo(cx-span,y0+flip*r*0.08);
+    ctx.bezierCurveTo(cx-span*0.4,y0-flip*r*0.14,cx+span*0.4,y0+flip*r*0.14,cx+span,y0-flip*r*0.08); ctx.stroke();
+  });
+  const g=ctx.createRadialGradient(cx-r*0.1,cy-r*0.25,0,cx,cy,r);
+  g.addColorStop(0,'rgba(230,195,100,0.22)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g; ctx.fill();
+}
+
+function drawWater(ctx, cx, cy, r) {
+  const depth=[{dx:0,dy:0,r:1.0,c:'rgba(15,60,130,0.5)'},{dx:-0.1,dy:0.1,r:0.75,c:'rgba(20,80,160,0.4)'},{dx:0.15,dy:-0.1,r:0.6,c:'rgba(30,110,190,0.35)'}];
+  depth.forEach(d=>{
+    const g=ctx.createRadialGradient(cx+d.dx*r,cy+d.dy*r,0,cx+d.dx*r,cy+d.dy*r,d.r*r);
+    g.addColorStop(0,d.c); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.fill();
+  });
+  const rng=seeded(cx*9+cy*4), span=r*0.72;
+  [{dy:-0.30,amp:0.10,col:'rgba(80,170,235,0.70)',w:1.4},{dy:-0.10,amp:0.08,col:'rgba(55,140,210,0.55)',w:1.1},{dy:0.10,amp:0.12,col:'rgba(80,170,235,0.60)',w:1.2},{dy:0.30,amp:0.09,col:'rgba(50,130,200,0.50)',w:1.0}]
+  .forEach(({dy,amp,col,w})=>{
+    const y0=cy+dy*r, phase=(rng()-0.5)*0.3;
+    ctx.strokeStyle=col; ctx.lineWidth=w;
+    ctx.beginPath(); ctx.moveTo(cx-span,y0+amp*r*Math.sin(phase));
+    ctx.bezierCurveTo(cx-span*0.5,y0-amp*r+phase*r*0.1,cx+span*0.5,y0+amp*r-phase*r*0.1,cx+span,y0+amp*r*Math.sin(phase+1)); ctx.stroke();
+  });
+}
+
+function drawFire(ctx, cx, cy, r) {
+  const rng=seeded(cx*6+cy*14);
+  ['rgba(60,15,5,0.7)','rgba(45,10,3,0.65)','rgba(70,20,5,0.6)'].forEach((c,i)=>{
+    ctx.fillStyle=c; ctx.beginPath();
+    ctx.ellipse(cx+(i-1)*r*0.25,cy+r*0.35,r*(0.4+i*0.08),r*0.22,0,0,Math.PI*2); ctx.fill();
+  });
+  const cols=[['rgba(255,60,0,','rgba(255,120,0,','rgba(255,200,0,'],['rgba(220,40,0,','rgba(255,100,0,','rgba(255,180,0,'],['rgba(200,30,0,','rgba(240,80,0,','rgba(255,160,0,']];
+  for(let i=0;i<3;i++){
+    const fx=cx+(rng()-0.5)*r*0.5, fy=cy+r*0.2;
+    const hw=r*(0.12+rng()*0.12), fh=r*(0.5+rng()*0.35);
+    const g=ctx.createLinearGradient(fx,fy,fx,fy-fh);
+    g.addColorStop(0,cols[i][0]+'0.9)'); g.addColorStop(0.4,cols[i][1]+'0.85)');
+    g.addColorStop(0.75,cols[i][2]+'0.7)'); g.addColorStop(1,'rgba(255,255,150,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.moveTo(fx-hw,fy);
+    ctx.quadraticCurveTo(fx+(rng()-0.5)*hw*0.8,fy-fh*0.5,fx,fy-fh);
+    ctx.quadraticCurveTo(fx+(rng()-0.5)*hw*0.8,fy-fh*0.5,fx+hw,fy); ctx.closePath(); ctx.fill();
+  }
+  const gl=ctx.createRadialGradient(cx,cy+r*0.2,0,cx,cy,r*0.7);
+  gl.addColorStop(0,'rgba(255,140,0,0.4)'); gl.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=gl; ctx.fill();
+}
+
+// ═══════════════════════════════════════════════════
+//  TOKEN DRAW FUNCTIONS
+// ═══════════════════════════════════════════════════
+const TOKEN_COLORS = {
+  garrison_p1:     { fill:'rgba(20,120,140,0.85)', stroke:'#40d0d0', label:'P1' },
+  garrison_p2:     { fill:'rgba(140,30,30,0.85)',  stroke:'#e06060', label:'P2' },
+  objective:       { fill:'rgba(140,110,10,0.85)', stroke:'#e0c040', label:'OBJ' },
+  upgrade_random:  { fill:'rgba(40,40,40,0.85)',   stroke:'#888888', label:'?' },
+  upgrade_attack:  { fill:'rgba(120,30,30,0.85)',  stroke:'#e06060', label:'ATK' },
+  upgrade_shield:  { fill:'rgba(20,60,140,0.85)',  stroke:'#4090d0', label:'SHD' },
+  upgrade_movement:{ fill:'rgba(20,100,30,0.85)',  stroke:'#60c060', label:'MOV' },
+  upgrade_energy:  { fill:'rgba(110,90,10,0.85)',  stroke:'#e0c040', label:'⚡' },
+  deploy_p1:       { fill:'rgba(10,50,100,0.55)',  stroke:'#3080c0', label:'DEP1' },
+  deploy_p2:       { fill:'rgba(100,20,20,0.55)',  stroke:'#c03030', label:'DEP2' },
+};
+
+function drawToken(ctx, cx, cy, type) {
+  const tc = TOKEN_COLORS[type];
+  if (!tc) return;
+  const r = R * 0.38;
+
+  if (type === 'deploy_p1' || type === 'deploy_p2') {
+    // Deploy zones: semi-transparent overlay
+    const verts = hexVerts(cx, cy, R - 2);
+    tracePoly(ctx, verts);
+    ctx.fillStyle = tc.fill;
+    ctx.fill();
+    tracePoly(ctx, verts);
+    ctx.strokeStyle = tc.stroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `bold ${Math.round(R * 0.28)}px "Barlow Condensed"`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = tc.stroke;
+    ctx.fillText(tc.label, cx, cy);
+    return;
+  }
+
+  if (type === 'objective') {
+    // Pentagon-ish shape
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI / 180 * (72 * i - 90);
+      const px = cx + r * 1.1 * Math.cos(a), py = cy + r * 1.1 * Math.sin(a);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = tc.fill; ctx.fill();
+    ctx.strokeStyle = tc.stroke; ctx.lineWidth = 1.5; ctx.stroke();
+  } else if (type.startsWith('upgrade_')) {
+    // Diamond
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r * 1.1); ctx.lineTo(cx + r * 0.75, cy);
+    ctx.lineTo(cx, cy + r * 1.1); ctx.lineTo(cx - r * 0.75, cy);
+    ctx.closePath();
+    ctx.fillStyle = tc.fill; ctx.fill();
+    ctx.strokeStyle = tc.stroke; ctx.lineWidth = 1.5; ctx.stroke();
+  } else {
+    // Garrison: square
+    ctx.fillStyle = tc.fill;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.strokeStyle = tc.stroke; ctx.lineWidth = 1.5;
+    ctx.strokeRect(cx - r, cy - r, r * 2, r * 2);
+  }
+
+  ctx.font = `bold ${Math.round(R * 0.26)}px "Barlow Condensed"`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(tc.label, cx, cy + 0.5);
+}
+
+// ═══════════════════════════════════════════════════
+//  DRAW A SINGLE HEX
+// ═══════════════════════════════════════════════════
+function drawHex(ctx, row, col) {
+  const { x, y } = hexCenter(row, col);
+  const cell  = grid[row][col];
+  const t     = ALL_TILES[cell.terrain] || ALL_TILES['plains'];
+  const elev  = cell.elevation;
+  const verts = hexVerts(x, y, R - 1);
+
+  if (elev > 1) {
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.65)'; ctx.shadowBlur=elev*5;
+    ctx.shadowOffsetX=elev*2; ctx.shadowOffsetY=elev*2;
+    tracePoly(ctx, hexVerts(x,y,R-1)); ctx.fillStyle='#000'; ctx.fill();
+    ctx.restore();
+  }
+
+  tracePoly(ctx, verts); ctx.fillStyle=t.bg; ctx.fill();
+  ctx.save(); tracePoly(ctx,verts); ctx.clip(); t.draw(ctx,x,y,R); ctx.restore();
+
+  if (elev>=2) { tracePoly(ctx,verts); ctx.fillStyle=ELEV_TINT[elev]; ctx.fill(); }
+  if (elev>=2) {
+    tracePoly(ctx,hexVerts(x,y,R*0.82)); ctx.strokeStyle=ELEV_RING1[elev]; ctx.lineWidth=elev===3?1.8:1.2; ctx.stroke();
+  }
+  if (elev===3) {
+    tracePoly(ctx,hexVerts(x,y,R*0.62)); ctx.strokeStyle=ELEV_RING2[3]; ctx.lineWidth=1.4; ctx.stroke();
+    tracePoly(ctx,hexVerts(x,y,R*0.40)); ctx.strokeStyle='rgba(64,220,255,0.14)'; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  tracePoly(ctx,verts);
+  ctx.strokeStyle=elev>=2?ELEV_COLOR[elev]:t.border; ctx.lineWidth=ELEV_WIDTH[elev]; ctx.stroke();
+
+  if (elev===3) {
+    tracePoly(ctx,hexVerts(x,y,R+0.5)); ctx.strokeStyle='rgba(64,208,255,0.22)'; ctx.lineWidth=3; ctx.stroke();
+  }
+
+  if (elev>=2) {
+    ctx.font=`700 ${Math.round(R*0.33)}px "Barlow Condensed",sans-serif`;
+    ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.fillStyle=elev===3?'#f0e050':'#d0b030'; ctx.globalAlpha=0.95;
+    ctx.fillText('L'+elev, x+R*0.60, y-R*0.60); ctx.globalAlpha=1;
+  }
+
+  ctx.font=`${Math.round(R*0.26)}px "Barlow Condensed",sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  ctx.fillStyle='rgba(255,255,255,0.17)';
+  ctx.fillText(`${col},${row}`, x, y+R*0.74);
+
+  // Draw tokens on top
+  const key = `${col},${row}`;
+  if (tokens[key]) {
+    drawToken(ctx, x, y, tokens[key].type);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  FULL MAP RENDER
+// ═══════════════════════════════════════════════════
+function renderMap(ctx2) {
+  const W = CANVAS_W, H = CANVAS_H;
+  ctx2.clearRect(0,0,W,H);
+  ctx2.fillStyle='#06080e'; ctx2.fillRect(0,0,W,H);
+  const vig=ctx2.createRadialGradient(W/2,H/2,H*0.28,W/2,H/2,H*0.82);
+  vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.45)');
+  ctx2.fillStyle=vig; ctx2.fillRect(0,0,W,H);
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) if (inBounds(r,c)) drawHex(ctx2,r,c);
+}
+
+// ═══════════════════════════════════════════════════
+//  CANVAS + EVENTS
+// ═══════════════════════════════════════════════════
+let canvas, ctx;
+
+function setup() {
+  canvas=document.getElementById('hexCanvas');
+  canvas.width=CANVAS_W; canvas.height=CANVAS_H;
+  ctx=canvas.getContext('2d');
+  renderMap(ctx);
+
+  canvas.addEventListener('mousedown', e => { painting=true; handlePaint(e); });
+  canvas.addEventListener('mousemove', e => { if(painting) handlePaint(e); hoverCoord(e); });
+  canvas.addEventListener('mouseleave', () => { painting=false; document.getElementById('coordDisplay').textContent=''; });
+  window.addEventListener('mouseup', () => { painting=false; });
+}
+
+function canvasPos(e) {
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=CANVAS_W/rect.width, scaleY=CANVAS_H/rect.height;
+  return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+}
+
+function hitTest(mx,my) {
+  let best=null, bestD=Infinity;
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
+    if (!inBounds(r,c)) continue;
+    const {x,y}=hexCenter(r,c);
+    const d=Math.hypot(mx-x,my-y);
+    if(d<R && d<bestD){bestD=d;best={r,c};}
+  }
+  return best;
+}
+
+function handlePaint(e) {
+  const {x,y}=canvasPos(e);
+  const hit=hitTest(x,y);
+  if(!hit) return;
+  const {r,c}=hit;
+  const key=`${c},${r}`;
+
+  if (mode==='erase') {
+    grid[r][c]={terrain:'plains',elevation:1};
+    delete tokens[key];
+  } else if (mode==='remove_token') {
+    delete tokens[key];
+  } else if (mode==='garrison_p1') {
+    tokens[key]={type:'garrison_p1', id:'garrison_p1_'+tokenIdCounter++};
+  } else if (mode==='garrison_p2') {
+    tokens[key]={type:'garrison_p2', id:'garrison_p2_'+tokenIdCounter++};
+  } else if (mode==='objective') {
+    tokens[key]={type:'objective', id:'obj_'+tokenIdCounter++, vpValue:3};
+  } else if (mode==='upgrade') {
+    tokens[key]={type: activeUpgrade==='energy' ? 'upgrade_energy' : 'upgrade_random', id:'upg_'+tokenIdCounter++};
+  } else if (mode==='deploy_p1') {
+    tokens[key]={type:'deploy_p1'};
+  } else if (mode==='deploy_p2') {
+    tokens[key]={type:'deploy_p2'};
+  } else {
+    grid[r][c]={terrain:activeTerrain, elevation:activeElevation};
+  }
+
+  renderMap(ctx);
+  updateScenarioInfo();
+}
+
+function hoverCoord(e) {
+  const {x,y}=canvasPos(e);
+  const hit=hitTest(x,y);
+  const key = hit ? `${hit.c},${hit.r}` : null;
+  let label = hit ? `Col ${hit.c}  ·  Row ${hit.r}` : '';
+  if (key && tokens[key]) label += `  [${tokens[key].type}]`;
+  document.getElementById('coordDisplay').textContent = label;
+}
+
+// ═══════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════
+const MODE_IDS = {
+  paint:'modePaint', erase:'modeErase',
+  garrison_p1:'modeGarP1', garrison_p2:'modeGarP2',
+  objective:'modeObj', remove_token:'modeRemove',
+  upgrade:'modeUpg', deploy_p1:'modeDep1', deploy_p2:'modeDep2',
+};
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.pill').forEach(el=>el.classList.remove('active'));
+  const id = MODE_IDS[m];
+  if (id) document.getElementById(id).classList.add('active');
+}
+
+function setTerrain(t) {
+  activeTerrain=t;
+  document.querySelectorAll('.terrain-tile').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tile_'+t).classList.add('active');
+  if (mode==='erase'||mode.startsWith('garrison')||mode==='objective'||mode==='upgrade'||mode.startsWith('deploy')||mode==='remove_token') setMode('paint');
+}
+
+function setElevation(e) {
+  activeElevation=e;
+  document.querySelectorAll('.elev-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById('eL'+e).classList.add('active');
+}
+
+function setUpgradeType(t) {
+  activeUpgrade=t;
+  document.querySelectorAll('.token-opt').forEach(el=>el.classList.remove('active'));
+  document.getElementById('upg_'+t).classList.add('active');
+}
+
+function fillAll() {
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) grid[r][c]={terrain:activeTerrain,elevation:activeElevation};
+  renderMap(ctx); showToast('All cells filled');
+}
+
+function clearMap() {
+  initGrid(); renderMap(ctx); updateScenarioInfo(); showToast('Map reset');
+}
+
+// ═══════════════════════════════════════════════════
+//  SCENARIO INFO
+// ═══════════════════════════════════════════════════
+function updateScenarioInfo() {
+  const counts = {};
+  Object.values(tokens).forEach(t => { counts[t.type] = (counts[t.type]||0)+1; });
+  const lines = [];
+  if (counts.garrison_p1)      lines.push(`<b>P1 Garrisons:</b> ${counts.garrison_p1}`);
+  if (counts.garrison_p2)      lines.push(`<b>P2 Garrisons:</b> ${counts.garrison_p2}`);
+  if (counts.objective)        lines.push(`<b>Objectives:</b> ${counts.objective}`);
+  if (counts.upgrade_attack)   lines.push(`<b>Atk Upgrades:</b> ${counts.upgrade_attack}`);
+  if (counts.upgrade_shield)   lines.push(`<b>Shd Upgrades:</b> ${counts.upgrade_shield}`);
+  if (counts.upgrade_movement) lines.push(`<b>Mov Upgrades:</b> ${counts.upgrade_movement}`);
+  if (counts.upgrade_energy)   lines.push(`<b>Energy Tokens:</b> ${counts.upgrade_energy}`);
+  if (counts.deploy_p1)        lines.push(`<b>P1 Deploy hexes:</b> ${counts.deploy_p1}`);
+  if (counts.deploy_p2)        lines.push(`<b>P2 Deploy hexes:</b> ${counts.deploy_p2}`);
+  document.getElementById('scenarioInfo').innerHTML = lines.length ? lines.join('<br>') : 'No tokens placed yet.';
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT GAME JSON  (formato DemoMap.json)
+// ═══════════════════════════════════════════════════
+function exportJSON() {
+  // Build grid array (rows x cols)
+  const gridData = [];
+  for (let r=0;r<ROWS;r++) {
+    gridData[r] = [];
+    for (let c=0;c<COLS;c++) {
+      gridData[r][c] = { terrain: grid[r][c].terrain, elevation: grid[r][c].elevation };
+    }
+  }
+
+  // Build scenario
+  const objectives = [];
+  const garrisons  = [];
+  const upgrades   = [];
+  const deployZones = { player1:[], player2:[] };
+
+  let objIdx=1, garIdx=1, upgIdx=1;
+
+  Object.entries(tokens).forEach(([key, tok]) => {
+    const [col, row] = key.split(',').map(Number);
+    if (tok.type==='objective') {
+      objectives.push({ col, row, id:`obj_${objIdx++}`, vpValue: tok.vpValue||3 });
+    } else if (tok.type==='garrison_p1') {
+      garrisons.push({ col, row, id:`garrison_p1_${garIdx++}`, owner:'player1', hp:1 });
+    } else if (tok.type==='garrison_p2') {
+      garrisons.push({ col, row, id:`garrison_p2_${garIdx++}`, owner:'player2', hp:1 });
+    } else if (tok.type.startsWith('upgrade_')) {
+      const upType = tok.type === 'upgrade_random' ? 'random' : tok.type.replace('upgrade_','');
+      upgrades.push({ col, row, id:`upg_${upgIdx++}`, type:upType, value:1 });
+    } else if (tok.type==='deploy_p1') {
+      deployZones.player1.push({ col, row });
+    } else if (tok.type==='deploy_p2') {
+      deployZones.player2.push({ col, row });
+    }
+  });
+
+  const mapName = prompt('Map name:', 'MyMap') || 'MyMap';
+  const safeName = mapName.replace(/[^a-zA-Z0-9_-]/g,'_');
+
+  const data = {
+    version: 1,
+    cols: COLS,
+    rows: ROWS,
+    grid: gridData,
+    scenario: {
+      name: mapName,
+      description: '',
+      vpToWin: 0,
+      objectives,
+      garrisons,
+      upgrades,
+      deployZones,
+    }
+  };
+
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.download = safeName+'.json';
+  a.href = url;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  showToast(safeName+'.json exported ✓');
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT PNG
+// ═══════════════════════════════════════════════════
+async function exportPNG() {
+  showOverlay(true,'Rendering…');
+  await new Promise(res=>setTimeout(res,60));
+  try {
+    const S=EXPORT_SCALE;
+    const off=document.createElement('canvas');
+    off.width=CANVAS_W*S; off.height=CANVAS_H*S;
+    const offCtx=off.getContext('2d');
+    offCtx.scale(S,S);
+    renderMap(offCtx);
+    showOverlay(true,'Saving PNG…');
+    await new Promise(res=>setTimeout(res,40));
+    off.toBlob(blob=>{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.download='gundam_hex_map.png'; a.href=url; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      showOverlay(false); showToast('gundam_hex_map.png saved ✓');
+    },'image/png');
+  } catch(err) { console.error(err); showOverlay(false); showToast('Export failed','error'); }
+}
+
+// ═══════════════════════════════════════════════════
+//  SAVE / LOAD EDITOR STATE
+// ═══════════════════════════════════════════════════
+function saveMapJSON() {
+  const name = prompt('Save as:','hex_map') || 'hex_map';
+  const data = { version:1, cols:COLS, rows:ROWS, grid, tokens, tokenIdCounter };
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.download = name.replace(/\.json$/i,'')+'.json';
+  a.href=url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  showToast(name+'.json saved ✓');
+}
+
+function loadMapJSON(e) {
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try {
+      const data=JSON.parse(ev.target.result);
+      if (!data.grid) throw new Error('Invalid');
+      grid=data.grid;
+      if (data.tokens) {
+        tokens=data.tokens;
+        tokenIdCounter=data.tokenIdCounter||1;
+      } else {
+        tokens={};
+        tokenIdCounter=1;
+        if (data.scenario) {
+          const s=data.scenario;
+          (s.objectives||[]).forEach(o=>{
+            tokens[o.col+','+o.row]={type:'objective',id:'obj_'+tokenIdCounter++,vpValue:o.vpValue||3};
+          });
+          (s.garrisons||[]).forEach(g=>{
+            const type=g.owner==='player1'?'garrison_p1':'garrison_p2';
+            tokens[g.col+','+g.row]={type,id:g.id};
+          });
+          (s.upgrades||[]).forEach(u=>{
+            const type=u.type==='energy'?'upgrade_energy':'upgrade_random';
+            tokens[u.col+','+u.row]={type,id:'upg_'+tokenIdCounter++};
+          });
+          ((s.deployZones||{}).player1||[]).forEach(d=>{
+            tokens[d.col+','+d.row]={type:'deploy_p1'};
+          });
+          ((s.deployZones||{}).player2||[]).forEach(d=>{
+            tokens[d.col+','+d.row]={type:'deploy_p2'};
+          });
+        }
+      }
+      renderMap(ctx);
+      updateScenarioInfo();
+      showToast('Map loaded ✓');
+    } catch(err) { console.error(err); showToast('Failed to load map','error'); }
+    e.target.value='';
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════
+function showOverlay(show,lbl) {
+  document.getElementById('exportOverlay').style.display=show?'flex':'none';
+  if(lbl) document.getElementById('expLbl').textContent=lbl;
+}
+
+let toastTimer;
+function showToast(msg,type) {
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.className='toast'+(type==='error'?' error':'')+' show';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+// ═══════════════════════════════════════════════════
+//  TERRAIN TILE PREVIEWS
+// ═══════════════════════════════════════════════════
+function makeTile(key,t) {
+  const tile=document.createElement('div');
+  tile.className='terrain-tile'+(key===activeTerrain?' active':'');
+  tile.id='tile_'+key;
+  tile.onclick=()=>setTerrain(key);
+  const PC=44;
+  const pc=document.createElement('canvas'); pc.width=PC; pc.height=PC;
+  const pctx=pc.getContext('2d');
+  const pv=hexVerts(PC/2,PC/2,PC/2-2);
+  tracePoly(pctx,pv); pctx.fillStyle=t.bg; pctx.fill();
+  pctx.save(); tracePoly(pctx,pv); pctx.clip(); t.draw(pctx,PC/2,PC/2,PC/2); pctx.restore();
+  tracePoly(pctx,pv); pctx.strokeStyle=t.border; pctx.lineWidth=1.5; pctx.stroke();
+  const lbl=document.createElement('div'); lbl.className='terrain-name'; lbl.textContent=t.label;
+  tile.appendChild(pc); tile.appendChild(lbl);
+  return tile;
+}
+
+function buildTerrainTiles() {
+  const tg=document.getElementById('terrainGrid'); tg.innerHTML='';
+  Object.entries(TERRAINS).forEach(([key,t])=>tg.appendChild(makeTile(key,t)));
+  const hg=document.getElementById('hazardGrid'); hg.innerHTML='';
+  Object.entries(HAZARDS).forEach(([key,t])=>hg.appendChild(makeTile(key,t)));
+}
+
+function buildLegend() {
+  const leg=document.getElementById('legend'); leg.innerHTML='';
+  const addDiv=(label)=>{
+    const d=document.createElement('div');
+    d.style.cssText='font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:5px 0 3px;border-top:1px solid var(--border);padding-top:5px;';
+    d.textContent=label; leg.appendChild(d);
+  };
+  addDiv('Tokens');
+  Object.entries(TOKEN_COLORS).forEach(([key,tc])=>{
+    const row=document.createElement('div'); row.className='legend-row';
+    const dot=document.createElement('div');
+    dot.style.cssText=`width:10px;height:10px;background:${tc.stroke};border-radius:2px;flex-shrink:0;`;
+    const span=document.createElement('span'); span.textContent=key.replace(/_/g,' ');
+    row.appendChild(dot); row.appendChild(span); leg.appendChild(row);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════
+initGrid();
+buildTerrainTiles();
+buildLegend();
+setup();
+</script>
+</body>
+</html>
