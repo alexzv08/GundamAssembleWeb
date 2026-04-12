@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
@@ -35,6 +35,11 @@ export default function App() {
   const [selectedWeaponIndex, setSelectedWeaponIndex] = useState<number | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
 
+  const gameStateRef = useRef<GameState | null>(null)
+  const lastActionRef = useRef<'moving' | 'dashing' | null>(null)
+
+  useEffect(() => { gameStateRef.current = gameState }, [gameState])
+
   // ─── SOCKET EVENTS ────────────────────────────────────────────────────────
   useEffect(() => {
     socket.on('connect', () => setConnected(true))
@@ -61,6 +66,58 @@ export default function App() {
       gameState: GameState
       diceRolls?: number[]
     }) => {
+      const prevState = gameStateRef.current
+
+      if (prevState && newState.activeUnitId) {
+        const prevUnit = prevState.units[newState.activeUnitId]
+        const newUnit = newState.units[newState.activeUnitId]
+
+        if (prevUnit && newUnit) {
+          // Detectar upgrade o energía recogida
+          if (newUnit.upgrades.length > prevUnit.upgrades.length) {
+            const gained = newUnit.upgrades[newUnit.upgrades.length - 1]
+            const labels: Record<string, string> = {
+              attack: '⚔ ¡Upgrade de Ataque! +1 Strength permanente',
+              shield: '🛡 ¡Upgrade de Escudo! Absorbe 1 daño',
+              movement: '👟 ¡Upgrade de Movimiento! +1 hex de movimiento',
+            }
+            setMessage(labels[gained.type] ?? `Upgrade obtenido: ${gained.type}`)
+          } else if (newUnit.energy > prevUnit.energy) {
+            setMessage('⚡ ¡Energía obtenida! +1 token de energía')
+          }
+
+          // Detectar movimiento confirmado por el servidor
+          const prevPos = prevUnit.position
+          const newPos = newUnit.position
+          const moved = prevPos && newPos &&
+            (prevPos.q !== newPos.q || prevPos.r !== newPos.r)
+
+          if (moved && lastActionRef.current) {
+            if (lastActionRef.current === 'moving') {
+              setHasMoved(true)
+              // Calcular atacables con la nueva posición
+              const weapon = newUnit.weapons[0]
+              if (weapon) {
+                const attackable = new Set<string>()
+                for (const other of Object.values(newState.units)) {
+                  if (other.playerId === newUnit.playerId) continue
+                  if (other.currentHp <= 0 || !other.position) continue
+                  if (gridDistance(newPos, other.position) <= weapon.range) {
+                    attackable.add(hexKey(other.position))
+                  }
+                }
+                setAttackableHexes(attackable)
+                setMessage(attackable.size > 0 ? 'Puedes atacar u otras acciones' : 'Pasa turno')
+              }
+            } else if (lastActionRef.current === 'dashing') {
+              setHasUsedPrimary(true)
+              setMessage('Dash realizado')
+            }
+            lastActionRef.current = null
+          }
+        }
+      }
+
       setGameState(newState)
       if (diceRolls) setDiceResult(diceRolls)
       setSelectedUnitId(prev => {
@@ -71,6 +128,7 @@ export default function App() {
           setAttackableHexes(new Set())
           setSelectionMode('none')
           setSelectedWeaponIndex(null)
+          lastActionRef.current = null
           return null
         }
         return prev
@@ -88,6 +146,11 @@ export default function App() {
 
     socket.on('ACTION_ERROR', ({ message }: { message: string }) => {
       setMessage(`Error: ${message}`)
+      // Solo limpiar el modo visual — NO resetear hasMoved ni hasUsedPrimary
+      lastActionRef.current = null
+      setSelectionMode('none')
+      setReachableHexes(new Set())
+      setAttackableHexes(new Set())
     })
 
     socket.on('OPPONENT_DISCONNECTED', ({ message }: { message: string }) => {
@@ -117,23 +180,26 @@ export default function App() {
     setHasMoved(false)
     setHasUsedPrimary(false)
     setSelectedWeaponIndex(null)
+    lastActionRef.current = null
   }, [])
 
   const calcReachable = useCallback((unitId: string, state: GameState) => {
     const unit = state.units[unitId]
     if (!unit?.position) return new Set<string>()
-    console.log('Unit position:', unit.position)
-    console.log('Board keys sample:', Object.keys(state.board).slice(0, 5))
+    // Solo enemigos como obstáculos — aliados se pueden atravesar
     const obstacles = new Set(
       Object.values(state.units)
         .filter(u => u.id !== unitId && u.currentHp > 0 && u.position && u.playerId !== unit.playerId)
         .map(u => hexKey(u.position!))
     )
     const reachable = getReachableHexes(unit.position, state.board, obstacles, 3)
-    console.log('Unit at:', unit.position)
-    console.log('Reachable count:', reachable.length)
-    console.log('Reachable:', reachable.slice(0, 6))
-    return new Set(reachable.map(h => hexKey(h)))
+    // Excluir hexes ocupados por aliados como destino final
+    const alliedHexes = new Set(
+      Object.values(state.units)
+        .filter(u => u.id !== unitId && u.currentHp > 0 && u.position && u.playerId === unit.playerId)
+        .map(u => hexKey(u.position!))
+    )
+    return new Set(reachable.map(h => hexKey(h)).filter(k => !alliedHexes.has(k)))
   }, [])
 
   const calcAttackable = useCallback((unitId: string, state: GameState, weaponIndex: number = 0) => {
@@ -199,27 +265,23 @@ export default function App() {
     const [q, r] = key.split(',').map(Number)
 
     if (selectionMode === 'moving') {
+      lastActionRef.current = 'moving'
       socket.emit('GAME_ACTION', {
         action: { type: 'ADVANCE', unitId: selectedUnitId, to: { q, r } }
       })
-      setHasMoved(true)
-      const newAttackable = calcAttackable(selectedUnitId, gameState, selectedWeaponIndex ?? 0)
-      setAttackableHexes(newAttackable)
       setReachableHexes(new Set())
       setSelectionMode('none')
-      setMessage(newAttackable.size > 0 ? 'Puedes atacar u otras acciones' : 'Pasa turno')
     }
 
     if (selectionMode === 'dashing') {
+      lastActionRef.current = 'dashing'
       socket.emit('GAME_ACTION', {
         action: { type: 'DASH', unitId: selectedUnitId, to: { q, r } }
       })
-      setHasUsedPrimary(true)
       setReachableHexes(new Set())
       setSelectionMode('none')
-      setMessage('Dash realizado')
     }
-  }, [gameState, selectedUnitId, selectionMode, reachableHexes, selectedWeaponIndex, calcAttackable])
+  }, [gameState, selectedUnitId, selectionMode, reachableHexes])
 
   const handleAttackMode = useCallback((weaponIndex: number) => {
     if (!gameState || !selectedUnitId) return
@@ -245,7 +307,6 @@ export default function App() {
     if (!selectedUnitId || !gameState || !myPlayerId) return
     const unit = gameState.units[selectedUnitId]
     if (!unit?.position) return
-
     for (const hex of Object.values(gameState.board)) {
       if (!hex.garrisonToken) continue
       if (hex.garrisonToken.owner !== myPlayerId) continue
@@ -383,10 +444,8 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Timeline + VP */}
       <TimelineBar gameState={gameState} myPlayerId={myPlayerId} />
 
-      {/* Mensaje central */}
       <div style={{
         textAlign: 'center', padding: '4px 16px',
         background: 'rgba(0,0,0,0.6)', color: 'white',
@@ -408,7 +467,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Canvas 3D */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         <GameScene
           gameState={gameState}
@@ -420,7 +478,6 @@ export default function App() {
           onTokenHover={setTokenTooltip}
         />
 
-        {/* Panel de unidad */}
         {panelUnit && !isFinished && (
           <UnitPanel
             unit={panelUnit}
@@ -453,8 +510,15 @@ export default function App() {
                   .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId !== unit.playerId)
                   .map(u2 => hexKey(u2.position!))
               )
+              const alliedHexes = new Set(
+                Object.values(gameState.units)
+                  .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId === unit.playerId)
+                  .map(u2 => hexKey(u2.position!))
+              )
               const reachable = getReachableHexes(unit.position, gameState.board, obstacles, 2)
-              setReachableHexes(new Set(reachable.map(h => hexKey(h))))
+              console.log('DASH reachable:', reachable.length, reachable.map(h => `${h.q},${h.r}`))
+              console.log('DASH reachable coords:', reachable.map(h => `${h.q},${h.r} (elev:${gameState.board[hexKey(h)]?.elevation})`))
+              setReachableHexes(new Set(reachable.map(h => hexKey(h)).filter(k => !alliedHexes.has(k))))
               setAttackableHexes(new Set())
               setMessage('Dash: elige hex (2 hexes, cuesta 2 TL)')
             }}
@@ -467,11 +531,16 @@ export default function App() {
             }}
             onRescue={handleRescue}
             onEndTurn={handleEndTurn}
-            onCancel={clearSelection}
+            onCancel={() => {
+              setSelectionMode('none')
+              setReachableHexes(new Set())
+              setAttackableHexes(new Set())
+              setSelectedUnitId(null)
+              setPanelUnitId(null)
+            }}
           />
         )}
 
-        {/* Leyenda de tokens */}
         <div style={{
           position: 'absolute', bottom: 16, right: 16,
           background: 'rgba(10,10,20,0.92)', border: '1px solid #333',
@@ -504,7 +573,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Tooltip de token */}
         {tokenTooltip && (
           <div style={{
             position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
@@ -517,7 +585,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Fin de partida */}
       {isFinished && (
         <div style={{
           position: 'absolute', inset: 0, display: 'flex',

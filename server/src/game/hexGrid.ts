@@ -163,10 +163,6 @@ export function checkLineOfSight(
     if (hex.occupiedBy && enemyUnitPositions.has(hex.occupiedBy)) {
       return { clear: false, reason: `Bloqueado por unidad enemiga en ${key}` }
     }
-
-    if (hex.objectiveToken) {
-      return { clear: false, reason: `Bloqueado por objetivo en ${key}` }
-    }
   }
 
   return { clear: true }
@@ -237,34 +233,45 @@ export function getReachableHexes(
   maxDistance: number
 ): HexCoord[] {
   const reachable: HexCoord[] = []
-  const visited = new Set<string>([hexKey(start)])
-  const queue: { coord: HexCoord; movesLeft: number }[] = [
-    { coord: start, movesLeft: maxDistance }
-  ]
+  const visited = new Map<string, number>()  // key → menor coste encontrado
+  visited.set(hexKey(start), 0)
+
+  // Cola de prioridad: [coste, coord]
+  const queue: { coord: HexCoord; cost: number }[] = [{ coord: start, cost: 0 }]
 
   while (queue.length > 0) {
-    const { coord, movesLeft } = queue.shift()!
+    // Ordenar por coste — explorar primero los más baratos
+    queue.sort((a, b) => a.cost - b.cost)
+    const { coord, cost } = queue.shift()!
 
     for (const neighbor of getNeighbors(coord)) {
       const key = hexKey(neighbor)
-      if (visited.has(key)) continue
       if (!board[key]) continue
       if (obstacles.has(key)) continue
 
-      visited.add(key)
-
       const hex = board[key]
       const currentHex = board[hexKey(coord)]
-      const elevationCost = Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
+      const elevCost = Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
       const waterCost = currentHex?.terrain === 'water' ? 1 : 0
-      const cost = 1 + elevationCost + waterCost
+      const newCost = cost + 1 + elevCost + waterCost
 
-      if (movesLeft - cost >= 0) {
+      if (newCost > maxDistance) continue
+
+      // Solo añadir si no hemos visitado con menor o igual coste
+      if (!visited.has(key) || newCost < visited.get(key)!) {
+        visited.set(key, newCost)
         reachable.push(neighbor)
-        queue.push({ coord: neighbor, movesLeft: movesLeft - cost })
+        queue.push({ coord: neighbor, cost: newCost })
       }
     }
   }
 
-  return reachable
+  // Eliminar duplicados
+  const seen = new Set<string>()
+  return reachable.filter(h => {
+    const k = hexKey(h)
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
 }

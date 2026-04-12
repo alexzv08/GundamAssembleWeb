@@ -19,22 +19,42 @@ function validateTurn(state: GameState, unitId: string, playerId: PlayerId): str
 }
 
 function getMovementObstacles(state: GameState, movingUnitId: string): Set<string> {
+    const movingUnit = state.units[movingUnitId]
     const obstacles = new Set<string>()
+
     for (const unit of Object.values(state.units)) {
         if (unit.id === movingUnitId) continue
         if (unit.currentHp <= 0) continue
         if (!unit.position) continue
-        if (unit.playerId !== state.units[movingUnitId].playerId) {
+        // Enemigos bloquean paso y destino
+        if (unit.playerId !== movingUnit.playerId) {
             obstacles.add(hexKey(unit.position))
         }
     }
+
+    // Garrisons enemigas bloquean
     for (const hex of Object.values(state.board)) {
-        if (hex.garrisonToken) obstacles.add(hexKey(hex.coord))
-        if (hex.objectiveToken) obstacles.add(hexKey(hex.coord))
+        if (hex.garrisonToken && hex.garrisonToken.owner !== movingUnit.playerId) {
+            obstacles.add(hexKey(hex.coord))
+        }
     }
+
     return obstacles
 }
 
+function getAlliedPositions(state: GameState, movingUnitId: string): Set<string> {
+    const movingUnit = state.units[movingUnitId]
+    const allied = new Set<string>()
+    for (const unit of Object.values(state.units)) {
+        if (unit.id === movingUnitId) continue
+        if (unit.currentHp <= 0) continue
+        if (!unit.position) continue
+        if (unit.playerId === movingUnit.playerId) {
+            allied.add(hexKey(unit.position))
+        }
+    }
+    return allied
+}
 function getEnemyPositions(state: GameState, playerId: PlayerId): Set<string> {
     const positions = new Set<string>()
     for (const unit of Object.values(state.units)) {
@@ -105,6 +125,10 @@ export function applyAdvance(
     if (!state.board[destKey]) return { success: false, error: 'Hex destino no existe en el tablero' }
 
     const obstacles = getMovementObstacles(state, unitId)
+    const allied = getAlliedPositions(state, unitId)
+
+    if (allied.has(destKey)) return { success: false, error: 'Ese hex está ocupado por una unidad aliada' }
+
     const maxMove = 3 + (unit.upgrades.find(u => u.type === 'movement')?.value ?? 0)
     const path = findPath(unit.position, to, state.board, obstacles, maxMove)
     if (!path) return { success: false, error: 'Movimiento no válido o fuera de rango' }
@@ -245,7 +269,12 @@ export function applyDash(
     const unit = state.units[unitId]
     if (!unit.position) return { success: false, error: 'La unidad no está en el tablero' }
 
+    const destKey = hexKey(to)
     const obstacles = getMovementObstacles(state, unitId)
+    const allied = getAlliedPositions(state, unitId)
+
+    if (allied.has(destKey)) return { success: false, error: 'Ese hex está ocupado por una unidad aliada' }
+
     const path = findPath(unit.position, to, state.board, obstacles, 2)
     if (!path) return { success: false, error: 'Dash no válido o fuera de rango' }
 
@@ -257,8 +286,22 @@ export function applyDash(
     }
 
     newUnit.position = to
-    if (newState.board[hexKey(to)]) {
-        newState.board[hexKey(to)].occupiedBy = unitId
+    if (newState.board[destKey]) {
+        newState.board[destKey].occupiedBy = unitId
+    }
+
+    // Recoger upgrade token al hacer Dash
+    const destHex = newState.board[destKey]
+    if (destHex?.upgradeToken && !destHex.upgradeToken.revealed) {
+        destHex.upgradeToken.revealed = true
+        if (destHex.upgradeToken.type === 'energy') {
+            newUnit.energy += destHex.upgradeToken.value
+        } else {
+            newUnit.upgrades.push({
+                type: destHex.upgradeToken.type as 'attack' | 'movement' | 'shield',
+                value: destHex.upgradeToken.value,
+            })
+        }
     }
 
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
@@ -266,7 +309,6 @@ export function applyDash(
 
     return { success: true, newState }
 }
-
 // ─── ENERGIZE ────────────────────────────────────────────────────────────────
 export function applyEnergize(
     state: GameState,

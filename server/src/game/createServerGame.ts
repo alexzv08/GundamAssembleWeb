@@ -53,6 +53,24 @@ function getNeighbors(coord: { q: number; r: number }): { q: number; r: number }
     }
 }
 
+function findNearestValidHex(
+    coord: { q: number; r: number },
+    board: BoardMap
+): { q: number; r: number } {
+    if (board[hexKey(coord)]) return coord
+    const neighbors = getNeighbors(coord)
+    for (const n of neighbors) {
+        if (board[hexKey(n)]) return n
+    }
+    // Si ningún vecino es válido, buscar en radio 2
+    for (const n of neighbors) {
+        for (const n2 of getNeighbors(n)) {
+            if (board[hexKey(n2)]) return n2
+        }
+    }
+    return coord
+}
+
 export function createServerGame(player1Name: string, player2Name: string): GameState {
     const dataDir = path.join(__dirname, '../../data')
     const mapData = loadJSON<MapJSON>(path.join(dataDir, 'maps/DemoMap.json'))
@@ -63,7 +81,6 @@ export function createServerGame(player1Name: string, player2Name: string): Game
 
     for (let row = 0; row < mapData.rows; row++) {
         for (let col = 0; col < mapData.cols; col++) {
-            // Ignorar col 13 en filas impares (pointy-top odd-r)
             if (row % 2 === 1 && col === mapData.cols - 1) continue
             const cell = mapData.grid[row][col]
             const coord = offsetToAxial(col, row)
@@ -87,8 +104,8 @@ export function createServerGame(player1Name: string, player2Name: string): Game
     }
 
     // ─── COLOCAR TOKENS DEL ESCENARIO ─────────────────────────────────────────
-    const deployP1 = mapData.scenario?.deployZones?.player1 ?? []
-    const deployP2 = mapData.scenario?.deployZones?.player2 ?? []
+    const deployP1Raw = mapData.scenario?.deployZones?.player1 ?? []
+    const deployP2Raw = mapData.scenario?.deployZones?.player2 ?? []
 
     if (mapData.scenario) {
         const s = mapData.scenario
@@ -118,19 +135,29 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         })
     }
 
+    // ─── POSICIONES DE DEPLOY ─────────────────────────────────────────────────
+    const p1DeployRaw = deployP1Raw[0]
+        ? offsetToAxial(deployP1Raw[0].col, deployP1Raw[0].row)
+        : { q: 0, r: 7 }
+    const p2DeployRaw = deployP2Raw[0]
+        ? offsetToAxial(deployP2Raw[0].col, deployP2Raw[0].row)
+        : { q: 12, r: 7 }
+
+    // Buscar hex válido más cercano si el deploy está fuera de bounds
+    const p1Deploy = findNearestValidHex(p1DeployRaw, board)
+    const p2Deploy = findNearestValidHex(p2DeployRaw, board)
+
     // Marcar zonas de despliegue
-    deployP1.forEach(z => {
-        const key = hexKey(offsetToAxial(z.col, z.row))
+    deployP1Raw.forEach(z => {
+        const coord = findNearestValidHex(offsetToAxial(z.col, z.row), board)
+        const key = hexKey(coord)
         if (board[key]) board[key].deployZone = 'player1'
     })
-    deployP2.forEach(z => {
-        const key = hexKey(offsetToAxial(z.col, z.row))
+    deployP2Raw.forEach(z => {
+        const coord = findNearestValidHex(offsetToAxial(z.col, z.row), board)
+        const key = hexKey(coord)
         if (board[key]) board[key].deployZone = 'player2'
     })
-
-    // ─── POSICIONES DE DEPLOY ─────────────────────────────────────────────────
-    const p1Deploy = deployP1[0] ? offsetToAxial(deployP1[0].col, deployP1[0].row) : { q: 0, r: 7 }
-    const p2Deploy = deployP2[0] ? offsetToAxial(deployP2[0].col, deployP2[0].row) : { q: 13, r: 7 }
 
     const fedCards = unitData.cards.filter(c => c.faction === 'Earth Federation').slice(0, 3)
     const zeonCards = unitData.cards.filter(c => c.faction === 'Zeon').slice(0, 3)
@@ -178,16 +205,21 @@ export function createServerGame(player1Name: string, player2Name: string): Game
 
     const firstToken = timeline.slots.find(s => s.tokens.length > 0)?.tokens[0]
 
-    // ─── SPAWN PRIMERA UNIDAD ACTIVA ──────────────────────────────────────────
-    // La primera unidad que va a activarse aparece en su hex de deploy
-    if (firstToken) {
-        const firstUnit = allUnits.find(u => u.id === firstToken.unitId)
-        const deployHex = firstToken.playerId === 'player1' ? p1Deploy : p2Deploy
-        const deployKey = hexKey(deployHex)
-        if (firstUnit && board[deployKey] && !board[deployKey].occupiedBy) {
-            firstUnit.position = deployHex
-            board[deployKey].occupiedBy = firstUnit.id
-        }
+    // ─── SPAWN PRIMERA UNIDAD DE CADA JUGADOR ─────────────────────────────────
+    const firstP1Unit = p1Units[0]
+    const firstP2Unit = p2Units[0]
+
+    const p1DeployKey = hexKey(p1Deploy)
+    const p2DeployKey = hexKey(p2Deploy)
+
+    if (firstP1Unit && board[p1DeployKey] && !board[p1DeployKey].occupiedBy) {
+        firstP1Unit.position = p1Deploy
+        board[p1DeployKey].occupiedBy = firstP1Unit.id
+    }
+
+    if (firstP2Unit && board[p2DeployKey] && !board[p2DeployKey].occupiedBy) {
+        firstP2Unit.position = p2Deploy
+        board[p2DeployKey].occupiedBy = firstP2Unit.id
     }
 
     // ─── GAME STATE ───────────────────────────────────────────────────────────
