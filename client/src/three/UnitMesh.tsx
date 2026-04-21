@@ -6,17 +6,17 @@ import { useSTLModel } from './useSTLModel'
 
 interface UnitMeshProps {
   unit: Unit
+  elevation?: number
   isActive?: boolean
   isSelected?: boolean
   onClick?: () => void
 }
 
-// Mapa de modelos STL por nombre de unidad
 const STL_MODELS: Record<string, string> = {
   'Gundam': '/models/tallgeese.stl',
 }
 
-export function UnitMesh({ unit, isActive = false, isSelected = false, onClick }: UnitMeshProps) {
+export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, onClick }: UnitMeshProps) {
   const meshRef = useRef<Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
@@ -26,7 +26,7 @@ export function UnitMesh({ unit, isActive = false, isSelected = false, onClick }
   if (!unit.position || unit.currentHp <= 0) return null
 
   const { q, r } = unit.position
-  const [x, y, z] = hexToWorld(q, r, 0)
+  const [x, y, z] = hexToWorld(q, r, elevation)
 
   const baseColor = unit.playerId === 'player1' ? '#1565c0' : '#b71c1c'
   const color = isSelected ? '#f5c518' : hovered ? '#ffffff' : baseColor
@@ -39,8 +39,6 @@ export function UnitMesh({ unit, isActive = false, isSelected = false, onClick }
 
   return (
     <group position={[x, y + 0.6, z]}>
-
-      {/* Modelo STL si está disponible, sino esfera placeholder */}
       {stlUrl && stlGeometry ? (
         <mesh
           ref={meshRef}
@@ -58,7 +56,6 @@ export function UnitMesh({ unit, isActive = false, isSelected = false, onClick }
         </mesh>
       )}
 
-      {/* Anillo indicador de unidad activa */}
       {isActive && (
         <mesh position={[0, -0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.45, 0.05, 8, 32]} />
@@ -66,7 +63,6 @@ export function UnitMesh({ unit, isActive = false, isSelected = false, onClick }
         </mesh>
       )}
 
-      {/* Barra de HP */}
       <HPBar current={unit.currentHp} max={unit.maxHp} />
     </group>
   )

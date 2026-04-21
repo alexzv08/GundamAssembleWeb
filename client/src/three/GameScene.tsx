@@ -26,9 +26,7 @@ export function GameScene({
   onTokenHover,
 }: GameSceneProps) {
   const selectedUnit = selectedUnitId ? gameState.units[selectedUnitId] : null
-  const selectedHexKey = selectedUnit?.position
-    ? hexKey(selectedUnit.position)
-    : null
+  const selectedHexKey = selectedUnit?.position ? hexKey(selectedUnit.position) : null
 
   return (
     <Canvas style={{ width: '100%', height: '100%' }} shadows>
@@ -56,15 +54,21 @@ export function GameScene({
           onTokenHover={onTokenHover}
         />
 
-        {Object.values(gameState.units).map(unit => (
-          <UnitMesh
-            key={unit.id}
-            unit={unit}
-            isActive={gameState.activeUnitId === unit.id}
-            isSelected={selectedUnitId === unit.id}
-            onClick={() => onUnitClick(unit.id)}
-          />
-        ))}
+        {Object.values(gameState.units).map(unit => {
+          const elevation = unit.position
+            ? (gameState.board[hexKey(unit.position)]?.elevation ?? 0)
+            : 0
+          return (
+            <UnitMesh
+              key={unit.id}
+              unit={unit}
+              elevation={elevation}
+              isActive={gameState.activeUnitId === unit.id}
+              isSelected={selectedUnitId === unit.id}
+              onClick={() => onUnitClick(unit.id)}
+            />
+          )
+        })}
       </Suspense>
     </Canvas>
   )

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
-import { hexKey, getReachableHexes, gridDistance } from './game/hexGrid'
+import { hexKey, getReachableHexes, gridDistance, checkLineOfSight } from './game/hexGrid'
 import { useGameData } from './game/useGameData'
 import { UnitPanel } from './components/ui/UnitPanel'
 import { TimelineBar } from './components/ui/TimelineBar'
@@ -95,16 +95,24 @@ export default function App() {
           if (moved && lastActionRef.current) {
             if (lastActionRef.current === 'moving') {
               setHasMoved(true)
-              // Calcular atacables con la nueva posición
               const weapon = newUnit.weapons[0]
               if (weapon) {
+                const enemyIds = new Set(
+                  Object.values(newState.units)
+                    .filter(u => u.playerId !== newUnit.playerId && u.currentHp > 0 && u.position)
+                    .map(u => u.id)
+                )
                 const attackable = new Set<string>()
                 for (const other of Object.values(newState.units)) {
                   if (other.playerId === newUnit.playerId) continue
                   if (other.currentHp <= 0 || !other.position) continue
-                  if (gridDistance(newPos, other.position) <= weapon.range) {
-                    attackable.add(hexKey(other.position))
+                  const dist = gridDistance(newPos, other.position)
+                  if (dist > weapon.range) continue
+                  if (dist > 1) {
+                    const los = checkLineOfSight(newPos, other.position, newState.board, newUnit.playerId as 'player1' | 'player2', enemyIds)
+                    if (!los.clear) continue
                   }
+                  attackable.add(hexKey(other.position))
                 }
                 setAttackableHexes(attackable)
                 setMessage(attackable.size > 0 ? 'Puedes atacar u otras acciones' : 'Pasa turno')
@@ -146,7 +154,6 @@ export default function App() {
 
     socket.on('ACTION_ERROR', ({ message }: { message: string }) => {
       setMessage(`Error: ${message}`)
-      // Solo limpiar el modo visual — NO resetear hasMoved ni hasUsedPrimary
       lastActionRef.current = null
       setSelectionMode('none')
       setReachableHexes(new Set())
@@ -186,14 +193,12 @@ export default function App() {
   const calcReachable = useCallback((unitId: string, state: GameState) => {
     const unit = state.units[unitId]
     if (!unit?.position) return new Set<string>()
-    // Solo enemigos como obstáculos — aliados se pueden atravesar
     const obstacles = new Set(
       Object.values(state.units)
         .filter(u => u.id !== unitId && u.currentHp > 0 && u.position && u.playerId !== unit.playerId)
         .map(u => hexKey(u.position!))
     )
     const reachable = getReachableHexes(unit.position, state.board, obstacles, 3)
-    // Excluir hexes ocupados por aliados como destino final
     const alliedHexes = new Set(
       Object.values(state.units)
         .filter(u => u.id !== unitId && u.currentHp > 0 && u.position && u.playerId === unit.playerId)
@@ -207,12 +212,22 @@ export default function App() {
     if (!unit?.position) return new Set<string>()
     const weapon = unit.weapons[weaponIndex]
     if (!weapon) return new Set<string>()
+    const enemyIds = new Set(
+      Object.values(state.units)
+        .filter(u => u.playerId !== unit.playerId && u.currentHp > 0 && u.position)
+        .map(u => u.id)
+    )
     const attackable = new Set<string>()
     for (const other of Object.values(state.units)) {
       if (other.playerId === unit.playerId) continue
       if (other.currentHp <= 0 || !other.position) continue
       const dist = gridDistance(unit.position, other.position)
-      if (dist <= weapon.range) attackable.add(hexKey(other.position))
+      if (dist > weapon.range) continue
+      if (dist > 1) {
+        const los = checkLineOfSight(unit.position, other.position, state.board, unit.playerId as 'player1' | 'player2', enemyIds)
+        if (!los.clear) continue
+      }
+      attackable.add(hexKey(other.position))
     }
     return attackable
   }, [])
@@ -516,8 +531,6 @@ export default function App() {
                   .map(u2 => hexKey(u2.position!))
               )
               const reachable = getReachableHexes(unit.position, gameState.board, obstacles, 2)
-              console.log('DASH reachable:', reachable.length, reachable.map(h => `${h.q},${h.r}`))
-              console.log('DASH reachable coords:', reachable.map(h => `${h.q},${h.r} (elev:${gameState.board[hexKey(h)]?.elevation})`))
               setReachableHexes(new Set(reachable.map(h => hexKey(h)).filter(k => !alliedHexes.has(k))))
               setAttackableHexes(new Set())
               setMessage('Dash: elige hex (2 hexes, cuesta 2 TL)')

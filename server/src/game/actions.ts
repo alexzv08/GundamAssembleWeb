@@ -195,6 +195,7 @@ export function applyAttack(
     if (dist > 1) {
         const enemyPositions = getEnemyPositions(state, playerId)
         const los = checkLineOfSight(attacker.position, target.position, state.board, playerId, enemyPositions)
+        console.log('LOS result:', los)
         if (!los.clear) return { success: false, error: `Sin línea de visión: ${los.reason}` }
     }
 

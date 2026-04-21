@@ -108,7 +108,7 @@ export function HexTile({
             )}
 
             {/* Upgrade / Energy token */}
-            {hex.upgradeToken && (
+            {hex.upgradeToken && !hex.upgradeToken.revealed && (
                 <mesh
                     position={[x, y + 0.15, z]}
                     onPointerEnter={(e) => {
