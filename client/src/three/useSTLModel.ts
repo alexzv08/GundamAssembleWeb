@@ -8,7 +8,7 @@ export function useSTLModel(url: string): BufferGeometry | null {
     const [geometry, setGeometry] = useState<BufferGeometry | null>(cache[url] ?? null)
 
     useEffect(() => {
-        if (cache[url]) { setGeometry(cache[url]); return }
+        if (cache[url]) return
         const loader = new STLLoader()
         loader.load(url, (geo) => {
             geo.center()

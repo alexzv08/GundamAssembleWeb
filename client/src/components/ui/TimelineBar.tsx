@@ -1,4 +1,3 @@
-import type { Timeline } from '../../types/timeline'
 import type { GameState } from '../../types/gameState'
 
 interface TimelineBarProps {

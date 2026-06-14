@@ -13,6 +13,7 @@ interface UnitPanelProps {
     onMove?: () => void
     onDash?: () => void
     onAttack?: (weaponIndex: number) => void
+    onUseAbility?: (abilityIndex: number) => void
     onEnergize?: () => void
     onRescue?: () => void
     onEndTurn?: () => void
@@ -50,6 +51,7 @@ export function UnitPanel({
     onMove,
     onDash,
     onAttack,
+    onUseAbility,
     onEnergize,
     onRescue,
     onEndTurn,
@@ -256,6 +258,10 @@ export function UnitPanel({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {unit.abilities.map((ab, i) => {
                                 const { bg, label } = abilityTypeColor(ab.type)
+                                const canUse = showActions && !hasUsedPrimary && ab.type === 'CMD'
+                                const noEnergy = ab.energyCost != null && unit.energy < ab.energyCost
+                                const notImplemented = !ab.abilityData
+                                const disabled = noEnergy || notImplemented
                                 return (
                                     <div key={i} style={{
                                         background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a2a',
@@ -266,8 +272,22 @@ export function UnitPanel({
                                                 background: bg, borderRadius: 3, padding: '1px 5px',
                                                 fontSize: 9, fontWeight: 'bold', color: 'white',
                                             }}>{label}</span>
-                                            <span style={{ color: '#ddd', fontWeight: 'bold' }}>{ab.name}</span>
-                                            {ab.energyCost && <span style={{ color: '#f5c518', fontSize: 10 }}>⚡</span>}
+                                            <span style={{ color: '#ddd', fontWeight: 'bold', flex: 1 }}>{ab.name}</span>
+                                            {ab.energyCost != null && (
+                                                <span style={{ color: unit.energy >= ab.energyCost ? '#f5c518' : '#555', fontSize: 10 }}>
+                                                    {'⚡'.repeat(ab.energyCost)}
+                                                </span>
+                                            )}
+                                            {canUse && (
+                                                <button
+                                                    onClick={() => onUseAbility?.(i)}
+                                                    disabled={disabled}
+                                                    title={notImplemented ? 'No implementada aún' : noEnergy ? 'Energía insuficiente' : undefined}
+                                                    style={btn('#7b1fa2', '1px solid #ab47bc', disabled)}
+                                                >
+                                                    Usar
+                                                </button>
+                                            )}
                                         </div>
                                         <div style={{ color: '#999', fontSize: 10, lineHeight: 1.4 }}>
                                             {ab.description}

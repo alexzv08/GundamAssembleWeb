@@ -6,13 +6,11 @@
       "uid": 1771805650409,
       "name": "Last Shot Counts",
       "type": "command",
-      "faction": "Gundam",
+      "faction": "Earth Federation",
       "cardId": "T01",
       "effect": "Gundam gains a [Strength] Upgrade. Its attacks cost [TL-1] this turn. If it defeats an enemy unit this turn, it gains an additional [Strength] Upgrade.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650410,
@@ -21,10 +19,8 @@
       "faction": "Earth Federation",
       "cardId": "T-02",
       "effect": "Your active unit gains +2 [Strength] this turn. Its attacks count 7's and 8's as [Crit] this turn.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650411,
@@ -32,23 +28,19 @@
       "type": "response",
       "faction": "Earth Federation",
       "cardId": "T03",
-      "effect": "[After Attack Roll] An allied unit is delt -2 [Damage].",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effect": "[After Attack Roll] An allied unit is dealt -2 [Damage].",
+      "effectData": { "type": "reduce_incoming_damage", "amount": 2, "trigger": "after_combat_damage" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650412,
       "name": "Forward Artillery Position",
       "type": "command",
-      "faction": "Guncannon",
+      "faction": "Earth Federation",
       "cardId": "T04",
       "effect": "Guncannon gains an [Energy]. It gains +1 [Strength] this turn for each Garrison you've Rescued.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650413,
@@ -57,10 +49,8 @@
       "faction": "Earth Federation",
       "cardId": "T05",
       "effect": "[After Combat Damage] The defending allied unit makes an attack at [TL-1]",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "counter_attack", "trigger": "after_combat_damage" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650414,
@@ -69,22 +59,18 @@
       "faction": "Earth Federation",
       "cardId": "T06",
       "effect": "After an allied unit Rescues a Garrison: It gains a [Shield] Upgrade",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "gain_upgrade_after_rescue", "upgradeType": "shield", "trigger": "after_rescue" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650415,
       "name": "Entrenched Position",
       "type": "command",
-      "faction": "Guntank",
+      "faction": "Earth Federation",
       "cardId": "T-07",
       "effect": "Guntank gains a [Shield] Upgrade. It captures an objective it is on or adjacent to.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "gain_shield_and_capture_objective" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650416,
@@ -92,11 +78,9 @@
       "type": "command",
       "faction": "Earth Federation",
       "cardId": "T08",
-      "effect": "Your active unit gains 1 hit point for each Upgrade on it. units cannot gain more than their max hit points)",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effect": "Your active unit gains 1 hit point for each Upgrade on it. (units cannot gain more than their max hit points)",
+      "effectData": { "type": "heal_per_upgrade" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650417,
@@ -105,22 +89,18 @@
       "faction": "Earth Federation",
       "cardId": "T09",
       "effect": "Your active unit destroys 1 Upgrade on an enemy unit within [Range 3] and Slows that unit.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "destroy_upgrade_and_slow", "range": 3 },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650418,
       "name": "Crimson Execution",
       "type": "command",
-      "faction": "Char's Zaku II",
+      "faction": "Zeon",
       "cardId": "T-10",
-      "effect": "Char's Zaku II makes an additional Dash at [TL 0]. Then, it makes an additional Heat Hawk attack at TL 0].",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effect": "Char's Zaku II makes an additional Dash at [TL 0]. Then, it makes an additional Heat Hawk attack at [TL 0].",
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650419,
@@ -129,10 +109,8 @@
       "faction": "Zeon",
       "cardId": "T-11",
       "effect": "[After Combat Damage] The attacking allied unit gains an [Energy] and a [Strength] Upgrade.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650420,
@@ -141,22 +119,18 @@
       "faction": "Zeon",
       "cardId": "T-12",
       "effect": "Your active unit deals 2 [Damage] to each enemy unit and Garrison within [Range 3].",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "aoe_damage", "range": 3, "amount": 2 },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650421,
       "name": "Rescued Extraction",
       "type": "command",
-      "faction": "Zaku II [ Linebreaker]",
+      "faction": "Zeon",
       "cardId": "T-13",
-      "effect": "Zaku II, Linebreaker Rescues an allied Garrion within [Range 3] at [TL 0]. Then it gains an [Energy]",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effect": "Zaku II, Linebreaker Rescues an allied Garrison within [Range 3] at [TL 0]. Then it gains an [Energy]",
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650422,
@@ -164,11 +138,9 @@
       "type": "command",
       "faction": "Zeon",
       "cardId": "T-14",
-      "effect": "Your active unit destroys 1 Upgrade on an enemy unit within [Range 3] and Fracture that unit.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effect": "Your active unit destroys 1 Upgrade on an enemy unit within [Range 3] and Fractures that unit.",
+      "effectData": { "type": "destroy_upgrade_and_fracture", "range": 3 },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650423,
@@ -176,23 +148,19 @@
       "type": "response",
       "faction": "Zeon",
       "cardId": "T-15",
-      "effect": "After an allied unit Rescues a Garrion: It gains a [Speed] Upgrade.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effect": "After an allied unit Rescues a Garrison: It gains a [Speed] Upgrade.",
+      "effectData": { "type": "gain_upgrade_after_rescue", "upgradeType": "movement", "trigger": "after_rescue" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650424,
       "name": "Iron Grip",
       "type": "response",
-      "faction": "Zaku II [Enforcer]",
+      "faction": "Zeon",
       "cardId": "T-16",
       "effect": "After an enemy unit ends its movement adjacent to Zaku II, Enforcer: it deals 3 [Damage] to that enemy unit.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "damage_on_adjacent_enemy", "amount": 3, "trigger": "after_enemy_advance" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650425,
@@ -201,10 +169,8 @@
       "faction": "Zeon",
       "cardId": "T-17",
       "effect": "Your active unit Moves 2. Then Push 1 an adjacent enemy unit and deal 1 [Damage] to it.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": null,
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805650427,
@@ -213,10 +179,8 @@
       "faction": "Zeon",
       "cardId": "T-18",
       "effect": "[After Combat Damage] if the defending allied unit survives the attack, it deals 2 [Damage] to the attackers.",
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "effectData": { "type": "retaliate_damage", "amount": 2, "trigger": "after_combat_damage" },
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     }
   ]
 }

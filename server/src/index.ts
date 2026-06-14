@@ -11,7 +11,7 @@ import cardsRouter from './routes/cards'
 const app = express()
 const http = createServer(app)
 const io = new Server(http, {
-    cors: { origin: 'http://localhost:5173', methods: ['GET', 'POST'] }
+    cors: { origin: ['http://localhost:5173', 'http://localhost:5174'], methods: ['GET', 'POST'] }
 })
 
 app.use(cors())
@@ -25,10 +25,8 @@ app.use('/api/cards', cardsRouter)
 app.get('/health', (_, res) => res.json({ ok: true }))
 
 io.on('connection', socket => {
-    console.log(`Cliente conectado: ${socket.id}`)
     registerGameEvents(io, socket, roomManager)
     socket.on('disconnect', () => {
-        console.log(`Cliente desconectado: ${socket.id}`)
         roomManager.handleDisconnect(socket.id, io)
     })
 })

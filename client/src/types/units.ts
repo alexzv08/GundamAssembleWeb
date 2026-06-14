@@ -1,72 +1,94 @@
-// Tipos de terreno del tablero
 export type TerrainType = 'normal' | 'water' | 'elevation_1' | 'elevation_2' | 'elevation_3'
 
-// Coordenadas en sistema axial (el mejor para hexágonos)
 export interface HexCoord {
-    q: number  // columna
-    r: number  // fila
+    q: number
+    r: number
 }
 
-// Un arma de una unidad
+// ─── WEAPON EFFECTS ───────────────────────────────────────────────────────────
+
+export type WeaponEffectTrigger = 'always' | 'after_attack_roll' | 'after_combat_damage'
+
+export interface WeaponEffect {
+    trigger: WeaponEffectTrigger
+    type: 'ignore_los' | 'bonus_damage' | 'bonus_damage_near_objective' |
+          'destroy_upgrade' | 'slow' | 'fracture' | 'gain_upgrade' |
+          'splash_damage' | 'push'
+    target?: 'self' | 'target' | 'adjacent_enemies'
+    amount?: number
+    upgradeType?: 'shield' | 'attack' | 'movement' | 'energy' | 'any'
+}
+
+// ─── ABILITY EFFECTS ──────────────────────────────────────────────────────────
+
+export interface AbilityEffect {
+    type: 'fracture_enemy' | 'saturated_fire' | 'capture_objective'
+        | 'reroll_one_miss' | 'extended_crit_threshold' | 'accuracy_bonus'
+        | 'dash_range_bonus' | 'strength_vs_damaged'
+        | 'damage_after_dash' | 'heal_ally_after_rescue'
+    amount?: number
+    range?: number
+    requiredUpgrades?: number
+    threshold?: number
+    dice?: number
+}
+
+// ─── WEAPON ───────────────────────────────────────────────────────────────────
+
 export interface Weapon {
     name: string
-    range: number        // en hexágonos
-    strength: number     // número de dados a tirar
-    tlCost: number       // coste en Timeline
-    critEffect?: string  // descripción del efecto crítico
-    energyCost?: number  // si requiere energía
+    range: number
+    strength: number
+    tlCost: number
+    effect?: string
+    critEffect?: string
+    effectData?: WeaponEffect | null
+    critData?: WeaponEffect | null
+    energyCost?: number
 }
 
-// Tipos de habilidad
+// ─── ABILITY ──────────────────────────────────────────────────────────────────
+
 export type AbilityType = 'CMD' | 'ONG' | 'RSP'
 
-// Una habilidad de una unidad
 export interface Ability {
     name: string
     type: AbilityType
     description: string
     energyCost?: number
+    abilityData?: AbilityEffect | null
 }
 
-// Estado de una unidad en la partida
+// ─── UNIT ─────────────────────────────────────────────────────────────────────
+
 export interface Unit {
-    id: string            // ej: "player1_rx78"
-    name: string          // ej: "RX-78-2 Gundam"
-    unitType: string      // ej: "Mobile Suit"
-    traits: string[]      // ej: ["Federation", "Prototype"]
+    id: string
+    name: string
+    unitType: string
+    traits: string[]
 
-    // Stats base
     maxHp: number
-    vp: number            // VP que da al rival al ser derrotado
-    startingTl: number    // posición inicial en el Timeline
+    vp: number
+    startingTl: number
 
-    // Estado actual
     currentHp: number
-    energy: number        // tokens de energía actuales
-    position: HexCoord | null  // null si aún no está en el tablero
+    energy: number
+    position: HexCoord | null
 
-    // Equipamiento
     weapons: Weapon[]
     abilities: Ability[]
 
-    // Efectos activos
     statusEffects: StatusEffect[]
     upgrades: Upgrade[]
 
-    // A qué jugador pertenece
     playerId: 'player1' | 'player2'
-
-    // Si ya actuó este round
     activated: boolean
 }
 
-// Efectos de estado temporales
 export interface StatusEffect {
     type: 'disarm' | 'fracture' | 'slow'
-    // Todos duran "un uso" según las reglas
 }
 
-// Tokens de mejora recogidos del tablero
 export interface Upgrade {
     type: 'attack' | 'movement' | 'shield' | 'energy'
     value: number

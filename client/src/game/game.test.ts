@@ -138,7 +138,7 @@ describe('resolveInitiativeTie', () => {
 
 
 // ─── IMPORTS ADICIONALES (añade al principio del archivo) ─────────────────────
-import { applyAdvance, applyAttack, applyEnergize, applyDash } from './actions'
+import { applyAdvance, applyAttack, applyEnergize, applyDash, applyUseAbility, applyPlayCard, applyAttackGarrison, applyPlayResponse, applyPassResponse } from './actions'
 import { GameState, Unit } from '../types'
 
 // ─── ESTADO DE PRUEBA ─────────────────────────────────────────────────────────
@@ -183,6 +183,9 @@ function makeGameState(): GameState {
     },
     actionLog: [],
     winner: null,
+    pendingResponse: null,
+    lastActivePlayer: null,
+    hasUsedPrimaryAction: false,
   }
 }
 
@@ -199,12 +202,9 @@ it('rechaza movimiento fuera de rango', () => {
     // { q: 2, r: 0 } está ocupado por zaku2 (enemigo), a distancia 2 pero bloqueado
     // Usamos { q: -2, r: 0 } que está a distancia 2 pero en dirección opuesta — válido
     // Para probar fuera de rango usamos distancia 4: imposible con maxMove=3
-    const result = applyAdvance(state, 'rx78', { q: 2, r: -1 }, 'player1')
-    // distancia de (0,0) a (2,-1) = max(2,1,1) = 2 — dentro de rango
-    // Mejor: mover rx78 primero y luego intentar saltar muy lejos
-    // La forma más limpia: usar un hex que no existe en el board
-    const result2 = applyAdvance(state, 'rx78', { q: 99, r: 99 }, 'player1')
-    expect(result2.success).toBe(false)
+    applyAdvance(state, 'rx78', { q: 2, r: -1 }, 'player1')
+    const outOfBoard = applyAdvance(state, 'rx78', { q: 99, r: 99 }, 'player1')
+    expect(outOfBoard.success).toBe(false)
   })
   it('rechaza si no es tu turno', () => {
     const state  = makeGameState()
@@ -230,12 +230,7 @@ describe('applyAttack', () => {
     expect(result.newState!.units['zaku2'].currentHp).toBe(5)
   })
   it('derrota la unidad y suma VP', () => {
-    const state  = makeGameState()
-    const result = applyAttack(state, 'rx78', 0, 'zaku2', 'player1', [6, 7, 8, 8, 8])
-    // Aunque solo hay 3 dados en el arma, probamos con daño suficiente
-    // Ajustamos: zaku2 tiene 5 HP, necesitamos 5 hits
-    const result2 = applyAttack(state, 'rx78', 0, 'zaku2', 'player1', [5, 6, 7])
-    // 3 hits → 3 daño, no suficiente. Vamos a bajar HP manualmente
+    // Bajamos HP manualmente para probar derrota
     const lowHpState = { ...makeGameState() }
     lowHpState.units['zaku2'] = { ...lowHpState.units['zaku2'], currentHp: 2 }
     const result3 = applyAttack(lowHpState, 'rx78', 0, 'zaku2', 'player1', [5, 6, 7])
@@ -268,6 +263,215 @@ describe('applyDash', () => {
   })
 })
 
+// ─── USE_ABILITY ──────────────────────────────────────────────────────────────
+describe('applyUseAbility', () => {
+  function makeUnitWithAbility(id: string, playerId: 'player1' | 'player2', q: number, r: number) {
+    return {
+      ...makeUnit(id, playerId, q, r),
+      abilities: [{
+        name: 'Fractura Táctica',
+        type: 'CMD' as const,
+        description: 'Aplica fracture a un enemigo en rango 3',
+        abilityData: { type: 'fracture_enemy' as const, range: 3 },
+      }],
+    }
+  }
+
+  it('valida turno incorrecto', () => {
+    const state = makeGameState()
+    const result = applyUseAbility(state, 'rx78', 0, 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('No es tu turno')
+  })
+
+  it('rechaza habilidad no CMD', () => {
+    const state = makeGameState()
+    state.units['rx78'].abilities = [{
+      name: 'Pasiva', type: 'ONG', description: '...', abilityData: null
+    }]
+    const result = applyUseAbility(state, 'rx78', 0, 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('CMD')
+  })
+
+  it('rechaza si energía insuficiente', () => {
+    const state = makeGameState()
+    state.units['rx78'].abilities = [{
+      name: 'Habilidad cara', type: 'CMD', description: '...', energyCost: 2,
+      abilityData: { type: 'fracture_enemy' as const, range: 3 },
+    }]
+    state.units['rx78'].energy = 1
+    const result = applyUseAbility(state, 'rx78', 0, 'player1', 'zaku2')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Energía')
+  })
+
+  it('rechaza habilidad sin abilityData (no implementada)', () => {
+    const state = makeGameState()
+    state.units['rx78'].abilities = [{
+      name: 'Sin implementar', type: 'CMD', description: '...', abilityData: null
+    }]
+    const result = applyUseAbility(state, 'rx78', 0, 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('no está implementada')
+  })
+
+  it('fracture_enemy: requiere targetId', () => {
+    const state = makeGameState()
+    state.units['rx78'] = makeUnitWithAbility('rx78', 'player1', 0, 0)
+    const result = applyUseAbility(state, 'rx78', 0, 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('objetivo')
+  })
+
+  it('fracture_enemy: rechaza objetivo aliado', () => {
+    const state = makeGameState()
+    state.units['rx78'] = makeUnitWithAbility('rx78', 'player1', 0, 0)
+    const result = applyUseAbility(state, 'rx78', 0, 'player1', 'rx78')
+    expect(result.success).toBe(false)
+  })
+
+  it('fracture_enemy: rechaza objetivo fuera de rango', () => {
+    const state = makeGameState()
+    state.units['rx78'] = makeUnitWithAbility('rx78', 'player1', 0, 0)
+    state.units['zaku2'].position = { q: 0, r: 4 }  // distancia 4 > rango 3
+    const result = applyUseAbility(state, 'rx78', 0, 'player1', 'zaku2')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('rango')
+  })
+
+  it('fracture_enemy: acepta objetivo enemigo en rango', () => {
+    const state = makeGameState()
+    state.units['rx78'] = makeUnitWithAbility('rx78', 'player1', 0, 0)
+    const result = applyUseAbility(state, 'rx78', 0, 'player1', 'zaku2')
+    expect(result.success).toBe(true)
+  })
+})
+
+// ─── ATTACK_GARRISON ──────────────────────────────────────────────────────────
+describe('applyAttackGarrison', () => {
+  function makeStateWithGarrison(): GameState {
+    const state = makeGameState()
+    // Garrison enemiga en (1,0) — adyacente a rx78 en (0,0), dentro de rango 3
+    state.board['1,0'] = {
+      coord: { q: 1, r: 0 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null, upgradeToken: null, objectiveToken: null, deployZone: null,
+      garrisonToken: { id: 'gar1', owner: 'player2', hp: 1 },
+    }
+    return state
+  }
+
+  it('rechaza si no es tu turno', () => {
+    const state = makeStateWithGarrison()
+    const result = applyAttackGarrison(state, 'rx78', 0, 'gar1', 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('No es tu turno')
+  })
+
+  it('rechaza garrison propia', () => {
+    const state = makeStateWithGarrison()
+    state.board['1,0'].garrisonToken!.owner = 'player1'
+    const result = applyAttackGarrison(state, 'rx78', 0, 'gar1', 'player1')
+    expect(result.success).toBe(false)
+  })
+
+  it('rechaza garrison fuera de rango', () => {
+    const state = makeStateWithGarrison()
+    state.board['1,0'].garrisonToken = null
+    state.board['-2,0'] = {
+      coord: { q: -2, r: 0 }, terrain: 'normal', elevation: 0,
+      occupiedBy: null, upgradeToken: null, objectiveToken: null, deployZone: null,
+      garrisonToken: { id: 'gar_far', owner: 'player2', hp: 1 },
+    }
+    // rx78 tiene rango 3, garrison a distancia 2 en (-2,0) sería ok, pero usamos un arma con rango 1
+    state.units['rx78'].weapons[0].range = 1
+    // garrison en (1,0) fue limpiada, ponemos la garrison en (2,0) que está a distancia 2 > rango 1
+    state.board['2,0'].garrisonToken = { id: 'gar_far2', owner: 'player2', hp: 1 }
+    const result = applyAttackGarrison(state, 'rx78', 0, 'gar_far2', 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('rango')
+  })
+
+  it('acepta ataque a garrison enemiga en rango', () => {
+    const state = makeStateWithGarrison()
+    const result = applyAttackGarrison(state, 'rx78', 0, 'gar1', 'player1')
+    expect(result.success).toBe(true)
+  })
+})
+
+// ─── PLAY_CARD ────────────────────────────────────────────────────────────────
+describe('applyPlayCard', () => {
+  function makeStateWithCard(): GameState {
+    const state = makeGameState()
+    state.players['player1'].tactics.hand = [
+      {
+        id: 'card-aoe', name: 'Barrage Tático', type: 'command', faction: 'federation',
+        effect: 'Daño 2 a enemigos en rango 3',
+        effectData: { type: 'aoe_damage', range: 3, amount: 2 },
+      },
+      {
+        id: 'card-destroy', name: 'Sabotaje', type: 'command', faction: 'federation',
+        effect: 'Destruye upgrade y aplica slow',
+        effectData: { type: 'destroy_upgrade_and_slow', range: 3 },
+      },
+      {
+        id: 'card-rsp', name: 'Contraataque', type: 'response', faction: 'federation',
+        effect: 'Respuesta al ser atacado',
+        effectData: null,
+      },
+    ]
+    return state
+  }
+
+  it('rechaza si no es tu turno', () => {
+    const state = makeStateWithCard()
+    const result = applyPlayCard(state, 'rx78', 'card-aoe', 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('No es tu turno')
+  })
+
+  it('rechaza carta que no está en la mano', () => {
+    const state = makeStateWithCard()
+    const result = applyPlayCard(state, 'rx78', 'card-inexistente', 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('mano')
+  })
+
+  it('rechaza carta de respuesta durante tu turno', () => {
+    const state = makeStateWithCard()
+    const result = applyPlayCard(state, 'rx78', 'card-rsp', 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('comando')
+  })
+
+  it('rechaza carta sin effectData (no implementada)', () => {
+    const state = makeStateWithCard()
+    state.players['player1'].tactics.hand[0].effectData = null
+    const result = applyPlayCard(state, 'rx78', 'card-aoe', 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('no está implementada')
+  })
+
+  it('acepta carta aoe sin objetivo', () => {
+    const state = makeStateWithCard()
+    const result = applyPlayCard(state, 'rx78', 'card-aoe', 'player1')
+    expect(result.success).toBe(true)
+  })
+
+  it('rechaza carta que necesita objetivo sin targetId', () => {
+    const state = makeStateWithCard()
+    const result = applyPlayCard(state, 'rx78', 'card-destroy', 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('objetivo')
+  })
+
+  it('acepta carta que necesita objetivo con targetId', () => {
+    const state = makeStateWithCard()
+    const result = applyPlayCard(state, 'rx78', 'card-destroy', 'player1', 'zaku2')
+    expect(result.success).toBe(true)
+  })
+})
+
 // ─── VICTORY ──────────────────────────────────────────────────────────────────
 describe('checkGameOver', () => {
   it('no termina si ambos jugadores tienen unidades', () => {
@@ -394,128 +598,151 @@ describe('awardObjectiveVP', () => {
   })
 })
 
-// ─── VICTORY ──────────────────────────────────────────────────────────────────
-describe('checkGameOver', () => {
-  it('no termina si ambos jugadores tienen unidades', () => {
+// ─── RSP: PASS_RESPONSE ───────────────────────────────────────────────────────
+describe('applyPassResponse', () => {
+  it('limpia pendingResponse', () => {
     const state = makeGameState()
-    expect(checkGameOver(state).isOver).toBe(false)
+    state.pendingResponse = {
+      trigger: 'after_combat_damage',
+      forPlayerId: 'player1',
+      attackerUnitId: 'zaku2',
+      defenderUnitId: 'rx78',
+    }
+    const result = applyPassResponse(state, 'player1')
+    expect(result.success).toBe(true)
+    expect(result.newState!.pendingResponse).toBeNull()
   })
 
-  it('gana player1 si player2 no tiene unidades vivas', () => {
+  it('rechaza si no hay ventana de respuesta', () => {
     const state = makeGameState()
-    state.units['zaku2'].currentHp = 0
-    const result = checkGameOver(state)
-    expect(result.isOver).toBe(true)
-    expect(result.winner).toBe('player1')
+    const result = applyPassResponse(state, 'player1')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('ventana')
   })
 
-  it('gana player2 si player1 no tiene unidades vivas', () => {
+  it('rechaza si la ventana es para el otro jugador', () => {
     const state = makeGameState()
-    state.units['rx78'].currentHp = 0
-    const result = checkGameOver(state)
-    expect(result.isOver).toBe(true)
-    expect(result.winner).toBe('player2')
-  })
-
-  it('empate si ambos sin unidades', () => {
-    const state = makeGameState()
-    state.units['rx78'].currentHp  = 0
-    state.units['zaku2'].currentHp = 0
-    const result = checkGameOver(state)
-    expect(result.isOver).toBe(true)
-    expect(result.winner).toBeNull()
-  })
-
-  it('gana por VP al acabar fase 2', () => {
-    const state = makeGameState()
-    state.phase = 'phase2'
-    state.players.player1.vp = 6
-    state.players.player2.vp = 3
-    // Vaciar el timeline para simular fin de fase
-    state.timeline = createEmptyTimeline()
-    const result = checkGameOver(state)
-    expect(result.isOver).toBe(true)
-    expect(result.winner).toBe('player1')
-  })
-
-  it('empate por VP al acabar fase 2', () => {
-    const state = makeGameState()
-    state.phase = 'phase2'
-    state.players.player1.vp = 5
-    state.players.player2.vp = 5
-    state.timeline = createEmptyTimeline()
-    const result = checkGameOver(state)
-    expect(result.isOver).toBe(true)
-    expect(result.winner).toBeNull()
+    state.pendingResponse = {
+      trigger: 'after_combat_damage',
+      forPlayerId: 'player2',
+      attackerUnitId: 'rx78',
+      defenderUnitId: 'zaku2',
+    }
+    const result = applyPassResponse(state, 'player1')
+    expect(result.success).toBe(false)
   })
 })
 
-describe('resolveObjectiveControl', () => {
-  it('player1 controla objetivo si tiene más unidades adyacentes', () => {
+// ─── RSP: PLAY_RESPONSE ───────────────────────────────────────────────────────
+describe('applyPlayResponse', () => {
+  function makeStateWithRspWindow(): GameState {
     const state = makeGameState()
-
-    // Añadir objetivo en hex (1,0)
-    state.board['1,0'] = {
-      coord: { q: 1, r: 0 }, terrain: 'normal', elevation: 0,
-      occupiedBy: null,
-      upgradeToken: null, garrisonToken: null,
-      objectiveToken: { id: 'obj1', vpValue: 2, controlledBy: null }
+    state.pendingResponse = {
+      trigger: 'after_combat_damage',
+      forPlayerId: 'player2',
+      attackerUnitId: 'rx78',
+      defenderUnitId: 'zaku2',
     }
+    state.players['player2'].tactics.hand = [{
+      id: 'shield-rsp',
+      name: 'Earth Federation Shield',
+      type: 'response',
+      faction: 'Earth Federation',
+      effect: 'An allied unit is dealt -2 Damage',
+      effectData: { type: 'reduce_incoming_damage', amount: 2, trigger: 'after_combat_damage' },
+    }]
+    return state
+  }
 
-    // rx78 está en (0,0) — adyacente a (1,0)
-    // zaku2 está en (2,0) — también adyacente a (1,0)
-    // Empate → nadie controla
-
-    const { results } = resolveObjectiveControl(state)
-    expect(results[0].controlledBy).toBeNull()
+  it('acepta carta RSP con trigger correcto', () => {
+    const state = makeStateWithRspWindow()
+    const result = applyPlayResponse(state, 'shield-rsp', 'player2')
+    expect(result.success).toBe(true)
+    expect(result.newState!.pendingResponse).toBeNull()
   })
 
-  it('player1 controla si tiene más unidades', () => {
+  it('mueve la carta a descartadas y la quita de la mano', () => {
+    const state = makeStateWithRspWindow()
+    const result = applyPlayResponse(state, 'shield-rsp', 'player2')
+    expect(result.newState!.players['player2'].tactics.hand).toHaveLength(0)
+    expect(result.newState!.players['player2'].tactics.discarded).toHaveLength(1)
+  })
+
+  it('rechaza si no hay ventana de respuesta', () => {
     const state = makeGameState()
+    state.players['player2'].tactics.hand = [{
+      id: 'shield-rsp', name: 'Shield', type: 'response', faction: 'EF',
+      effect: '...', effectData: { type: 'reduce_incoming_damage', amount: 2, trigger: 'after_combat_damage' },
+    }]
+    const result = applyPlayResponse(state, 'shield-rsp', 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('ventana')
+  })
 
-    // Objetivo en (0,1)
-    state.board['0,1'] = {
-      coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
-      occupiedBy: null,
-      upgradeToken: null, garrisonToken: null,
-      objectiveToken: { id: 'obj2', vpValue: 3, controlledBy: null }
+  it('rechaza si la ventana es para el otro jugador', () => {
+    const state = makeStateWithRspWindow()
+    const result = applyPlayResponse(state, 'shield-rsp', 'player1')
+    expect(result.success).toBe(false)
+  })
+
+  it('rechaza carta que no está en la mano', () => {
+    const state = makeStateWithRspWindow()
+    const result = applyPlayResponse(state, 'carta-inexistente', 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('mano')
+  })
+
+  it('rechaza carta RSP con trigger distinto al de la ventana', () => {
+    const state = makeStateWithRspWindow()
+    state.players['player2'].tactics.hand[0].effectData = {
+      type: 'gain_upgrade_after_rescue', upgradeType: 'shield', trigger: 'after_rescue',
     }
+    const result = applyPlayResponse(state, 'shield-rsp', 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('trigger')
+  })
 
-    // rx78 en (0,0) → adyacente a (0,1) ✓
-    // zaku2 en (2,0) → NO adyacente a (0,1)
-    const { results } = resolveObjectiveControl(state)
-    expect(results[0].controlledBy).toBe('player1')
+  it('rechaza carta CMD en ventana de respuesta', () => {
+    const state = makeStateWithRspWindow()
+    state.players['player2'].tactics.hand[0].type = 'command' as const
+    const result = applyPlayResponse(state, 'shield-rsp', 'player2')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('RSP')
   })
 })
 
-describe('transitionToPhase2', () => {
-  it('cambia la fase a phase2', () => {
+// ─── RSP: apertura de ventana tras ATTACK ─────────────────────────────────────
+describe('pendingResponse tras applyAttack', () => {
+  it('abre ventana de respuesta si el defensor tiene carta after_combat_damage', () => {
     const state = makeGameState()
-    const newState = transitionToPhase2(state)
-    expect(newState.phase).toBe('phase2')
+    state.players['player2'].tactics.hand = [{
+      id: 'shield-rsp', name: 'Shield', type: 'response', faction: 'EF',
+      effect: '...', effectData: { type: 'reduce_incoming_damage', amount: 2, trigger: 'after_combat_damage' },
+    }]
+    const result = applyAttack(state, 'rx78', 0, 'zaku2', 'player1', [6, 7, 8])
+    expect(result.success).toBe(true)
+    expect(result.newState!.pendingResponse).not.toBeNull()
+    expect(result.newState!.pendingResponse!.trigger).toBe('after_combat_damage')
+    expect(result.newState!.pendingResponse!.forPlayerId).toBe('player2')
   })
 
-  it('resetea el timeline', () => {
+  it('NO abre ventana si el defensor no tiene cartas RSP', () => {
     const state = makeGameState()
-    const newState = transitionToPhase2(state)
-    // rx78 tiene startingTl=2, debe volver al round 2
-    expect(getUnitRound(newState.timeline, 'rx78')).toBe(2)
+    const result = applyAttack(state, 'rx78', 0, 'zaku2', 'player1', [6, 7, 8])
+    expect(result.success).toBe(true)
+    expect(result.newState!.pendingResponse).toBeNull()
   })
-})
 
-describe('awardObjectiveVP', () => {
-  it('otorga VP al jugador que controla el objetivo', () => {
+  it('NO abre ventana si el objetivo murió', () => {
     const state = makeGameState()
-
-    state.board['0,1'] = {
-      coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
-      occupiedBy: null, upgradeToken: null, garrisonToken: null,
-      objectiveToken: { id: 'obj1', vpValue: 3, controlledBy: 'player1' }
-    }
-
-    const { newState, vpAwarded } = awardObjectiveVP(state)
-    expect(vpAwarded.player1).toBe(3)
-    expect(vpAwarded.player2).toBe(0)
-    expect(newState.players.player1.vp).toBe(3)
+    state.units['zaku2'].currentHp = 1
+    state.players['player2'].tactics.hand = [{
+      id: 'shield-rsp', name: 'Shield', type: 'response', faction: 'EF',
+      effect: '...', effectData: { type: 'reduce_incoming_damage', amount: 2, trigger: 'after_combat_damage' },
+    }]
+    const result = applyAttack(state, 'rx78', 0, 'zaku2', 'player1', [6, 7, 8])
+    expect(result.success).toBe(true)
+    expect(result.newState!.units['zaku2'].position).toBeNull()  // murió
+    expect(result.newState!.pendingResponse).toBeNull()
   })
 })

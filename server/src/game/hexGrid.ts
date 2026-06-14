@@ -174,7 +174,8 @@ export function findPath(
   goal: HexCoord,
   board: BoardMap,
   obstacles: Set<string>,
-  maxDistance: number
+  maxDistance: number,
+  ignoreTerrainCosts = false
 ): HexCoord[] | null {
   const startKey = hexKey(start)
   const goalKey = hexKey(goal)
@@ -209,8 +210,8 @@ export function findPath(
 
       const hex = board[neighborKey]
       const currentHex = board[currentKey]
-      const elevationCost = Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
-      const waterCost = currentHex?.terrain === 'water' ? 1 : 0
+      const elevationCost = ignoreTerrainCosts ? 0 : Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
+      const waterCost = ignoreTerrainCosts ? 0 : (currentHex?.terrain === 'water' ? 1 : 0)
       const newCost = (costSoFar.get(currentKey) ?? 0) + 1 + elevationCost + waterCost
 
       if (newCost > maxDistance) continue
@@ -230,7 +231,8 @@ export function getReachableHexes(
   start: HexCoord,
   board: BoardMap,
   obstacles: Set<string>,
-  maxDistance: number
+  maxDistance: number,
+  ignoreTerrainCosts = false
 ): HexCoord[] {
   const reachable: HexCoord[] = []
   const visited = new Map<string, number>()  // key → menor coste encontrado
@@ -251,8 +253,8 @@ export function getReachableHexes(
 
       const hex = board[key]
       const currentHex = board[hexKey(coord)]
-      const elevCost = Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
-      const waterCost = currentHex?.terrain === 'water' ? 1 : 0
+      const elevCost = ignoreTerrainCosts ? 0 : Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
+      const waterCost = ignoreTerrainCosts ? 0 : (currentHex?.terrain === 'water' ? 1 : 0)
       const newCost = cost + 1 + elevCost + waterCost
 
       if (newCost > maxDistance) continue

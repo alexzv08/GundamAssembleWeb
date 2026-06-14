@@ -883,25 +883,25 @@
         "col": 5,
         "row": 8,
         "id": "obj_1",
-        "vpValue": 3
+        "vpValue": 5
       },
       {
         "col": 8,
         "row": 6,
         "id": "obj_2",
-        "vpValue": 3
+        "vpValue": 5
       },
       {
         "col": 6,
         "row": 1,
         "id": "obj_3",
-        "vpValue": 3
+        "vpValue": 5
       },
       {
         "col": 6,
         "row": 13,
         "id": "obj_4",
-        "vpValue": 3
+        "vpValue": 5
       }
     ],
     "garrisons": [

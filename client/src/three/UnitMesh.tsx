@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Mesh } from 'three'
+import type { ThreeEvent } from '@react-three/fiber'
 import type { Unit } from '../types'
 import { hexToWorld } from './hexUtils'
 import { useSTLModel } from './useSTLModel'
@@ -28,12 +29,12 @@ export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = f
   const { q, r } = unit.position
   const [x, y, z] = hexToWorld(q, r, elevation)
 
-  const baseColor = unit.playerId === 'player1' ? '#1565c0' : '#b71c1c'
+  const baseColor = unit.playerId === 'player1' ? '#c0393a' : '#3a6bc0'
   const color = isSelected ? '#f5c518' : hovered ? '#ffffff' : baseColor
 
   const handlers = {
-    onClick: (e: any) => { e.stopPropagation(); onClick?.() },
-    onPointerEnter: (e: any) => { e.stopPropagation(); setHovered(true) },
+    onClick: (e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onClick?.() },
+    onPointerEnter: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true) },
     onPointerLeave: () => setHovered(false),
   }
 

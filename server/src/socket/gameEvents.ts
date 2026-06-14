@@ -1,7 +1,10 @@
 import { Server, Socket } from 'socket.io'
 import { RoomManager } from '../rooms/roomManager'
 import { applyAction } from '../game/actions'
-import { checkGameOver } from '../game/victory'
+import { checkGameOver, transitionToPhase2, resolveObjectiveControl } from '../game/victory'
+import { getNextActivation } from '../game/timeline'
+import { reorderSlotTokens } from '../game/timeline'
+import { drawCards } from '../game/effects'
 
 export function registerGameEvents(io: Server, socket: Socket, roomManager: RoomManager) {
 
@@ -10,7 +13,6 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         const room = roomManager.createRoom(socket.id, playerName)
         socket.join(room.id)
         socket.emit('ROOM_CREATED', { roomId: room.id, playerId: 'player1' })
-        console.log(`Sala creada: ${room.id} por ${playerName}`)
     })
 
     // ── Unirse a sala ──────────────────────────────────────────────────────────
@@ -24,11 +26,66 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
 
         socket.join(room.id)
 
-        // Enviar a cada jugador su propio playerId
+        // Iniciar selección de escuadra en vez de arrancar la partida directamente
         for (const player of room.players) {
-            io.to(player.socketId).emit('GAME_STARTED', {
-                gameState: room.gameState,
+            io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', {
                 playerId: player.playerId,
+                faction: player.playerId === 'player1' ? 'Earth Federation' : 'Zeon',
+                roomId: room.id,
+            })
+        }
+    })
+
+    // ── Selección de escuadra ──────────────────────────────────────────────────
+    socket.on('SELECT_SQUAD', ({ unitCardIds, cardIds }: { unitCardIds: string[]; cardIds: string[] }) => {
+        const result = roomManager.submitSquad(socket.id, unitCardIds, cardIds ?? [])
+        if (!result) {
+            socket.emit('ACTION_ERROR', { message: 'Error al seleccionar escuadra' })
+            return
+        }
+
+        if (result.ready) {
+            const room = result.room
+            for (const player of room.players) {
+                io.to(player.socketId).emit('GAME_STARTED', {
+                    gameState: room.gameState,
+                    playerId: player.playerId,
+                })
+            }
+        }
+    })
+
+    // ── Reordenar slot de timeline (fase setup) ────────────────────────────────
+    socket.on('REORDER_SLOT', ({ slotRound, unitIds }: { slotRound: number; unitIds: string[] }) => {
+        const room = roomManager.getRoomBySocket(socket.id)
+        const playerId = roomManager.getPlayerIdBySocket(socket.id)
+        if (!room || !room.gameState || !playerId) return
+        if (room.gameState.phase !== 'setup') return
+
+        room.gameState = {
+            ...room.gameState,
+            timeline: reorderSlotTokens(room.gameState.timeline, slotRound, playerId, unitIds),
+        }
+
+        io.to(room.id).emit('GAME_STATE_UPDATE', {
+            gameState: room.gameState,
+            action: null,
+            actionType: 'REORDER_SLOT',
+            diceRolls: null,
+        })
+    })
+
+    // ── Confirmar setup ────────────────────────────────────────────────────────
+    socket.on('CONFIRM_SETUP', () => {
+        const result = roomManager.confirmSetup(socket.id)
+        if (!result) return
+
+        if (result.bothConfirmed) {
+            io.to(result.room.id).emit('GAME_STATE_UPDATE', {
+                gameState: result.room.gameState,
+                action: null,
+                actionType: 'CONFIRM_SETUP',
+                diceRolls: null,
             })
         }
     })
@@ -43,14 +100,20 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        if (room.gameState.activePlayerId !== playerId) {
+        if (room.gameState.phase === 'setup') {
+            socket.emit('ACTION_ERROR', { message: 'La partida aún está en fase de setup' })
+            return
+        }
+
+        const isResponseAction = action.type === 'PLAY_RESPONSE' || action.type === 'PASS_RESPONSE'
+        if (!isResponseAction && room.gameState.activePlayerId !== playerId) {
             socket.emit('ACTION_ERROR', { message: 'No es tu turno' })
             return
         }
 
-        // El servidor genera los dados para ataques (anti-cheat)
+        // Servidor genera dados (d10) para ataques — anti-cheat
         let rolls = diceRolls
-        if (action.type === 'ATTACK') {
+        if (action.type === 'ATTACK' || action.type === 'ATTACK_GARRISON') {
             const unit = room.gameState.units[action.unitId]
             const weapon = unit?.weapons[action.weaponIndex ?? 0]
             if (weapon) {
@@ -61,9 +124,6 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             }
         }
 
-
-        console.log('ACTION:', JSON.stringify(action))
-        console.log('PLAYER:', playerId)
         const result = applyAction(room.gameState, action, playerId, rolls)
 
         if (!result.success) {
@@ -71,9 +131,27 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        room.gameState = result.newState!
+        let gameState = result.newState!
 
-        // Comprobar fin de partida
+        // ── Transición de fase 1 → fase 2 ──────────────────────────────────────
+        if (gameState.phase === 'phase1' && !getNextActivation(gameState.timeline)) {
+            gameState = transitionToPhase2(gameState)
+            // Robar 3 cartas para cada jugador al inicio de fase 2
+            gameState = drawCards(gameState, 'player1', 3)
+            gameState = drawCards(gameState, 'player2', 3)
+
+            io.to(room.id).emit('PHASE_TRANSITION', {
+                gameState,
+                message: 'Inicio de Fase 2 — cada jugador roba 3 cartas',
+            })
+            room.gameState = gameState
+            return
+        }
+
+        gameState = resolveObjectiveControl(gameState).newState
+        room.gameState = gameState
+
+        // ── Comprobar fin de partida ────────────────────────────────────────────
         const gameOver = checkGameOver(room.gameState)
         if (gameOver.isOver) {
             room.gameState.phase = 'finished'
@@ -88,12 +166,42 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        // Emitir nuevo estado a ambos jugadores
         io.to(room.id).emit('GAME_STATE_UPDATE', {
             gameState: room.gameState,
             action,
             actionType: action.type,
             diceRolls: rolls,
         })
+    })
+
+    // ── Reconexión ────────────────────────────────────────────────────────────
+    socket.on('RECONNECT', ({ roomId, playerId }: { roomId: string; playerId: 'player1' | 'player2' }) => {
+        const room = roomManager.reconnect(roomId, playerId, socket.id)
+
+        if (!room) {
+            socket.emit('RECONNECT_FAILED', { message: 'La sala ya no existe o el tiempo de reconexión venció' })
+            return
+        }
+
+        socket.join(room.id)
+
+        const faction = playerId === 'player1' ? 'Earth Federation' : 'Zeon'
+        const squadSubmitted = room.squadSelections[playerId] !== null
+
+        socket.emit('RECONNECT_SUCCESS', {
+            playerId,
+            roomId,
+            roomStatus: room.status,
+            gameState: room.gameState ?? undefined,
+            faction,
+            squadSubmitted,
+        })
+
+        const opponent = room.players.find(p => p.playerId !== playerId)
+        if (opponent?.socketId) {
+            io.to(opponent.socketId).emit('OPPONENT_RECONNECTED', {
+                message: 'El oponente ha vuelto a conectarse'
+            })
+        }
     })
 }

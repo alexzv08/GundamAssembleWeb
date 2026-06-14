@@ -1,7 +1,8 @@
 import type { BoardMap } from '../types/board'
-import type { Unit } from '../types/units'
 import type { MapData, UnitCardData } from '../api/gameData'
 import { offsetToAxial, hexKey } from './hexGrid'
+
+interface ScenarioToken { col: number; row: number; id: string; vpValue?: number; owner?: string; hp?: number; type?: string; value?: number }
 
 // ─── CARGAR MAPA ──────────────────────────────────────────────────────────────
 export function loadMapFromJSON(mapData: MapData): BoardMap {
@@ -27,25 +28,24 @@ export function loadMapFromJSON(mapData: MapData): BoardMap {
     }
 
     // Colocar tokens del escenario si existe
-    if ((mapData as any).scenario) {
-        const s = (mapData as any).scenario
-
-        s.objectives?.forEach((obj: any) => {
+    const scenario = (mapData as MapData & { scenario?: { objectives?: ScenarioToken[]; garrisons?: ScenarioToken[]; upgrades?: ScenarioToken[] } }).scenario
+    if (scenario) {
+        scenario.objectives?.forEach((obj) => {
             const coord = offsetToAxial(obj.col, obj.row)
             const key = hexKey(coord)
-            if (board[key]) board[key].objectiveToken = { id: obj.id, vpValue: obj.vpValue, controlledBy: null }
+            if (board[key]) board[key].objectiveToken = { id: obj.id, vpValue: obj.vpValue ?? 0, controlledBy: null }
         })
 
-        s.garrisons?.forEach((gar: any) => {
+        scenario.garrisons?.forEach((gar) => {
             const coord = offsetToAxial(gar.col, gar.row)
             const key = hexKey(coord)
-            if (board[key]) board[key].garrisonToken = { id: gar.id, owner: gar.owner, hp: gar.hp }
+            if (board[key]) board[key].garrisonToken = { id: gar.id, owner: gar.owner ?? 'neutral', hp: gar.hp ?? 0 }
         })
 
-        s.upgrades?.forEach((upg: any) => {
+        scenario.upgrades?.forEach((upg) => {
             const coord = offsetToAxial(upg.col, upg.row)
             const key = hexKey(coord)
-            if (board[key]) board[key].upgradeToken = { type: upg.type, value: upg.value, revealed: false }
+            if (board[key]) board[key].upgradeToken = { type: upg.type ?? 'attack', value: upg.value ?? 1, revealed: false }
         })
     }
 

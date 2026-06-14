@@ -17,10 +17,12 @@ interface Scenario {
     deployZones: { player1: ScenarioZone[]; player2: ScenarioZone[] }
 }
 interface MapJSON { cols: number; rows: number; grid: MapCell[][]; scenario?: Scenario }
-interface WeaponJSON { name: string; cost: string; range: string; str: string; effect: string; crit: string }
-interface AbilityJSON { name: string; type: string; tags: string; effect: string }
+interface WeaponJSON { name: string; cost: string; range: string; str: string; effect: string; crit: string; effectData?: any; critData?: any }
+interface AbilityJSON { name: string; type: string; tags: string; effect: string; abilityData?: any }
 interface UnitJSON { unitName: string; pilot: string; faction: string; cardId: string; hp: string; vp: string; tl: string; weapons: WeaponJSON[]; abilities: AbilityJSON[] }
 interface UnitsJSON { cards: UnitJSON[] }
+interface CardJSON { cardId: string; name: string; type: string; faction: string; effect: string; effectData?: any }
+interface CardsJSON { cards: CardJSON[] }
 
 function loadJSON<T>(filePath: string): T {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T
@@ -71,10 +73,27 @@ function findNearestValidHex(
     return coord
 }
 
-export function createServerGame(player1Name: string, player2Name: string): GameState {
+function shuffleArray<T>(arr: T[]): T[] {
+    const a = [...arr]
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
+}
+
+export function createServerGame(
+    player1Name: string,
+    player2Name: string,
+    p1UnitCardIds?: string[],
+    p2UnitCardIds?: string[],
+    p1CardIds?: string[],
+    p2CardIds?: string[]
+): GameState {
     const dataDir = path.join(__dirname, '../../data')
     const mapData = loadJSON<MapJSON>(path.join(dataDir, 'maps/DemoMap.json'))
     const unitData = loadJSON<UnitsJSON>(path.join(dataDir, 'units/unit_library.json'))
+    const cardData = loadJSON<CardsJSON>(path.join(dataDir, 'cards/card_library.json'))
 
     // ─── CONSTRUIR TABLERO ────────────────────────────────────────────────────
     const board: BoardMap = {}
@@ -159,8 +178,15 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         if (board[key]) board[key].deployZone = 'player2'
     })
 
-    const fedCards = unitData.cards.filter(c => c.faction === 'Earth Federation').slice(0, 3)
-    const zeonCards = unitData.cards.filter(c => c.faction === 'Zeon').slice(0, 3)
+    const allFedCards = unitData.cards.filter(c => c.faction === 'Earth Federation')
+    const allZeonCards = unitData.cards.filter(c => c.faction === 'Zeon')
+
+    const fedCards = p1UnitCardIds
+        ? p1UnitCardIds.map(id => unitData.cards.find(c => c.cardId === id)).filter((c): c is UnitJSON => c !== undefined)
+        : allFedCards.slice(0, 3)
+    const zeonCards = p2UnitCardIds
+        ? p2UnitCardIds.map(id => unitData.cards.find(c => c.cardId === id)).filter((c): c is UnitJSON => c !== undefined)
+        : allZeonCards.slice(0, 3)
 
     const createUnit = (card: UnitJSON, playerId: 'player1' | 'player2') => ({
         id: `${card.cardId}_${playerId}`,
@@ -178,14 +204,17 @@ export function createServerGame(player1Name: string, player2Name: string): Game
             range: parseInt(w.range),
             strength: parseInt(w.str),
             tlCost: parseInt(w.cost),
+            effect: w.effect || undefined,
             critEffect: w.crit || undefined,
-            specialRule: w.effect || undefined,
+            effectData: w.effectData ?? null,
+            critData: w.critData ?? null,
         })),
         abilities: card.abilities.map(a => ({
             name: a.name,
             type: normalizeAbilityType(a.type),
             description: a.effect,
             energyCost: a.tags.includes('Energy') ? 1 : undefined,
+            abilityData: a.abilityData ?? null,
         })),
         statusEffects: [],
         upgrades: [],
@@ -222,12 +251,41 @@ export function createServerGame(player1Name: string, player2Name: string): Game
         board[p2DeployKey].occupiedBy = firstP2Unit.id
     }
 
+    // ─── CARTAS ───────────────────────────────────────────────────────────────
+    const toTacticsCard = (c: CardJSON) => ({
+        id: c.cardId,
+        name: c.name,
+        type: c.type as 'command' | 'response',
+        faction: c.faction,
+        effect: c.effect,
+        effectData: c.effectData ?? null,
+    })
+
+    const allTactics = cardData.cards.map(toTacticsCard)
+
+    const p1Deck = shuffleArray(
+        p1CardIds && p1CardIds.length > 0
+            ? allTactics.filter(c => p1CardIds.includes(c.id))
+            : allTactics.filter(c => c.faction === 'Earth Federation')
+    )
+    const p2Deck = shuffleArray(
+        p2CardIds && p2CardIds.length > 0
+            ? allTactics.filter(c => p2CardIds.includes(c.id))
+            : allTactics.filter(c => c.faction === 'Zeon')
+    )
+
+    // Robar 3 cartas al inicio de fase 1
+    const p1Hand = p1Deck.splice(0, 3)
+    const p2Hand = p2Deck.splice(0, 3)
+
     // ─── GAME STATE ───────────────────────────────────────────────────────────
     return {
         gameId: Math.random().toString(36).substring(2, 10),
-        phase: 'phase1',
+        phase: 'setup',
+        hasUsedPrimaryAction: false,
         activePlayerId: firstToken?.playerId ?? 'player1',
         activeUnitId: firstToken?.unitId ?? p1Units[0].id,
+        lastActivePlayer: null,
         roundNumber: 1,
         board,
         units: Object.fromEntries(allUnits.map(u => [u.id, u])),
@@ -236,17 +294,18 @@ export function createServerGame(player1Name: string, player2Name: string): Game
             player1: {
                 id: 'player1', name: player1Name, vp: 0,
                 deployHex: p1Deploy,
-                tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
+                tactics: { deck: p1Deck, hand: p1Hand, discarded: [], usedResponseThisTurn: false },
                 squadUnitIds: p1Units.map(u => u.id),
             },
             player2: {
                 id: 'player2', name: player2Name, vp: 0,
                 deployHex: p2Deploy,
-                tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
+                tactics: { deck: p2Deck, hand: p2Hand, discarded: [], usedResponseThisTurn: false },
                 squadUnitIds: p2Units.map(u => u.id),
             },
         },
         actionLog: [],
         winner: null,
+        pendingResponse: null,
     }
 }

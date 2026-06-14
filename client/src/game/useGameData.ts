@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { BoardMap } from '../types/board'
 import type { Unit } from '../types/units'
-import { fetchMap, fetchUnits } from '../api/gameData'
-import type { UnitCardData } from '../api/gameData'
+import { fetchMap, fetchUnits, fetchCards } from '../api/gameData'
+import type { UnitCardData, TacticsCardData } from '../api/gameData'
 import { loadMapFromJSON, loadUnitFromJSON } from './loaders'
 import { offsetToAxial } from './hexGrid'
 
@@ -10,6 +10,8 @@ export interface GameData {
     board: BoardMap
     federationCards: UnitCardData[]
     zeonCards: UnitCardData[]
+    allUnitCards: UnitCardData[]
+    allTacticsCards: TacticsCardData[]
     loaded: boolean
     error: string | null
 }
@@ -19,17 +21,27 @@ export function useGameData(): GameData {
         board: {},
         federationCards: [],
         zeonCards: [],
+        allUnitCards: [],
+        allTacticsCards: [],
         loaded: false,
         error: null,
     })
 
     useEffect(() => {
-        Promise.all([fetchMap('DemoMap'), fetchUnits()])
-            .then(([mapData, unitsData]) => {
+        Promise.all([fetchMap('DemoMap'), fetchUnits(), fetchCards()])
+            .then(([mapData, unitsData, cardsData]) => {
                 const board = loadMapFromJSON(mapData)
                 const fed = unitsData.cards.filter(c => c.faction === 'Earth Federation')
                 const zeon = unitsData.cards.filter(c => c.faction === 'Zeon')
-                setData({ board, federationCards: fed, zeonCards: zeon, loaded: true, error: null })
+                setData({
+                    board,
+                    federationCards: fed,
+                    zeonCards: zeon,
+                    allUnitCards: unitsData.cards,
+                    allTacticsCards: cardsData.cards,
+                    loaded: true,
+                    error: null,
+                })
             })
             .catch(err => {
                 setData(prev => ({ ...prev, loaded: true, error: err.message }))

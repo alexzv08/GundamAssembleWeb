@@ -1,6 +1,12 @@
 import { GameState, GameAction, PlayerId } from '../types'
 import { hexKey, findPath, checkLineOfSight, gridDistance, getNeighbors } from './hexGrid'
-import { advanceToken, getNextActivation } from './timeline'
+import { advanceToken, getNextActivation, reorderSlotForTie } from './timeline'
+import {
+    getOngoingModifiers, getDashBonus, applyWeaponEffect, isNearObjective,
+    triggerAfterDash, triggerAfterRescue, applyBurstAbility, applyCardEffect,
+    applyResponseCardEffect, AttackContext
+} from './effects'
+import { PendingResponse } from '../types/tactics'
 
 export interface ActionResult {
     success: boolean
@@ -21,24 +27,15 @@ function validateTurn(state: GameState, unitId: string, playerId: PlayerId): str
 function getMovementObstacles(state: GameState, movingUnitId: string): Set<string> {
     const movingUnit = state.units[movingUnitId]
     const obstacles = new Set<string>()
-
     for (const unit of Object.values(state.units)) {
-        if (unit.id === movingUnitId) continue
-        if (unit.currentHp <= 0) continue
-        if (!unit.position) continue
-        // Enemigos bloquean paso y destino
-        if (unit.playerId !== movingUnit.playerId) {
-            obstacles.add(hexKey(unit.position))
-        }
+        if (unit.id === movingUnitId || unit.currentHp <= 0 || !unit.position) continue
+        if (unit.playerId !== movingUnit.playerId) obstacles.add(hexKey(unit.position))
     }
-
-    // Garrisons enemigas bloquean
     for (const hex of Object.values(state.board)) {
         if (hex.garrisonToken && hex.garrisonToken.owner !== movingUnit.playerId) {
             obstacles.add(hexKey(hex.coord))
         }
     }
-
     return obstacles
 }
 
@@ -46,24 +43,18 @@ function getAlliedPositions(state: GameState, movingUnitId: string): Set<string>
     const movingUnit = state.units[movingUnitId]
     const allied = new Set<string>()
     for (const unit of Object.values(state.units)) {
-        if (unit.id === movingUnitId) continue
-        if (unit.currentHp <= 0) continue
-        if (!unit.position) continue
-        if (unit.playerId === movingUnit.playerId) {
-            allied.add(hexKey(unit.position))
-        }
+        if (unit.id === movingUnitId || unit.currentHp <= 0 || !unit.position) continue
+        if (unit.playerId === movingUnit.playerId) allied.add(hexKey(unit.position))
     }
     return allied
 }
-function getEnemyPositions(state: GameState, playerId: PlayerId): Set<string> {
-    const positions = new Set<string>()
+
+function getEnemyUnitIds(state: GameState, playerId: PlayerId): Set<string> {
+    const ids = new Set<string>()
     for (const unit of Object.values(state.units)) {
-        if (unit.playerId === playerId) continue
-        if (unit.currentHp <= 0) continue
-        if (!unit.position) continue
-        positions.add(unit.id)
+        if (unit.playerId !== playerId && unit.currentHp > 0 && unit.position) ids.add(unit.id)
     }
-    return positions
+    return ids
 }
 
 function cloneState(state: GameState): GameState {
@@ -71,12 +62,35 @@ function cloneState(state: GameState): GameState {
 }
 
 function advanceToNextActivation(state: GameState): GameState {
-    const next = getNextActivation(state.timeline)
-    if (!next) return { ...state, activeUnitId: null, activePlayerId: state.activePlayerId }
-    return { ...state, activeUnitId: next.unitId, activePlayerId: next.playerId }
+    const lastPlayer = state.activePlayerId
+
+    // Reordenar el slot activo para aplicar desempate por iniciativa (intercalado)
+    const nextSlot = state.timeline.slots.find(s => s.tokens.length > 0)
+    const newTimeline = nextSlot
+        ? reorderSlotForTie(state.timeline, nextSlot.round, lastPlayer)
+        : state.timeline
+
+    const next = getNextActivation(newTimeline)
+    if (!next) return {
+        ...state,
+        timeline: newTimeline,
+        activeUnitId: null,
+        activePlayerId: state.activePlayerId,
+        lastActivePlayer: lastPlayer,
+        hasUsedPrimaryAction: false,
+    }
+    return {
+        ...state,
+        timeline: newTimeline,
+        activeUnitId: next.unitId,
+        activePlayerId: next.playerId,
+        lastActivePlayer: lastPlayer,
+        hasUsedPrimaryAction: false,
+    }
 }
 
 // ─── SPAWN ────────────────────────────────────────────────────────────────────
+
 function spawnUnitIfNeeded(state: GameState, unitId: string): GameState {
     const unit = state.units[unitId]
     if (unit.position !== null) return state
@@ -105,7 +119,8 @@ function spawnUnitIfNeeded(state: GameState, unitId: string): GameState {
     return state
 }
 
-// ─── ADVANCE ─────────────────────────────────────────────────────────────────
+// ─── ADVANCE ──────────────────────────────────────────────────────────────────
+
 export function applyAdvance(
     state: GameState,
     unitId: string,
@@ -126,11 +141,11 @@ export function applyAdvance(
 
     const obstacles = getMovementObstacles(state, unitId)
     const allied = getAlliedPositions(state, unitId)
-
     if (allied.has(destKey)) return { success: false, error: 'Ese hex está ocupado por una unidad aliada' }
 
     const maxMove = 3 + (unit.upgrades.find(u => u.type === 'movement')?.value ?? 0)
-    const path = findPath(unit.position, to, state.board, obstacles, maxMove)
+    const hasHover = unit.traits.includes('Hover')
+    const path = findPath(unit.position, to, state.board, obstacles, maxMove, hasHover)
     if (!path) return { success: false, error: 'Movimiento no válido o fuera de rango' }
 
     const newState = cloneState(state)
@@ -138,7 +153,6 @@ export function applyAdvance(
 
     const oldKey = hexKey(unit.position)
     if (newState.board[oldKey]) newState.board[oldKey].occupiedBy = null
-
     newUnit.position = to
     if (newState.board[destKey]) newState.board[destKey].occupiedBy = unitId
 
@@ -148,20 +162,44 @@ export function applyAdvance(
         if (destHex.upgradeToken.type === 'energy') {
             newUnit.energy += destHex.upgradeToken.value
         } else {
-            newUnit.upgrades.push({
-                type: destHex.upgradeToken.type as 'attack' | 'movement' | 'shield',
-                value: destHex.upgradeToken.value,
-            })
+            newUnit.upgrades.push({ type: destHex.upgradeToken.type as 'attack' | 'movement' | 'shield', value: destHex.upgradeToken.value })
         }
     }
 
     newUnit.statusEffects = newUnit.statusEffects.filter(e => e.type !== 'slow')
     newState.actionLog.push({ type: 'ADVANCE', unitId, to })
 
+    // Ventana de respuesta: T16 (Iron Grip) — si el oponente tiene carta after_enemy_advance
+    const advOpponent: PlayerId = playerId === 'player1' ? 'player2' : 'player1'
+    const advOppHand = newState.players[advOpponent].tactics.hand
+    const hasAdvanceTrigger = advOppHand.some(c =>
+        c.type === 'response' && c.effectData?.trigger === 'after_enemy_advance'
+    )
+    if (hasAdvanceTrigger) {
+        const neighbors = getNeighbors(to)
+        const adjacentToOpponent = neighbors.some(n => {
+            const occupant = newState.board[hexKey(n)]?.occupiedBy
+            return occupant && newState.units[occupant]?.playerId === advOpponent && newState.units[occupant].currentHp > 0
+        })
+        if (adjacentToOpponent) {
+            newState.pendingResponse = {
+                trigger: 'after_enemy_advance',
+                forPlayerId: advOpponent,
+                movedUnitId: unitId,
+            }
+        }
+    }
+
     return { success: true, newState }
 }
 
-// ─── ATTACK ──────────────────────────────────────────────────────────────────
+// ─── ATTACK ───────────────────────────────────────────────────────────────────
+
+function markPrimaryUsed(state: GameState): GameState | null {
+    if (state.hasUsedPrimaryAction) return null
+    return { ...state, hasUsedPrimaryAction: true }
+}
+
 export function applyAttack(
     state: GameState,
     unitId: string,
@@ -172,6 +210,10 @@ export function applyAttack(
 ): ActionResult {
     const error = validateTurn(state, unitId, playerId)
     if (error) return { success: false, error }
+
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+    state = primaryState
 
     const attacker = state.units[unitId]
     const target = state.units[targetId]
@@ -192,12 +234,16 @@ export function applyAttack(
     const dist = gridDistance(attacker.position, target.position)
     if (dist > weapon.range) return { success: false, error: 'Objetivo fuera de rango' }
 
-    if (dist > 1) {
-        const enemyPositions = getEnemyPositions(state, playerId)
-        const los = checkLineOfSight(attacker.position, target.position, state.board, playerId, enemyPositions)
-        console.log('LOS result:', los)
+    // LoS (ignorable por ignore_los)
+    const ignoresLoS = weapon.effectData?.type === 'ignore_los'
+    if (dist > 1 && !ignoresLoS) {
+        const enemyIds = getEnemyUnitIds(state, playerId)
+        const los = checkLineOfSight(attacker.position, target.position, state.board, playerId, enemyIds)
         if (!los.clear) return { success: false, error: `Sin línea de visión: ${los.reason}` }
     }
+
+    // Modificadores de habilidades ONGOING
+    const mods = getOngoingModifiers(state, unitId, targetId)
 
     const hasDisarm = attacker.statusEffects.some(e => e.type === 'disarm')
     const attackerHex = state.board[hexKey(attacker.position)]
@@ -210,14 +256,31 @@ export function applyAttack(
     if (targetHex?.terrain === 'water') accuracyMod += 1
     if (attackerHex?.terrain === 'water') accuracyMod += 1
 
-    const hitThreshold = Math.max(2, Math.min(9, 4 + accuracyMod))
+    const hitThreshold = Math.max(2, Math.min(10, 4 + accuracyMod - mods.accuracyBonus))
+    const critThreshold = mods.critThreshold  // default 8, Federation Courage lo baja a 7
+
+    const totalStrength = weapon.strength + mods.strengthBonus
+
+    // Reroll de fallos (Newtype Instincts)
+    let effectiveDice = diceRolls.slice(0, totalStrength)
+    if (mods.rerollMisses > 0) {
+        let left = mods.rerollMisses
+        effectiveDice = effectiveDice.map(roll => {
+            if (left > 0 && roll !== 1 && roll < hitThreshold) {
+                left--
+                return Math.floor(Math.random() * 10) + 1
+            }
+            return roll
+        })
+    }
 
     let hits = 0
-    let critEffectTriggered = false
-    for (const roll of diceRolls) {
+    let critCount = 0
+    for (const roll of effectiveDice) {
         if (roll === 1) continue
-        if (roll >= 9) {
-            if (!hasDisarm) { hits++; critEffectTriggered = true }
+        if (roll >= critThreshold) {
+            hits++
+            if (!hasDisarm) critCount++
         } else if (roll >= hitThreshold) {
             hits++
         }
@@ -226,8 +289,18 @@ export function applyAttack(
     const shieldUpgrade = target.upgrades.find(u => u.type === 'shield')?.value ?? 0
     let damage = Math.max(0, hits - shieldUpgrade)
 
+    // Bonus daño de crit (bonus_damage en critData)
+    if (critCount > 0 && weapon.critData?.type === 'bonus_damage') {
+        damage += weapon.critData.amount ?? 0
+    }
+
+    // Bonus daño cerca de objetivo
+    if (weapon.effectData?.type === 'bonus_damage_near_objective' && isNearObjective(state, target.position)) {
+        damage += weapon.effectData.amount ?? 0
+    }
+
     const hasFracture = target.statusEffects.some(e => e.type === 'fracture')
-    if (hasFracture && damage > 3) damage += 3
+    if (hasFracture && damage >= 3) damage += 3
 
     const newState = cloneState(state)
     const newTarget = newState.units[targetId]
@@ -239,25 +312,64 @@ export function applyAttack(
     if (hasDisarm) newAttacker.statusEffects = newAttacker.statusEffects.filter(e => e.type !== 'disarm')
     if (hasFracture) newTarget.statusEffects = newTarget.statusEffects.filter(e => e.type !== 'fracture')
 
-    newState.timeline = advanceToken(newState.timeline, unitId, weapon.tlCost)
+    const ctx: AttackContext = { attackerId: unitId, targetId, hits, critCount, damage }
 
-    if (newTarget.currentHp <= 0) {
-        newState.players[playerId].vp += newTarget.vp
-        if (newTarget.position) {
-            const key = hexKey(newTarget.position)
-            if (newState.board[key]) newState.board[key].occupiedBy = null
-            newTarget.position = null
-        }
-        newState.timeline = advanceToken(newState.timeline, targetId, 2)
-        newTarget.currentHp = newTarget.maxHp
+    // Efectos after_attack_roll
+    let resultState = newState
+    if (hits > 0 && weapon.effectData?.trigger === 'after_attack_roll') {
+        resultState = applyWeaponEffect(weapon.effectData, resultState, ctx)
+    }
+    if (critCount > 0 && weapon.critData?.trigger === 'after_attack_roll' && weapon.critData.type !== 'bonus_damage') {
+        resultState = applyWeaponEffect(weapon.critData, resultState, ctx)
     }
 
-    newState.actionLog.push({ type: 'ATTACK', unitId, weaponIndex, targetId })
+    resultState.timeline = advanceToken(resultState.timeline, unitId, weapon.tlCost)
 
-    return { success: true, newState }
+    const finalTarget = resultState.units[targetId]
+    if (finalTarget.currentHp <= 0) {
+        resultState.players[playerId].vp += finalTarget.vp
+        if (finalTarget.position) {
+            const key = hexKey(finalTarget.position)
+            if (resultState.board[key]) resultState.board[key].occupiedBy = null
+            finalTarget.position = null
+        }
+        resultState.timeline = advanceToken(resultState.timeline, targetId, 2)
+        finalTarget.currentHp = finalTarget.maxHp
+    } else {
+        // Efectos after_combat_damage (solo si hubo daño y el objetivo sobrevivió)
+        if (damage > 0 && weapon.effectData?.trigger === 'after_combat_damage') {
+            resultState = applyWeaponEffect(weapon.effectData, resultState, ctx)
+        }
+        if (critCount > 0 && damage > 0 && weapon.critData?.trigger === 'after_combat_damage') {
+            resultState = applyWeaponEffect(weapon.critData, resultState, ctx)
+        }
+    }
+
+    resultState.actionLog.push({ type: 'ATTACK', unitId, weaponIndex, targetId })
+
+    // Ventana de respuesta post-ataque solo si el defensor sobrevivió (position !== null)
+    const atkTargetSurvived = resultState.units[targetId]?.position !== null
+    const atkDefenderPlayerId = resultState.units[targetId]?.playerId
+    if (atkTargetSurvived && atkDefenderPlayerId && atkDefenderPlayerId !== playerId) {
+        const defenderHand = resultState.players[atkDefenderPlayerId].tactics.hand
+        const hasResponseCard = defenderHand.some(c =>
+            c.type === 'response' && c.effectData?.trigger === 'after_combat_damage'
+        )
+        if (hasResponseCard) {
+            resultState.pendingResponse = {
+                trigger: 'after_combat_damage',
+                forPlayerId: atkDefenderPlayerId,
+                attackerUnitId: unitId,
+                defenderUnitId: targetId,
+            }
+        }
+    }
+
+    return { success: true, newState: resultState }
 }
 
-// ─── DASH ────────────────────────────────────────────────────────────────────
+// ─── DASH ─────────────────────────────────────────────────────────────────────
+
 export function applyDash(
     state: GameState,
     unitId: string,
@@ -267,57 +379,58 @@ export function applyDash(
     const error = validateTurn(state, unitId, playerId)
     if (error) return { success: false, error }
 
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+    state = primaryState
+
     const unit = state.units[unitId]
     if (!unit.position) return { success: false, error: 'La unidad no está en el tablero' }
 
     const destKey = hexKey(to)
     const obstacles = getMovementObstacles(state, unitId)
     const allied = getAlliedPositions(state, unitId)
-
     if (allied.has(destKey)) return { success: false, error: 'Ese hex está ocupado por una unidad aliada' }
 
-    const path = findPath(unit.position, to, state.board, obstacles, 2)
+    const hasHover = unit.traits.includes('Hover')
+    const dashRange = 2 + getDashBonus(state, unitId)
+    const path = findPath(unit.position, to, state.board, obstacles, dashRange, hasHover)
     if (!path) return { success: false, error: 'Dash no válido o fuera de rango' }
 
     const newState = cloneState(state)
     const newUnit = newState.units[unitId]
 
-    if (newState.board[hexKey(unit.position)]) {
-        newState.board[hexKey(unit.position)].occupiedBy = null
-    }
-
+    if (newState.board[hexKey(unit.position)]) newState.board[hexKey(unit.position)].occupiedBy = null
     newUnit.position = to
-    if (newState.board[destKey]) {
-        newState.board[destKey].occupiedBy = unitId
-    }
+    if (newState.board[destKey]) newState.board[destKey].occupiedBy = unitId
 
-    // Recoger upgrade token al hacer Dash
     const destHex = newState.board[destKey]
     if (destHex?.upgradeToken && !destHex.upgradeToken.revealed) {
         destHex.upgradeToken.revealed = true
         if (destHex.upgradeToken.type === 'energy') {
             newUnit.energy += destHex.upgradeToken.value
         } else {
-            newUnit.upgrades.push({
-                type: destHex.upgradeToken.type as 'attack' | 'movement' | 'shield',
-                value: destHex.upgradeToken.value,
-            })
+            newUnit.upgrades.push({ type: destHex.upgradeToken.type as 'attack' | 'movement' | 'shield', value: destHex.upgradeToken.value })
         }
     }
 
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'DASH', unitId, to })
 
-    return { success: true, newState }
+    // Trigger response: Char Kick
+    const resultState = triggerAfterDash(newState, unitId)
+
+    return { success: true, newState: resultState }
 }
-// ─── ENERGIZE ────────────────────────────────────────────────────────────────
-export function applyEnergize(
-    state: GameState,
-    unitId: string,
-    playerId: PlayerId
-): ActionResult {
+
+// ─── ENERGIZE ─────────────────────────────────────────────────────────────────
+
+export function applyEnergize(state: GameState, unitId: string, playerId: PlayerId): ActionResult {
     const error = validateTurn(state, unitId, playerId)
     if (error) return { success: false, error }
+
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+    state = primaryState
 
     const newState = cloneState(state)
     newState.units[unitId].energy += 1
@@ -327,35 +440,25 @@ export function applyEnergize(
     return { success: true, newState }
 }
 
-// ─── RESCUE ──────────────────────────────────────────────────────────────────
-export function applyRescue(
-    state: GameState,
-    unitId: string,
-    garrisonId: string,
-    playerId: PlayerId
-): ActionResult {
+// ─── RESCUE ───────────────────────────────────────────────────────────────────
+
+export function applyRescue(state: GameState, unitId: string, garrisonId: string, playerId: PlayerId): ActionResult {
     const error = validateTurn(state, unitId, playerId)
     if (error) return { success: false, error }
+
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+    state = primaryState
 
     const unit = state.units[unitId]
     if (!unit.position) return { success: false, error: 'La unidad no está en el tablero' }
 
-    const garrisonHexEntry = Object.entries(state.board).find(
-        ([_, hex]) => hex.garrisonToken?.id === garrisonId
-    )
-    if (!garrisonHexEntry) return { success: false, error: 'Garrison no encontrada' }
+    const garrisonEntry = Object.entries(state.board).find(([_, hex]) => hex.garrisonToken?.id === garrisonId)
+    if (!garrisonEntry) return { success: false, error: 'Garrison no encontrada' }
 
-    const [garrisonKey, garrisonHex] = garrisonHexEntry
-    const garrison = garrisonHex.garrisonToken!
-
-    if (garrison.owner !== playerId) {
-        return { success: false, error: 'Solo puedes rescatar garrisons aliadas' }
-    }
-
-    const dist = gridDistance(unit.position, garrisonHex.coord)
-    if (dist > 1) {
-        return { success: false, error: 'La garrison no está adyacente' }
-    }
+    const [garrisonKey, garrisonHex] = garrisonEntry
+    if (garrisonHex.garrisonToken!.owner !== playerId) return { success: false, error: 'Solo puedes rescatar garrisons aliadas' }
+    if (gridDistance(unit.position, garrisonHex.coord) > 1) return { success: false, error: 'La garrison no está adyacente' }
 
     const newState = cloneState(state)
     newState.board[garrisonKey].garrisonToken = null
@@ -363,17 +466,159 @@ export function applyRescue(
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'RESCUE', unitId, garrisonId })
 
-    return { success: true, newState }
+    // Trigger response: Rescue the Mechanics
+    const rescueResult = triggerAfterRescue(newState, unitId)
+
+    // Ventana de respuesta post-rescue para el jugador activo (T06, T15)
+    const rescueHand = rescueResult.players[playerId].tactics.hand
+    const hasRescueTrigger = rescueHand.some(c =>
+        c.type === 'response' && c.effectData?.trigger === 'after_rescue'
+    )
+    if (hasRescueTrigger) {
+        rescueResult.pendingResponse = {
+            trigger: 'after_rescue',
+            forPlayerId: playerId,
+            rescuerUnitId: unitId,
+        }
+    }
+
+    return { success: true, newState: rescueResult }
 }
 
-// ─── END ACTIVATION ──────────────────────────────────────────────────────────
-export function applyEndActivation(
+// ─── ATTACK_GARRISON ──────────────────────────────────────────────────────────
+
+export function applyAttackGarrison(
     state: GameState,
     unitId: string,
-    playerId: PlayerId
+    weaponIndex: number,
+    garrisonId: string,
+    playerId: PlayerId,
+    diceRolls: number[]
 ): ActionResult {
     const error = validateTurn(state, unitId, playerId)
     if (error) return { success: false, error }
+
+    const attacker = state.units[unitId]
+    if (!attacker.position) return { success: false, error: 'El atacante no está en el tablero' }
+
+    const weapon = attacker.weapons[weaponIndex]
+    if (!weapon) return { success: false, error: 'Arma no encontrada' }
+    if (weapon.energyCost && attacker.energy < weapon.energyCost) return { success: false, error: 'No hay suficiente energía' }
+
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+    state = primaryState
+
+    const garrisonEntry = Object.entries(state.board).find(([, hex]) => hex.garrisonToken?.id === garrisonId)
+    if (!garrisonEntry) return { success: false, error: 'Garrison no encontrada' }
+
+    const [garrisonKey, garrisonHex] = garrisonEntry
+    if (garrisonHex.garrisonToken!.owner === playerId) return { success: false, error: 'No puedes atacar tus propias garrisons' }
+
+    const dist = gridDistance(attacker.position, garrisonHex.coord)
+    if (dist > weapon.range) return { success: false, error: 'Garrison fuera de rango' }
+
+    if (dist > 1) {
+        const enemyIds = getEnemyUnitIds(state, playerId)
+        const los = checkLineOfSight(attacker.position, garrisonHex.coord, state.board, playerId, enemyIds)
+        if (!los.clear) return { success: false, error: `Sin línea de visión: ${los.reason}` }
+    }
+
+    const mods = getOngoingModifiers(state, unitId, unitId)
+    const attackerHex = state.board[hexKey(attacker.position)]
+    const elevDiff = (attackerHex?.elevation ?? 0) - (garrisonHex.elevation ?? 0)
+    let accuracyMod = 0
+    if (elevDiff > 0) accuracyMod -= 1
+    if (elevDiff < 0) accuracyMod += 1
+    const hitThreshold = Math.max(2, Math.min(10, 4 + accuracyMod - mods.accuracyBonus))
+
+    const totalStrength = weapon.strength + mods.strengthBonus
+    const effectiveDice = diceRolls.slice(0, totalStrength)
+    let hits = 0
+    for (const roll of effectiveDice) {
+        if (roll !== 1 && roll >= hitThreshold) hits++
+    }
+
+    const newState = cloneState(state)
+    const newAttacker = newState.units[unitId]
+
+    if (weapon.energyCost) newAttacker.energy -= weapon.energyCost
+    newState.timeline = advanceToken(newState.timeline, unitId, weapon.tlCost)
+
+    if (hits > 0) {
+        newState.board[garrisonKey].garrisonToken = null
+        newState.players[playerId].vp += 2
+        newState.actionLog.push({ type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId })
+    } else {
+        newState.actionLog.push({ type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId })
+    }
+
+    return { success: true, newState }
+}
+
+// ─── USE_ABILITY ──────────────────────────────────────────────────────────────
+
+export function applyUseAbility(
+    state: GameState,
+    unitId: string,
+    abilityIndex: number,
+    playerId: PlayerId,
+    targetId?: string
+): ActionResult {
+    const error = validateTurn(state, unitId, playerId)
+    if (error) return { success: false, error }
+
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+
+    const result = applyBurstAbility(primaryState, unitId, abilityIndex, playerId, targetId)
+    return result
+}
+
+// ─── PLAY_CARD ────────────────────────────────────────────────────────────────
+
+export function applyPlayCard(
+    state: GameState,
+    unitId: string,
+    cardId: string,
+    playerId: PlayerId,
+    targetId?: string
+): ActionResult {
+    const error = validateTurn(state, unitId, playerId)
+    if (error) return { success: false, error }
+
+    const playerState = state.players[playerId]
+    const cardIndex = playerState.tactics.hand.findIndex(c => c.id === cardId)
+    if (cardIndex === -1) return { success: false, error: 'Carta no está en tu mano' }
+
+    const card = playerState.tactics.hand[cardIndex]
+    if (card.type !== 'command') return { success: false, error: 'Solo puedes jugar cartas de comando durante tu turno' }
+    if (!card.effectData) return { success: false, error: `"${card.name}" no está implementada aún` }
+
+    const primaryState = markPrimaryUsed(state)
+    if (!primaryState) return { success: false, error: 'Ya usaste tu acción primaria este turno' }
+
+    const result = applyCardEffect(primaryState, playerId, unitId, card.effectData, targetId)
+    if (!result.success) return { success: false, error: result.error }
+
+    const newState = cloneState(result.newState!)
+    // Mover carta de mano a descartadas
+    newState.players[playerId].tactics.hand.splice(cardIndex, 1)
+    newState.players[playerId].tactics.discarded.push(card)
+    newState.actionLog.push({ type: 'PLAY_CARD', unitId, cardId })
+
+    return { success: true, newState }
+}
+
+// ─── END ACTIVATION ───────────────────────────────────────────────────────────
+
+export function applyEndActivation(state: GameState, unitId: string, playerId: PlayerId): ActionResult {
+    const error = validateTurn(state, unitId, playerId)
+    if (error) return { success: false, error }
+
+    if (!state.hasUsedPrimaryAction) {
+        return { success: false, error: 'Debes realizar una acción primaria (Atacar, Dash, Energize o Rescue) antes de terminar' }
+    }
 
     const newState = cloneState(state)
     newState.timeline = advanceToken(newState.timeline, unitId, 1)
@@ -383,14 +628,60 @@ export function applyEndActivation(
     return { success: true, newState: updated }
 }
 
-// ─── DISPATCHER ──────────────────────────────────────────────────────────────
+// ─── PLAY_RESPONSE ────────────────────────────────────────────────────────────
+
+export function applyPlayResponse(
+    state: GameState,
+    cardId: string,
+    playerId: PlayerId,
+    targetId?: string
+): ActionResult {
+    if (!state.pendingResponse || state.pendingResponse.forPlayerId !== playerId) {
+        return { success: false, error: 'No hay ventana de respuesta disponible para ti' }
+    }
+
+    const playerState = state.players[playerId]
+    const cardIndex = playerState.tactics.hand.findIndex(c => c.id === cardId)
+    if (cardIndex === -1) return { success: false, error: 'Carta no está en tu mano' }
+
+    const card = playerState.tactics.hand[cardIndex]
+    if (card.type !== 'response') return { success: false, error: 'Solo puedes usar cartas RSP en la ventana de respuesta' }
+    if (!card.effectData?.trigger) return { success: false, error: `"${card.name}" no está implementada aún` }
+    if (card.effectData.trigger !== state.pendingResponse.trigger) {
+        return { success: false, error: 'Esta carta no corresponde al trigger actual' }
+    }
+
+    const result = applyResponseCardEffect(state, playerId, card.effectData, state.pendingResponse, targetId)
+    if (!result.success) return { success: false, error: result.error }
+
+    const newState = cloneState(result.newState!)
+    newState.players[playerId].tactics.hand.splice(cardIndex, 1)
+    newState.players[playerId].tactics.discarded.push(card)
+    newState.pendingResponse = null
+    newState.actionLog.push({ type: 'PLAY_RESPONSE', cardId })
+
+    return { success: true, newState }
+}
+
+// ─── PASS_RESPONSE ────────────────────────────────────────────────────────────
+
+export function applyPassResponse(state: GameState, playerId: PlayerId): ActionResult {
+    if (!state.pendingResponse || state.pendingResponse.forPlayerId !== playerId) {
+        return { success: false, error: 'No hay ventana de respuesta para ti' }
+    }
+    const newState = cloneState(state)
+    newState.pendingResponse = null
+    return { success: true, newState }
+}
+
+// ─── DISPATCHER ───────────────────────────────────────────────────────────────
+
 export function applyAction(
     state: GameState,
     action: GameAction,
     playerId: PlayerId,
     diceRolls?: number[]
 ): ActionResult {
-    // Spawn de la unidad activa si no tiene posición
     if (state.activeUnitId) {
         const activeUnit = state.units[state.activeUnitId]
         if (activeUnit && activeUnit.position === null && activeUnit.playerId === playerId) {
@@ -412,25 +703,29 @@ export function applyAction(
             result = applyEnergize(state, action.unitId, playerId); break
         case 'RESCUE':
             result = applyRescue(state, action.unitId, action.garrisonId, playerId); break
+        case 'ATTACK_GARRISON':
+            if (!diceRolls) return { success: false, error: 'Faltan los dados para el ataque' }
+            result = applyAttackGarrison(state, action.unitId, action.weaponIndex, action.garrisonId, playerId, diceRolls); break
+        case 'USE_ABILITY':
+            result = applyUseAbility(state, action.unitId, action.abilityIndex, playerId, action.targetId); break
+        case 'PLAY_CARD':
+            result = applyPlayCard(state, action.unitId, action.cardId, playerId, action.targetId); break
         case 'END_ACTIVATION':
             result = applyEndActivation(state, action.unitId, playerId); break
+        case 'PLAY_RESPONSE':
+            result = applyPlayResponse(state, action.cardId, playerId, action.targetId); break
+        case 'PASS_RESPONSE':
+            result = applyPassResponse(state, playerId); break
         default:
             return { success: false, error: 'Acción desconocida' }
     }
 
-    // Spawn de la siguiente unidad activa si no tiene posición
-    // Spawn de la siguiente unidad activa si no tiene posición
     if (result.success && result.newState?.activeUnitId) {
         const nextUnit = result.newState.units[result.newState.activeUnitId]
-        console.log('NEXT UNIT:', result.newState.activeUnitId, 'position:', nextUnit?.position)
         if (nextUnit && nextUnit.position === null) {
-            console.log('SPAWNING next unit...')
             result.newState = spawnUnitIfNeeded(result.newState, result.newState.activeUnitId)
-            console.log('After spawn:', result.newState.units[result.newState.activeUnitId!]?.position)
         }
     }
-
-    return result
 
     return result
 }

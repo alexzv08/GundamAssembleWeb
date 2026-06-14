@@ -1,7 +1,6 @@
 import type { GameState, PlayerId } from '../types'
 import { hexKey } from './hexGrid'
-import type { getCurrentRound, getNextActivation } from './timeline'
-import { resetForPhase2 } from './timeline'
+import { getNextActivation, resetForPhase2 } from './timeline'
 
 // ─── RESULTADO DE FIN DE PARTIDA ─────────────────────────────────────────────
 export interface GameOverResult {

@@ -128,7 +128,8 @@ export function resolveInitiativeTie(
 }
 
 // ─── REORDENAR SLOT POR DESEMPATE ─────────────────────────────────────────────
-// Reorganiza los tokens de un slot para que el jugador correcto esté arriba
+// Intercala tokens de ambos jugadores: first[0], second[0], first[1], second[1]...
+// El jugador que NO actuó último va primero.
 export function reorderSlotForTie(
     timeline: Timeline,
     round: number,
@@ -140,15 +141,23 @@ export function reorderSlotForTie(
         const hasP1 = slot.tokens.some(t => t.playerId === 'player1')
         const hasP2 = slot.tokens.some(t => t.playerId === 'player2')
 
-        if (!hasP1 || !hasP2) return slot  // no hay empate, no reordenar
+        if (!hasP1 || !hasP2) return slot  // solo un jugador, no reordenar
 
         const firstPlayer = resolveInitiativeTie(slot, lastActivePlayer)
+        const secondPlayer: PlayerId = firstPlayer === 'player1' ? 'player2' : 'player1'
 
-        // Poner los tokens del firstPlayer primero, manteniendo orden interno
         const first = slot.tokens.filter(t => t.playerId === firstPlayer)
-        const second = slot.tokens.filter(t => t.playerId !== firstPlayer)
+        const second = slot.tokens.filter(t => t.playerId === secondPlayer)
 
-        return { ...slot, tokens: [...first, ...second] }
+        // Intercalar: first[0], second[0], first[1], second[1], ...
+        const interleaved: TimelineToken[] = []
+        const maxLen = Math.max(first.length, second.length)
+        for (let i = 0; i < maxLen; i++) {
+            if (i < first.length) interleaved.push(first[i])
+            if (i < second.length) interleaved.push(second[i])
+        }
+
+        return { ...slot, tokens: interleaved }
     })
 
     return { ...timeline, slots }
@@ -173,6 +182,29 @@ export function resetForPhase2(
     }
 
     return newTimeline
+}
+
+// ─── REORDENAR TOKENS PROPIOS EN UN SLOT (fase de setup) ─────────────────────
+// El jugador elige el orden de activación de sus propias unidades dentro de un slot
+export function reorderSlotTokens(
+    timeline: Timeline,
+    slotRound: number,
+    playerId: PlayerId,
+    unitIds: string[]
+): Timeline {
+    return {
+        ...timeline,
+        slots: timeline.slots.map(slot => {
+            if (slot.round !== slotRound) return slot
+            const myTokens = slot.tokens.filter(t => t.playerId === playerId)
+            const orderedMine = unitIds
+                .map(uid => myTokens.find(t => t.unitId === uid))
+                .filter((t): t is TimelineToken => t !== undefined)
+            if (orderedMine.length !== myTokens.length) return slot // orden inválido
+            let ptr = 0
+            return { ...slot, tokens: slot.tokens.map(t => t.playerId !== playerId ? t : orderedMine[ptr++]) }
+        })
+    }
 }
 
 // ─── HELPERS DE CONSULTA ──────────────────────────────────────────────────────

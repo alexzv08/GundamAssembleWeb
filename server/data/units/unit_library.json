@@ -19,7 +19,9 @@
           "str": "02",
           "effect": "[After Attack Roll] Destroy 1 [Shield] Upgrade on the target.",
           "crit": "[After Combat Damage] Gain a [Strength] Upgrade.",
-          "dots": 1
+          "dots": 1,
+          "effectData": { "trigger": "after_attack_roll", "type": "destroy_upgrade", "target": "target", "amount": 1, "upgradeType": "shield" },
+          "critData": { "trigger": "after_combat_damage", "type": "gain_upgrade", "target": "self", "upgradeType": "attack" }
         },
         {
           "name": "Beam Rifle",
@@ -28,7 +30,9 @@
           "str": "05",
           "effect": "",
           "crit": "[Crit] +2 [Damage].",
-          "dots": 4
+          "dots": 4,
+          "effectData": null,
+          "critData": { "trigger": "after_attack_roll", "type": "bonus_damage", "amount": 2 }
         }
       ],
       "abilities": [
@@ -36,19 +40,18 @@
           "name": "White Base Unity",
           "type": "burst",
           "tags": "Energy, Command",
-          "effect": "If another allied unit within [Range 3] has 1 or fewer Upgrades, it gains an Upgrade of your choice."
+          "effect": "If another allied unit within [Range 3] has 1 or fewer Upgrades, it gains an Upgrade of your choice.",
+          "abilityData": null
         },
         {
           "name": "Newtype Instincts",
           "type": "ongoing",
           "tags": "Ongoing",
-          "effect": "[After Attack Roll] if this unit is attacking, it rerolls one miss."
+          "effect": "[After Attack Roll] if this unit is attacking, it rerolls one miss.",
+          "abilityData": { "type": "reroll_one_miss" }
         }
       ],
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805974873,
@@ -67,7 +70,9 @@
           "str": "02",
           "effect": "",
           "crit": "Slow the target.",
-          "dots": 3
+          "dots": 3,
+          "effectData": null,
+          "critData": { "trigger": "after_attack_roll", "type": "slow", "target": "target" }
         },
         {
           "name": "Shoulder Cannons",
@@ -76,7 +81,9 @@
           "str": "04",
           "effect": "",
           "crit": "[After Combat Damage] Dash at [TL 0]. Then, Rescue an adjacent allied Garrison at [TL 0].",
-          "dots": 3
+          "dots": 3,
+          "effectData": null,
+          "critData": null
         }
       ],
       "abilities": [
@@ -84,19 +91,18 @@
           "name": "Critical Shot",
           "type": "burst",
           "tags": "Energy, Command",
-          "effect": "Fracture an enemy unit within [Range 3]."
+          "effect": "Fracture an enemy unit within [Range 3].",
+          "abilityData": { "type": "fracture_enemy", "range": 3 }
         },
         {
           "name": "Federation Courage",
           "type": "ongoing",
           "tags": "Ongoing",
-          "effect": "While this unit has 2 or more Upgrades, its attacks count 7's and 8's as [Crit]."
+          "effect": "While this unit has 2 or more Upgrades, its attacks count 7's and 8's as [Crit].",
+          "abilityData": { "type": "extended_crit_threshold", "threshold": 7, "requiredUpgrades": 2 }
         }
       ],
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805974874,
@@ -115,7 +121,9 @@
           "str": "02",
           "effect": "This attack deals +1 [Damage] when targeting enemies on or adjacent to an objective.",
           "crit": "[After Combat Damage] Fracture the target.",
-          "dots": 3
+          "dots": 3,
+          "effectData": { "trigger": "always", "type": "bonus_damage_near_objective", "amount": 1 },
+          "critData": { "trigger": "after_combat_damage", "type": "fracture", "target": "target" }
         },
         {
           "name": "Low-Recoil Cannons",
@@ -124,7 +132,9 @@
           "str": "04",
           "effect": "This attack ignores Line of Sight.",
           "crit": "Slow the target",
-          "dots": 4
+          "dots": 4,
+          "effectData": { "trigger": "always", "type": "ignore_los" },
+          "critData": { "trigger": "after_attack_roll", "type": "slow", "target": "target" }
         }
       ],
       "abilities": [
@@ -132,19 +142,18 @@
           "name": "Saturated Fire",
           "type": "burst",
           "tags": "Energy, Command",
-          "effect": "Roll 5 dice. For each [Crit], deal 1 [Damage] to each enemy unit within [Range 4]"
+          "effect": "Roll 5 dice. For each [Crit], deal 1 [Damage] to each enemy unit within [Range 4]",
+          "abilityData": { "type": "saturated_fire", "dice": 5, "range": 4 }
         },
         {
           "name": "Targeted Shot",
           "type": "ongoing",
           "tags": "Ongoing",
-          "effect": "While this unit has 2 or more Upgrades, its attacks gain +1 [Accuracy]."
+          "effect": "While this unit has 2 or more Upgrades, its attacks gain +1 [Accuracy].",
+          "abilityData": { "type": "accuracy_bonus", "amount": 1, "requiredUpgrades": 2 }
         }
       ],
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805974875,
@@ -163,7 +172,9 @@
           "str": "03",
           "effect": "",
           "crit": "[After Combat Damage] Fracture the target.",
-          "dots": 1
+          "dots": 1,
+          "effectData": null,
+          "critData": { "trigger": "after_combat_damage", "type": "fracture", "target": "target" }
         },
         {
           "name": "Machine Gun",
@@ -172,7 +183,9 @@
           "str": "05",
           "effect": "",
           "crit": "[After Combat Damage] Dash at [TL 0].",
-          "dots": 2
+          "dots": 2,
+          "effectData": null,
+          "critData": null
         }
       ],
       "abilities": [
@@ -180,25 +193,25 @@
           "name": "Burst Attack",
           "type": "burst",
           "tags": "Energy, Command",
-          "effect": "Make a Heat Hawk attack at [TL 0]."
+          "effect": "Make a Heat Hawk attack at [TL 0].",
+          "abilityData": null
         },
         {
           "name": "Three Times Faster",
           "type": "ongoing",
           "tags": "Ongoing",
-          "effect": "When this unit Dashes: It moves up to 1 additional hex."
+          "effect": "When this unit Dashes: It moves up to 1 additional hex.",
+          "abilityData": { "type": "dash_range_bonus", "amount": 1 }
         },
         {
           "name": "Char Kick",
           "type": "response",
           "tags": "Response",
-          "effect": "After this unit Dashes: Deal 1 [Damage] to an adjacent enemy."
+          "effect": "After this unit Dashes: Deal 1 [Damage] to an adjacent enemy.",
+          "abilityData": { "type": "damage_after_dash", "amount": 1 }
         }
       ],
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805974876,
@@ -217,7 +230,9 @@
           "str": "02",
           "effect": "[After Combat Damage] Deal 2 [Damage] to each enemy adjacent to the target.",
           "crit": "+1 [Damage]",
-          "dots": 3
+          "dots": 3,
+          "effectData": { "trigger": "after_combat_damage", "type": "splash_damage", "target": "adjacent_enemies", "amount": 2 },
+          "critData": { "trigger": "after_attack_roll", "type": "bonus_damage", "amount": 1 }
         },
         {
           "name": "Bazooka",
@@ -226,7 +241,9 @@
           "str": "04",
           "effect": "",
           "crit": "+1 [Damage] for each Garrison you've Rescued.",
-          "dots": 3
+          "dots": 3,
+          "effectData": null,
+          "critData": null
         }
       ],
       "abilities": [
@@ -234,19 +251,18 @@
           "name": "Zeon Zealotry",
           "type": "burst",
           "tags": "Energy, Command",
-          "effect": "Move 5 towards a damaged enemy unit, ignoring terrain penalties."
+          "effect": "Move 5 towards a damaged enemy unit, ignoring terrain penalties.",
+          "abilityData": null
         },
         {
           "name": "Rescue the Mechanics",
           "type": "response",
           "tags": "Response",
-          "effect": "After this unit Rescues a Garrison: Another allied unit gains 2 hit points. (cannot gain more hit points than max hit points)"
+          "effect": "After this unit Rescues a Garrison: Another allied unit gains 2 hit points. (cannot gain more hit points than max hit points)",
+          "abilityData": { "type": "heal_ally_after_rescue", "amount": 2 }
         }
       ],
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     },
     {
       "uid": 1771805974877,
@@ -265,7 +281,9 @@
           "str": "03",
           "effect": "",
           "crit": "Push 2 the target",
-          "dots": 1
+          "dots": 1,
+          "effectData": null,
+          "critData": { "trigger": "after_combat_damage", "type": "push", "target": "target", "amount": 2 }
         },
         {
           "name": "Heat Hawk",
@@ -274,7 +292,9 @@
           "str": "05",
           "effect": "[After Attack Roll] Destroy 1 Upgrade on the target.",
           "crit": "Slow the target.",
-          "dots": 1
+          "dots": 1,
+          "effectData": { "trigger": "after_attack_roll", "type": "destroy_upgrade", "target": "target", "amount": 1, "upgradeType": "any" },
+          "critData": { "trigger": "after_attack_roll", "type": "slow", "target": "target" }
         }
       ],
       "abilities": [
@@ -282,19 +302,18 @@
           "name": "Domination",
           "type": "burst",
           "tags": "Energy, Command",
-          "effect": "Capture an objective this unit is on or adjacent to."
+          "effect": "Capture an objective this unit is on or adjacent to.",
+          "abilityData": { "type": "capture_objective", "range": 1 }
         },
         {
           "name": "Suppressing Presence",
           "type": "ongoing",
           "tags": "Ongoing",
-          "effect": "This unit gains +1 [Strength] when attacking damaged enemy units."
+          "effect": "This unit gains +1 [Strength] when attacking damaged enemy units.",
+          "abilityData": { "type": "strength_vs_damaged", "amount": 1 }
         }
       ],
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100
+      "art": null, "artX": 0, "artY": 0, "artZoom": 100
     }
   ]
 }

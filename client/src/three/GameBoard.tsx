@@ -1,6 +1,6 @@
 import type { BoardMap } from '../types/board'
 import { HexTile } from './HexTile'
-import { hexKey } from '../game/hexGrid'
+
 
 interface GameBoardProps {
     board: BoardMap
