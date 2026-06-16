@@ -1,6 +1,6 @@
 import { GameState, PlayerId } from '../types'
-import { hexKey } from './hexGrid'
-import { getCurrentRound, getNextActivation } from './timeline'
+import { hexKey, getNeighbors } from './hexGrid'
+import { getNextActivation } from './timeline'
 import { resetForPhase2 } from './timeline'
 
 // ─── RESULTADO DE FIN DE PARTIDA ─────────────────────────────────────────────
@@ -83,7 +83,7 @@ export function resolveObjectiveControl(state: GameState): {
         const obj = hex.objectiveToken
 
         // Contar unidades aliadas y enemigas en el hex y adyacentes
-        const relevantKeys = [key, ...getAdjacentKeys(hex.coord)]
+        const relevantKeys = [key, ...getNeighbors(hex.coord).map(n => hexKey(n))]
 
         let p1Count = 0
         let p2Count = 0
@@ -144,15 +144,6 @@ export function awardObjectiveVP(state: GameState): {
     }
 
     return { newState, vpAwarded: { player1: p1VP, player2: p2VP } }
-}
-
-// Helper: keys de los 6 hexes adyacentes
-function getAdjacentKeys(coord: { q: number; r: number }): string[] {
-    const dirs = [
-        { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
-        { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 },
-    ]
-    return dirs.map(d => hexKey({ q: coord.q + d.q, r: coord.r + d.r }))
 }
 
 // ─── TRANSICIÓN DE FASE ───────────────────────────────────────────────────────

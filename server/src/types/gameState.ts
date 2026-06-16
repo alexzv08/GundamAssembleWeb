@@ -7,6 +7,16 @@ import type { HexCoord } from './units'
 export type PlayerId = 'player1' | 'player2'
 export type GamePhase = 'setup' | 'phase1' | 'phase2' | 'finished'
 
+export type LogCategory = 'move' | 'attack' | 'ability' | 'card' | 'objective' | 'end'
+
+export interface LogEntry {
+  message: string
+  playerId: PlayerId
+  round: number | null
+  category: LogCategory
+  hexes: string[]
+}
+
 export interface GameState {
   gameId: string
   phase: GamePhase
@@ -23,6 +33,7 @@ export interface GameState {
     player2: PlayerState
   }
   actionLog: GameAction[]
+  log: LogEntry[]
   winner: PlayerId | null
   pendingResponse: PendingResponse | null
 }

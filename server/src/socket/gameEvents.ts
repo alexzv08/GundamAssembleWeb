@@ -36,6 +36,32 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         }
     })
 
+    // ── Emparejamiento aleatorio ───────────────────────────────────────────────
+    socket.on('FIND_MATCH', ({ playerName }: { playerName: string }) => {
+        const result = roomManager.joinQueue(socket.id, playerName)
+
+        if (result.matched) {
+            const room = result.room
+            const p1Socket = io.sockets.sockets.get(result.p1SocketId)
+            if (p1Socket) p1Socket.join(room.id)
+            socket.join(room.id)
+
+            for (const player of room.players) {
+                io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', {
+                    playerId: player.playerId,
+                    roomId: room.id,
+                })
+            }
+        } else {
+            socket.emit('MATCH_SEARCHING')
+        }
+    })
+
+    socket.on('CANCEL_MATCH', () => {
+        roomManager.leaveQueue(socket.id)
+        socket.emit('MATCH_CANCELLED')
+    })
+
     // ── Selección de escuadra ──────────────────────────────────────────────────
     socket.on('SELECT_SQUAD', ({ unitCardIds, cardIds }: { unitCardIds: string[]; cardIds: string[] }) => {
         const result = roomManager.submitSquad(socket.id, unitCardIds, cardIds ?? [])

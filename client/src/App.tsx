@@ -3,12 +3,27 @@ import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
 import { hexKey, getReachableHexes, gridDistance, checkLineOfSight } from './game/hexGrid'
+import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
 import { UnitPanel } from './components/ui/UnitPanel'
 import { TimelineBar } from './components/ui/TimelineBar'
 import { TacticsHand } from './components/ui/TacticsHand'
+import { useToasts, ToastContainer } from './components/ui/Toast'
+import { ActionLog } from './components/ui/ActionLog'
+
+const HAND_STRIP_H = 140
 
 const socket: Socket = io('http://localhost:3001')
+
+function inferHasMoved(actionLog: GameState['actionLog'], activeUnitId: string | null): boolean {
+  if (!activeUnitId) return false
+  for (let i = actionLog.length - 1; i >= 0; i--) {
+    const a = actionLog[i]
+    if (a.type === 'END_ACTIVATION') break
+    if (a.type === 'ADVANCE' && a.unitId === activeUnitId) return true
+  }
+  return false
+}
 
 type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'playing_card'
 type AppScreen = 'lobby' | 'waiting' | 'squad_selection' | 'setup' | 'playing'
@@ -37,15 +52,19 @@ export default function App() {
   const [pendingAbilityIndex, setPendingAbilityIndex] = useState<number | null>(null)
   const [pendingCardId, setPendingCardId] = useState<string | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
+  const [logHoveredHexes, setLogHoveredHexes] = useState<Set<string>>(new Set())
   const [squadFaction, setSquadFaction] = useState<string>('Earth Federation')
   const [selectedSquad, setSelectedSquad] = useState<string[]>([])
   const [selectedDeck, setSelectedDeck] = useState<string[]>([])
   const [squadStep, setSquadStep] = useState<'units' | 'deck'>('units')
   const [squadSubmitted, setSquadSubmitted] = useState(false)
   const [setupConfirmed, setSetupConfirmed] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [lobbyMode, setLobbyMode] = useState<'main' | 'private'>('main')
 
   const gameStateRef = useRef<GameState | null>(null)
   const lastActionRef = useRef<'moving' | 'dashing' | null>(null)
+  const { toasts, addToast } = useToasts()
 
   useEffect(() => { gameStateRef.current = gameState }, [gameState])
 
@@ -55,8 +74,6 @@ export default function App() {
     setReachableHexes(new Set())
     setAttackableHexes(new Set())
     setDiceResult(null)
-    setHasMoved(false)
-    setHasUsedPrimary(false)
     setSelectedWeaponIndex(null)
     setPendingAbilityIndex(null)
     setPendingCardId(null)
@@ -90,6 +107,14 @@ export default function App() {
       setLobbyError(message)
     })
 
+    socket.on('MATCH_SEARCHING', () => {
+      setIsSearching(true)
+    })
+
+    socket.on('MATCH_CANCELLED', () => {
+      setIsSearching(false)
+    })
+
     socket.on('SQUAD_SELECTION_STARTED', ({ playerId, faction, roomId: rId }: { playerId: 'player1' | 'player2'; faction: string; roomId: string }) => {
       setMyPlayerId(playerId)
       setRoomId(rId)
@@ -98,6 +123,8 @@ export default function App() {
       setSelectedDeck([])
       setSquadStep('units')
       setSquadSubmitted(false)
+      setIsSearching(false)
+      setLobbyMode('main')
       sessionStorage.setItem('reconnectData', JSON.stringify({ roomId: rId, playerId }))
       setScreen('squad_selection')
     })
@@ -116,66 +143,111 @@ export default function App() {
     }) => {
       const prevState = gameStateRef.current
 
-      if (prevState && newState.activeUnitId) {
-        const prevUnit = prevState.units[newState.activeUnitId]
-        const newUnit = newState.units[newState.activeUnitId]
+      if (prevState) {
+        // Turno nuevo
+        if (prevState.activeUnitId !== newState.activeUnitId && newState.activeUnitId) {
+          const unit = newState.units[newState.activeUnitId]
+          const player = newState.players[newState.activePlayerId]
+          const color = newState.activePlayerId === 'player1' ? '#4fc3f7' : '#ef9a9a'
+          addToast(`Turno: ${unit?.name ?? '?'} — ${player?.name}`, color)
+          setHasMoved(false)
+          setHasUsedPrimary(false)
+        }
 
-        if (prevUnit && newUnit) {
-          // Detectar upgrade o energía recogida
-          if (newUnit.upgrades.length > prevUnit.upgrades.length) {
-            const gained = newUnit.upgrades[newUnit.upgrades.length - 1]
-            const labels: Record<string, string> = {
-              attack: '⚔ ¡Upgrade de Ataque! +1 Strength permanente',
-              shield: '🛡 ¡Upgrade de Escudo! Absorbe 1 daño',
-              movement: '👟 ¡Upgrade de Movimiento! +1 hex de movimiento',
-            }
-            setMessage(labels[gained.type] ?? `Upgrade obtenido: ${gained.type}`)
-          } else if (newUnit.energy > prevUnit.energy) {
-            setMessage('⚡ ¡Energía obtenida! +1 token de energía')
+        // Unidades derrotadas
+        Object.values(newState.units).forEach(unit => {
+          const prev = prevState.units[unit.id]
+          if (prev && prev.currentHp > 0 && unit.currentHp <= 0) {
+            addToast(`¡${unit.name} eliminado!`, '#ef5350', 4000)
           }
+        })
 
-          // Detectar movimiento confirmado por el servidor
-          const prevPos = prevUnit.position
-          const newPos = newUnit.position
-          const moved = prevPos && newPos &&
-            (prevPos.q !== newPos.q || prevPos.r !== newPos.r)
+        // Objetivos capturados
+        Object.values(newState.board).forEach(hex => {
+          if (!hex.objectiveToken) return
+          const prevHex = prevState.board[hexKey(hex.coord)]
+          if (!prevHex?.objectiveToken) return
+          const prev = prevHex.objectiveToken.controlledBy
+          const next = hex.objectiveToken.controlledBy
+          if (prev !== next && next) {
+            const capturer = newState.players[next]
+            addToast(`¡Objetivo capturado por ${capturer.name}!`, '#f5c518', 4000)
+          }
+        })
 
-          if (moved && lastActionRef.current) {
-            if (lastActionRef.current === 'moving') {
-              setHasMoved(true)
-              const weapon = newUnit.weapons[0]
-              if (weapon) {
-                const enemyIds = new Set(
-                  Object.values(newState.units)
-                    .filter(u => u.playerId !== newUnit.playerId && u.currentHp > 0 && u.position)
-                    .map(u => u.id)
-                )
-                const attackable = new Set<string>()
-                for (const other of Object.values(newState.units)) {
-                  if (other.playerId === newUnit.playerId) continue
-                  if (other.currentHp <= 0 || !other.position) continue
-                  const dist = gridDistance(newPos, other.position)
-                  if (dist > weapon.range) continue
-                  if (dist > 1) {
-                    const los = checkLineOfSight(newPos, other.position, newState.board, newUnit.playerId as 'player1' | 'player2', enemyIds)
-                    if (!los.clear) continue
-                  }
-                  attackable.add(hexKey(other.position))
-                }
-                setAttackableHexes(attackable)
-                setMessage(attackable.size > 0 ? 'Puedes atacar u otras acciones' : 'Pasa turno')
+        // Garrison rescatada (desaparece del tablero)
+        Object.values(prevState.board).forEach(hex => {
+          if (!hex.garrisonToken) return
+          const newHex = newState.board[hexKey(hex.coord)]
+          if (!newHex?.garrisonToken) {
+            addToast('¡Garrison rescatada! +2 VP', '#81c784')
+          }
+        })
+
+        // Fase 2
+        if (prevState.phase === 'phase1' && newState.phase === 'phase2') {
+          addToast('¡Fase 2! — Timeline reiniciado', '#ab47bc', 5000)
+        }
+
+        // Upgrade o energía recogida por la unidad activa
+        if (newState.activeUnitId) {
+          const prevUnit = prevState.units[newState.activeUnitId]
+          const newUnit = newState.units[newState.activeUnitId]
+          if (prevUnit && newUnit) {
+            if (newUnit.upgrades.length > prevUnit.upgrades.length) {
+              const gained = newUnit.upgrades[newUnit.upgrades.length - 1]
+              const labels: Record<string, string> = {
+                attack: '⚔ Upgrade de Ataque obtenido',
+                shield: '🛡 Upgrade de Escudo obtenido',
+                movement: '👟 Upgrade de Movimiento obtenido',
+                energy: '⚡ Upgrade de Energía obtenido',
               }
-            } else if (lastActionRef.current === 'dashing') {
-              setHasUsedPrimary(true)
-              setMessage('Dash realizado')
+              addToast(labels[gained.type] ?? `Upgrade: ${gained.type}`, '#81c784')
+            } else if (newUnit.energy > prevUnit.energy) {
+              addToast('⚡ Energía obtenida', '#f5c518')
             }
-            lastActionRef.current = null
+
+            // Movimiento confirmado
+            const prevPos = prevUnit.position
+            const newPos = newUnit.position
+            const moved = prevPos && newPos && (prevPos.q !== newPos.q || prevPos.r !== newPos.r)
+            if (moved && lastActionRef.current) {
+              if (lastActionRef.current === 'moving') {
+                setHasMoved(true)
+                const weapon = newUnit.weapons[0]
+                if (weapon) {
+                  const enemyIds = new Set(
+                    Object.values(newState.units)
+                      .filter(u => u.playerId !== newUnit.playerId && u.currentHp > 0 && u.position)
+                      .map(u => u.id)
+                  )
+                  const attackable = new Set<string>()
+                  for (const other of Object.values(newState.units)) {
+                    if (other.playerId === newUnit.playerId) continue
+                    if (other.currentHp <= 0 || !other.position) continue
+                    const dist = gridDistance(newPos, other.position)
+                    if (dist > weapon.range) continue
+                    if (dist > 1) {
+                      const los = checkLineOfSight(newPos, other.position, newState.board, newUnit.playerId as 'player1' | 'player2', enemyIds)
+                      if (!los.clear) continue
+                    }
+                    attackable.add(hexKey(other.position))
+                  }
+                  setAttackableHexes(attackable)
+                  setMessage(attackable.size > 0 ? 'Puedes atacar u otras acciones' : 'Pasa turno')
+                }
+              } else if (lastActionRef.current === 'dashing') {
+                setHasUsedPrimary(true)
+                setMessage('Dash realizado')
+              }
+              lastActionRef.current = null
+            }
           }
         }
       }
 
       // Setup → phase1 transition
-      if (newState.phase === 'phase1') {
+      if (newState.phase === 'phase1' && prevState?.phase !== 'phase1') {
         setScreen('playing')
         setSetupConfirmed(false)
         setMessage('¡Partida iniciada!')
@@ -185,12 +257,11 @@ export default function App() {
       if (diceRolls) setDiceResult(diceRolls)
       setSelectedUnitId(prev => {
         if (newState.activeUnitId !== prev) {
-          setHasMoved(false)
-          setHasUsedPrimary(false)
           setReachableHexes(new Set())
           setAttackableHexes(new Set())
           setSelectionMode('none')
           setSelectedWeaponIndex(null)
+          setPanelUnitId(null)
           lastActionRef.current = null
           return null
         }
@@ -252,6 +323,8 @@ export default function App() {
         setScreen('squad_selection')
       } else if (roomStatus === 'playing' && gs) {
         setGameState(gs)
+        setHasUsedPrimary(gs.hasUsedPrimaryAction)
+        setHasMoved(inferHasMoved(gs.actionLog, gs.activeUnitId))
         setScreen(gs.phase === 'setup' ? 'setup' : 'playing')
         setMessage('Reconectado a la partida')
       } else if (roomStatus === 'finished' && gs) {
@@ -271,6 +344,8 @@ export default function App() {
       setGameState(newState)
       setMessage(msg)
       clearSelection()
+      setHasMoved(false)
+      setHasUsedPrimary(false)
     })
 
     return () => {
@@ -278,6 +353,8 @@ export default function App() {
       socket.off('disconnect')
       socket.off('ROOM_CREATED')
       socket.off('JOIN_ERROR')
+      socket.off('MATCH_SEARCHING')
+      socket.off('MATCH_CANCELLED')
       socket.off('SQUAD_SELECTION_STARTED')
       socket.off('GAME_STARTED')
       socket.off('GAME_STATE_UPDATE')
@@ -290,7 +367,7 @@ export default function App() {
       socket.off('RECONNECT_FAILED')
       socket.off('PHASE_TRANSITION')
     }
-  }, [clearSelection])
+  }, [clearSelection, addToast])
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
   const calcReachable = useCallback((unitId: string, state: GameState) => {
@@ -376,8 +453,8 @@ export default function App() {
       socket.emit('GAME_ACTION', {
         action: { type: 'ATTACK', unitId: selectedUnitId, weaponIndex: wIdx, targetId: unitId }
       })
-      setHasUsedPrimary(true)
       clearSelection()
+      setHasUsedPrimary(true)
       return
     }
 
@@ -385,8 +462,8 @@ export default function App() {
       socket.emit('GAME_ACTION', {
         action: { type: 'USE_ABILITY', unitId: selectedUnitId, abilityIndex: pendingAbilityIndex, targetId: unitId }
       })
-      setHasUsedPrimary(true)
       clearSelection()
+      setHasUsedPrimary(true)
       return
     }
 
@@ -423,8 +500,8 @@ export default function App() {
         socket.emit('GAME_ACTION', {
           action: { type: 'ATTACK_GARRISON', unitId: selectedUnitId, weaponIndex: selectedWeaponIndex ?? 0, garrisonId: hex.garrisonToken.id }
         })
-        setHasUsedPrimary(true)
         clearSelection()
+        setHasUsedPrimary(true)
         return
       }
     }
@@ -488,8 +565,8 @@ export default function App() {
     socket.emit('GAME_ACTION', {
       action: { type: 'USE_ABILITY', unitId: selectedUnitId, abilityIndex }
     })
-    setHasUsedPrimary(true)
     clearSelection()
+    setHasUsedPrimary(true)
   }, [gameState, selectedUnitId, myPlayerId, clearSelection])
 
   const handlePlayCard = useCallback((cardId: string) => {
@@ -594,73 +671,166 @@ export default function App() {
   )
 
   // ─── LOBBY ────────────────────────────────────────────────────────────────
-  if (screen === 'lobby') return (
-    <div style={{
-      width: '100vw', height: '100vh', background: '#0d0d1a',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
+  if (screen === 'lobby') {
+    const canPlay = playerName.trim().length > 0 && connected
+
+    return (
       <div style={{
-        background: '#1a1a2e', border: '1px solid #333', borderRadius: 12,
-        padding: '40px 48px', minWidth: 340, color: 'white', textAlign: 'center',
+        width: '100vw', height: '100vh', background: '#0d0d1a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <div style={{ fontSize: 28, fontWeight: 'bold', marginBottom: 8, color: '#4fc3f7' }}>
-          GUNDAM ASSEMBLE
-        </div>
-        <div style={{ fontSize: 13, color: '#666', marginBottom: 32 }}>
-          {connected ? '🟢 Conectado' : '🔴 Desconectado'}
-        </div>
-        <input
-          value={playerName}
-          onChange={e => setPlayerName(e.target.value)}
-          placeholder="Tu nombre"
-          style={{
-            width: '100%', padding: '10px 14px', marginBottom: 16,
-            background: '#0d0d1a', border: '1px solid #444', borderRadius: 8,
-            color: 'white', fontSize: 14, boxSizing: 'border-box',
-          }}
-        />
-        <button
-          onClick={() => { if (playerName.trim()) socket.emit('CREATE_ROOM', { playerName: playerName.trim() }) }}
-          style={{
-            width: '100%', padding: '12px', marginBottom: 16,
-            background: '#1565c0', color: 'white', border: 'none',
-            borderRadius: 8, cursor: 'pointer', fontSize: 15, fontWeight: 'bold',
-          }}
-        >
-          Crear sala
-        </button>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <div style={{
+          background: '#1a1a2e', border: '1px solid #333', borderRadius: 14,
+          padding: '36px 44px', width: 380, color: 'white',
+        }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ fontSize: 26, fontWeight: 'bold', color: '#4fc3f7', letterSpacing: 2 }}>
+              GUNDAM ASSEMBLE
+            </div>
+            <div style={{ fontSize: 12, color: connected ? '#4caf50' : '#ef5350', marginTop: 6 }}>
+              {connected ? '● Conectado' : '● Desconectado'}
+            </div>
+          </div>
+
+          {/* Nombre */}
           <input
-            value={roomInput}
-            onChange={e => setRoomInput(e.target.value.toUpperCase())}
-            placeholder="Código de sala"
+            value={playerName}
+            onChange={e => setPlayerName(e.target.value)}
+            placeholder="Tu nombre de piloto"
             style={{
-              flex: 1, padding: '10px 14px',
+              width: '100%', padding: '11px 14px', marginBottom: 24,
               background: '#0d0d1a', border: '1px solid #444', borderRadius: 8,
-              color: 'white', fontSize: 14,
+              color: 'white', fontSize: 14, boxSizing: 'border-box',
             }}
           />
-          <button
-            onClick={() => {
-              if (playerName.trim() && roomInput.trim()) {
-                setLobbyError('')
-                socket.emit('JOIN_ROOM', { roomId: roomInput.trim(), playerName: playerName.trim() })
-              }
-            }}
-            style={{
-              padding: '10px 20px', background: '#2e7d32', color: 'white',
-              border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14,
-            }}
-          >
-            Unirse
-          </button>
+
+          {/* Estado: buscando partida */}
+          {isSearching ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: 15, color: '#f5c518', marginBottom: 8, fontWeight: 'bold',
+              }}>
+                Buscando oponente...
+              </div>
+              <div style={{ color: '#555', fontSize: 12, marginBottom: 20 }}>
+                Esperando que alguien más entre en cola
+              </div>
+              <button
+                onClick={() => socket.emit('CANCEL_MATCH')}
+                style={{
+                  width: '100%', padding: '11px',
+                  background: 'transparent', color: '#aaa',
+                  border: '1px solid #444', borderRadius: 8,
+                  cursor: 'pointer', fontSize: 14,
+                }}
+              >
+                Cancelar búsqueda
+              </button>
+            </div>
+          ) : lobbyMode === 'main' ? (
+            <>
+              {/* Búsqueda aleatoria */}
+              <button
+                disabled={!canPlay}
+                onClick={() => {
+                  socket.emit('FIND_MATCH', { playerName: playerName.trim() })
+                }}
+                style={{
+                  width: '100%', padding: '14px', marginBottom: 12,
+                  background: canPlay ? '#1565c0' : '#222',
+                  color: canPlay ? 'white' : '#555',
+                  border: 'none', borderRadius: 8,
+                  cursor: canPlay ? 'pointer' : 'not-allowed',
+                  fontSize: 15, fontWeight: 'bold',
+                }}
+              >
+                Buscar partida
+              </button>
+
+              {/* Sala privada */}
+              <button
+                disabled={!canPlay}
+                onClick={() => setLobbyMode('private')}
+                style={{
+                  width: '100%', padding: '11px',
+                  background: 'transparent',
+                  color: canPlay ? '#aaa' : '#444',
+                  border: `1px solid ${canPlay ? '#444' : '#2a2a2a'}`,
+                  borderRadius: 8,
+                  cursor: canPlay ? 'pointer' : 'not-allowed',
+                  fontSize: 14,
+                }}
+              >
+                Sala privada →
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Crear sala */}
+              <button
+                onClick={() => {
+                  if (canPlay) socket.emit('CREATE_ROOM', { playerName: playerName.trim() })
+                }}
+                style={{
+                  width: '100%', padding: '12px', marginBottom: 12,
+                  background: '#2e7d32', color: 'white', border: 'none',
+                  borderRadius: 8, cursor: canPlay ? 'pointer' : 'not-allowed',
+                  fontSize: 14, fontWeight: 'bold',
+                  opacity: canPlay ? 1 : 0.4,
+                }}
+              >
+                Crear sala
+              </button>
+
+              {/* Unirse con código */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input
+                  value={roomInput}
+                  onChange={e => setRoomInput(e.target.value.toUpperCase())}
+                  placeholder="Código de sala"
+                  style={{
+                    flex: 1, padding: '10px 14px',
+                    background: '#0d0d1a', border: '1px solid #444', borderRadius: 8,
+                    color: 'white', fontSize: 14,
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (canPlay && roomInput.trim()) {
+                      setLobbyError('')
+                      socket.emit('JOIN_ROOM', { roomId: roomInput.trim(), playerName: playerName.trim() })
+                    }
+                  }}
+                  style={{
+                    padding: '10px 18px', background: '#1565c0', color: 'white',
+                    border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14,
+                  }}
+                >
+                  Unirse
+                </button>
+              </div>
+
+              <button
+                onClick={() => { setLobbyMode('main'); setLobbyError('') }}
+                style={{
+                  width: '100%', padding: '9px',
+                  background: 'transparent', color: '#666',
+                  border: '1px solid #2a2a2a', borderRadius: 8,
+                  cursor: 'pointer', fontSize: 13,
+                }}
+              >
+                ← Volver
+              </button>
+
+              {lobbyError && (
+                <div style={{ color: '#ef5350', fontSize: 13, marginTop: 10, textAlign: 'center' }}>{lobbyError}</div>
+              )}
+            </>
+          )}
         </div>
-        {lobbyError && (
-          <div style={{ color: '#ef5350', fontSize: 13, marginTop: 8 }}>{lobbyError}</div>
-        )}
       </div>
-    </div>
-  )
+    )
+  }
 
   // ─── ESPERANDO ────────────────────────────────────────────────────────────
   if (screen === 'waiting') return (
@@ -705,10 +875,10 @@ export default function App() {
               </div>
               <div style={{
                 fontSize: 11, marginTop: 2,
-                color: squadFaction === 'Earth Federation' ? '#4fc3f7' : '#ef5350',
+                color: myPlayerId === 'player1' ? '#ef5350' : '#4fc3f7',
                 fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase',
               }}>
-                {squadFaction}
+                {playerName}
               </div>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -757,10 +927,7 @@ export default function App() {
                       {card.pilot && card.pilot !== card.unitName && (
                         <div style={{ color: '#888', fontSize: 11, marginBottom: 4 }}>{card.pilot}</div>
                       )}
-                      <div style={{ fontSize: 10, color: card.faction === 'Earth Federation' ? '#4fc3f7' : '#ef5350', marginBottom: 4 }}>
-                        {card.faction}
-                      </div>
-                      <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#aaa' }}>
+                      <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#aaa', marginTop: 4 }}>
                         <span>HP {card.hp}</span>
                         <span>VP {card.vp}</span>
                         <span>TL {card.tl}</span>
@@ -832,12 +999,6 @@ export default function App() {
                           filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
                         }}>
                           {isCommand ? '⚔️' : '🛡️'}
-                        </div>
-                        <div style={{
-                          fontSize: 9, fontWeight: 'bold', letterSpacing: 1,
-                          color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase',
-                        }}>
-                          {isFed ? 'Fed.' : 'Zeon'}
                         </div>
                         {isSelected && (
                           <div style={{
@@ -1027,28 +1188,40 @@ export default function App() {
     ? gameState.units[panelUnitId]
     : activeUnit ?? null
 
+  const hasHandStrip = !isFinished && myPlayerId && (
+    gameState.players[myPlayerId].tactics.hand.length > 0 ||
+    gameState.pendingResponse?.forPlayerId === myPlayerId
+  )
+  const bottomOffset = hasHandStrip ? HAND_STRIP_H + 12 : 16
+
+  // Objetivos del tablero
+  const objectiveHexes = Object.values(gameState.board).filter(h => h.objectiveToken)
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
 
       <TimelineBar gameState={gameState} myPlayerId={myPlayerId} />
 
       <div style={{
-        textAlign: 'center', padding: '4px 16px',
+        padding: '4px 16px',
         background: 'rgba(0,0,0,0.6)', color: 'white',
         fontSize: 12, zIndex: 10, flexShrink: 0,
         borderBottom: '1px solid #111',
-        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16,
+        display: 'flex', alignItems: 'center', gap: 16,
       }}>
+        <span style={{
+          color: isMyTurn ? '#4caf50' : '#888',
+          fontWeight: 'bold', fontSize: 13,
+        }}>
+          {isFinished ? '— FIN —' : isMyTurn ? '⚡ Tu turno' : `Turno de ${activePlayer.name}`}
+        </span>
         <span style={{ color: gameState.activePlayerId === 'player1' ? '#4fc3f7' : '#ef9a9a' }}>
           {activeUnit?.name ?? '—'}
         </span>
-        <span style={{ color: isMyTurn ? '#4caf50' : '#888' }}>
-          {isFinished ? '— FIN —' : isMyTurn ? '⚡ Tu turno' : `Turno de ${activePlayer.name}`}
-        </span>
-        {message && <span style={{ color: '#f5c518' }}>{message}</span>}
+        {message && <span style={{ color: '#f5c518', marginLeft: 'auto' }}>{message}</span>}
         {diceResult && (
           <span style={{ color: '#aaa' }}>
-            [{diceResult.join(', ')}] — {diceResult.filter(r => r >= 4).length} impactos
+            [{diceResult.join(', ')}] — {diceResult.filter(r => r >= 4).length} hits
           </span>
         )}
       </div>
@@ -1056,78 +1229,128 @@ export default function App() {
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         <GameScene
           gameState={gameState}
+          myPlayerId={myPlayerId}
           selectedUnitId={selectedUnitId}
           reachableHexes={reachableHexes}
           attackableHexes={attackableHexes}
           onHexClick={handleHexClick}
           onUnitClick={handleUnitClick}
           onTokenHover={setTokenTooltip}
+          logHighlightedHexes={logHoveredHexes}
         />
 
-        {panelUnit && !isFinished && (
-          <UnitPanel
-            unit={panelUnit}
-            isActive={gameState.activeUnitId === panelUnit.id}
-            isMyUnit={panelUnit.playerId === myPlayerId}
-            isMyTurn={isMyTurn}
-            isSelected={panelUnit?.id === selectedUnitId}
-            hasMoved={hasMoved}
-            hasUsedPrimary={hasUsedPrimary}
-            selectedWeaponIndex={selectedWeaponIndex}
-            canRescue={
-              selectedUnitId && myPlayerId
-                ? calcCanRescue(selectedUnitId, gameState, myPlayerId)
-                : false
-            }
-            onMove={() => {
-              if (!selectedUnitId) return
-              setSelectionMode('moving')
-              setReachableHexes(calcReachable(selectedUnitId, gameState))
-              setAttackableHexes(new Set())
-              setMessage('Elige hex para mover')
-            }}
-            onDash={() => {
-              if (!selectedUnitId) return
-              setSelectionMode('dashing')
-              const unit = gameState.units[selectedUnitId]
-              if (!unit.position) return
-              const obstacles = new Set(
-                Object.values(gameState.units)
-                  .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId !== unit.playerId)
-                  .map(u2 => hexKey(u2.position!))
+        {/* Toasts centrados arriba */}
+        <ToastContainer toasts={toasts} />
+
+        {/* Panel de objetivos — top right */}
+        {objectiveHexes.length > 0 && (
+          <div style={{
+            position: 'absolute', top: 12, right: 16,
+            background: 'rgba(10,10,20,0.92)', border: '1px solid #333',
+            borderRadius: 8, padding: '8px 12px', color: 'white',
+            fontSize: 11, zIndex: 15, minWidth: 160,
+          }}>
+            <div style={{ color: '#666', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+              Objetivos
+            </div>
+            {objectiveHexes.map(hex => {
+              const obj = hex.objectiveToken!
+              const controlled = obj.controlledBy
+              const color = controlled === 'player1' ? '#4fc3f7'
+                : controlled === 'player2' ? '#ef9a9a' : '#555'
+              const label = controlled
+                ? gameState.players[controlled].name
+                : 'Sin control'
+              return (
+                <div key={obj.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: controlled ? `0 0 4px ${color}` : 'none' }} />
+                  <span style={{ color: '#888', flex: 1 }}>{obj.id}</span>
+                  <span style={{ color }}>{label}</span>
+                  <span style={{ color: '#444', fontSize: 9 }}>+{obj.vpValue}VP</span>
+                </div>
               )
-              const alliedHexes = new Set(
-                Object.values(gameState.units)
-                  .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId === unit.playerId)
-                  .map(u2 => hexKey(u2.position!))
-              )
-              const reachable = getReachableHexes(unit.position, gameState.board, obstacles, 2)
-              setReachableHexes(new Set(reachable.map(h => hexKey(h)).filter(k => !alliedHexes.has(k))))
-              setAttackableHexes(new Set())
-              setMessage('Dash: elige hex (2 hexes, cuesta 2 TL)')
-            }}
-            onAttack={(idx) => handleAttackMode(idx)}
-            onUseAbility={handleUseAbility}
-            onEnergize={() => {
-              if (!selectedUnitId) return
-              socket.emit('GAME_ACTION', { action: { type: 'ENERGIZE', unitId: selectedUnitId } })
-              setHasUsedPrimary(true)
-              setMessage('Energize: +1 energía, -2 TL')
-            }}
-            onRescue={handleRescue}
-            onEndTurn={handleEndTurn}
-            onCancel={() => {
-              setSelectionMode('none')
-              setReachableHexes(new Set())
-              setAttackableHexes(new Set())
-              setSelectedUnitId(null)
-              setPanelUnitId(null)
-            }}
-          />
+            })}
+          </div>
         )}
 
+        {/* ActionLog — bottom right */}
+        <ActionLog
+          log={gameState.log}
+          myPlayerId={myPlayerId}
+          player1Name={gameState.players.player1.name}
+          player2Name={gameState.players.player2.name}
+          onHoverHexes={hexes => setLogHoveredHexes(hexes ? new Set(hexes) : new Set())}
+        />
+
+        {/* UnitPanel — bottom left, encima del strip de cartas */}
+        {panelUnit && !isFinished && (
+          <div style={{ position: 'absolute', bottom: bottomOffset, left: 16, zIndex: 15 }}>
+            <UnitPanel
+              unit={panelUnit}
+              isActive={gameState.activeUnitId === panelUnit.id}
+              isMyUnit={panelUnit.playerId === myPlayerId}
+              isMyTurn={isMyTurn}
+              isSelected={panelUnit?.id === selectedUnitId}
+              hasMoved={hasMoved}
+              hasUsedPrimary={hasUsedPrimary}
+              selectedWeaponIndex={selectedWeaponIndex}
+              currentTlRound={getUnitRound(gameState.timeline, panelUnit.id)}
+              canRescue={
+                selectedUnitId && myPlayerId
+                  ? calcCanRescue(selectedUnitId, gameState, myPlayerId)
+                  : false
+              }
+              onMove={() => {
+                if (!selectedUnitId) return
+                setSelectionMode('moving')
+                setReachableHexes(calcReachable(selectedUnitId, gameState))
+                setAttackableHexes(new Set())
+                setMessage('Elige hex para mover')
+              }}
+              onDash={() => {
+                if (!selectedUnitId) return
+                setSelectionMode('dashing')
+                const unit = gameState.units[selectedUnitId]
+                if (!unit.position) return
+                const obstacles = new Set(
+                  Object.values(gameState.units)
+                    .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId !== unit.playerId)
+                    .map(u2 => hexKey(u2.position!))
+                )
+                const alliedHexes = new Set(
+                  Object.values(gameState.units)
+                    .filter(u2 => u2.id !== selectedUnitId && u2.currentHp > 0 && u2.position && u2.playerId === unit.playerId)
+                    .map(u2 => hexKey(u2.position!))
+                )
+                const reachable = getReachableHexes(unit.position, gameState.board, obstacles, 2)
+                setReachableHexes(new Set(reachable.map(h => hexKey(h)).filter(k => !alliedHexes.has(k))))
+                setAttackableHexes(new Set())
+                setMessage('Dash: elige hex (2 hexes, cuesta TL)')
+              }}
+              onAttack={(idx) => handleAttackMode(idx)}
+              onUseAbility={handleUseAbility}
+              onEnergize={() => {
+                if (!selectedUnitId) return
+                socket.emit('GAME_ACTION', { action: { type: 'ENERGIZE', unitId: selectedUnitId } })
+                setHasUsedPrimary(true)
+                setMessage('Energize: +1 energía')
+              }}
+              onRescue={handleRescue}
+              onEndTurn={handleEndTurn}
+              onCancel={() => {
+                setSelectionMode('none')
+                setReachableHexes(new Set())
+                setAttackableHexes(new Set())
+                setSelectedUnitId(null)
+                setPanelUnitId(null)
+              }}
+            />
+          </div>
+        )}
+
+        {/* Leyenda — bottom right, encima del strip */}
         <div style={{
-          position: 'absolute', bottom: 16, right: 16,
+          position: 'absolute', bottom: bottomOffset, right: 16,
           background: 'rgba(10,10,20,0.92)', border: '1px solid #333',
           borderRadius: 8, padding: '8px 12px', color: 'white',
           fontSize: 11, zIndex: 15, display: 'flex', flexDirection: 'column', gap: 4,
@@ -1137,13 +1360,13 @@ export default function App() {
           </div>
           {[
             { color: '#f5c518', shape: 'circle', label: 'Objetivo' },
-            { color: '#4fc3f7', shape: 'square', label: 'Garrison Federación' },
-            { color: '#ef9a9a', shape: 'square', label: 'Garrison Zeon' },
+            { color: '#ef5350', shape: 'square', label: `Garrison ${gameState.players.player1.name}` },
+            { color: '#4fc3f7', shape: 'square', label: `Garrison ${gameState.players.player2.name}` },
             { color: '#ef9a9a', shape: 'diamond', label: '⚔ Ataque' },
             { color: '#4fc3f7', shape: 'diamond', label: '🛡 Escudo' },
             { color: '#81c784', shape: 'diamond', label: '👟 Movimiento' },
             { color: '#f5c518', shape: 'diamond', label: '⚡ Energía' },
-            { color: '#555', shape: 'diamond', label: '❓ Token oculto' },
+            { color: '#555', shape: 'diamond', label: '❓ Oculto' },
           ].map(({ color, shape, label }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{
@@ -1158,25 +1381,36 @@ export default function App() {
           ))}
         </div>
 
-        {myPlayerId && !isFinished && (gameState.players[myPlayerId].tactics.hand.length > 0 || gameState.pendingResponse?.forPlayerId === myPlayerId) && (
-          <TacticsHand
-            hand={gameState.players[myPlayerId].tactics.hand}
-            isMyTurn={isMyTurn}
-            selectedCardId={pendingCardId}
-            onPlayCard={handlePlayCard}
-            pendingResponseTrigger={gameState.pendingResponse?.forPlayerId === myPlayerId ? gameState.pendingResponse.trigger : null}
-            onPassResponse={handlePassResponse}
-          />
-        )}
-
+        {/* Token tooltip — encima del strip */}
         {tokenTooltip && (
           <div style={{
-            position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+            position: 'absolute', bottom: bottomOffset, left: '50%', transform: 'translateX(-50%)',
             background: 'rgba(10,10,20,0.95)', border: '1px solid #f5c518',
             borderRadius: 8, padding: '8px 16px', color: '#f5c518',
             fontSize: 13, zIndex: 20, whiteSpace: 'nowrap', pointerEvents: 'none',
           }}>
             {tokenTooltip}
+          </div>
+        )}
+
+        {/* TacticsHand — strip horizontal en el fondo */}
+        {hasHandStrip && myPlayerId && (
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: HAND_STRIP_H,
+            background: 'rgba(5,5,12,0.97)',
+            borderTop: '1px solid #1e1e2e',
+            zIndex: 15,
+          }}>
+            <TacticsHand
+              hand={gameState.players[myPlayerId].tactics.hand}
+              isMyTurn={isMyTurn}
+              selectedCardId={pendingCardId}
+              deckCount={gameState.players[myPlayerId].tactics.deck.length}
+              onPlayCard={handlePlayCard}
+              pendingResponseTrigger={gameState.pendingResponse?.forPlayerId === myPlayerId ? gameState.pendingResponse.trigger : null}
+              onPassResponse={handlePassResponse}
+            />
           </div>
         )}
       </div>

@@ -182,6 +182,7 @@ function makeGameState(): GameState {
       player2: { id: 'player2', name: 'P2', vp: 0, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false }, squadUnitIds: ['zaku2'] },
     },
     actionLog: [],
+    log: [],
     winner: null,
     pendingResponse: null,
     lastActivePlayer: null,

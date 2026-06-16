@@ -235,8 +235,10 @@ export function createServerGame(
     const firstToken = timeline.slots.find(s => s.tokens.length > 0)?.tokens[0]
 
     // ─── SPAWN PRIMERA UNIDAD DE CADA JUGADOR ─────────────────────────────────
-    const firstP1Unit = p1Units[0]
-    const firstP2Unit = p2Units[0]
+    // La unidad a spawnear es la que tiene el TL más bajo (la que activará primero),
+    // no necesariamente la primera en el orden de selección.
+    const firstP1Unit = p1Units.reduce((a, b) => a.startingTl <= b.startingTl ? a : b)
+    const firstP2Unit = p2Units.reduce((a, b) => a.startingTl <= b.startingTl ? a : b)
 
     const p1DeployKey = hexKey(p1Deploy)
     const p2DeployKey = hexKey(p2Deploy)
@@ -305,6 +307,7 @@ export function createServerGame(
             },
         },
         actionLog: [],
+        log: [],
         winner: null,
         pendingResponse: null,
     }

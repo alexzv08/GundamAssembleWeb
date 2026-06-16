@@ -1,8 +1,8 @@
-import { GameState, PlayerId } from '../types'
+import { GameState, PlayerId, LogCategory } from '../types'
 import { WeaponEffect, AbilityEffect } from '../types/units'
 import { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, getNeighbors, gridDistance } from './hexGrid'
-import { advanceToken } from './timeline'
+import { advanceToken, getCurrentRound } from './timeline'
 
 // ─── ATTACK CONTEXT ───────────────────────────────────────────────────────────
 
@@ -365,6 +365,19 @@ export function applyBurstAbility(
     if (energyCost > 0) newState.units[unitId].energy -= energyCost
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'USE_ABILITY', unitId, abilityIndex, targetId })
+    {
+        const pos = state.units[unitId].position
+        const tgtPos = targetId ? state.units[targetId]?.position : null
+        const logHexes = [pos ? hexKey(pos) : null, tgtPos ? hexKey(tgtPos) : null].filter(Boolean) as string[]
+        const category: LogCategory = 'ability'
+        newState.log.push({
+            message: `${state.units[unitId].name} usó habilidad "${ability.name}"`,
+            playerId,
+            round: getCurrentRound(newState.timeline),
+            category,
+            hexes: logHexes,
+        })
+    }
 
     return { success: true, newState }
 }

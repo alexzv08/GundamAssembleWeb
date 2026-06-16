@@ -5,9 +5,11 @@ import type { Hex } from '../types/board'
 
 interface HexTileProps {
     hex: Hex
+    myPlayerId?: 'player1' | 'player2' | null
     isSelected?: boolean
     isReachable?: boolean
     isAttackable?: boolean
+    isLogHighlighted?: boolean
     onClick?: () => void
     onHover?: () => void
     onTokenHover?: (info: string | null) => void
@@ -15,9 +17,11 @@ interface HexTileProps {
 
 export function HexTile({
     hex,
+    myPlayerId = null,
     isSelected = false,
     isReachable = false,
     isAttackable = false,
+    isLogHighlighted = false,
     onClick,
     onHover,
     onTokenHover,
@@ -29,6 +33,7 @@ export function HexTile({
     const [x, y, z] = hexToWorld(q, r, hex.elevation)
 
     let color = terrainColor(hex.terrain, hex.elevation)
+    if (isLogHighlighted) color = '#b8860b'
     if (isSelected) color = '#f5c518'
     if (isReachable) color = '#4caf50'
     if (isAttackable) color = '#e53935'
@@ -54,7 +59,9 @@ export function HexTile({
                 <meshStandardMaterial
                     color={color}
                     roughness={0.8}
-                    metalness={0.1}
+                    metalness={isLogHighlighted ? 0.4 : 0.1}
+                    emissive={isLogHighlighted && !isSelected && !isReachable && !isAttackable ? '#b8860b' : '#000000'}
+                    emissiveIntensity={isLogHighlighted && !isSelected && !isReachable && !isAttackable ? 0.35 : 0}
                     transparent={isReachable || isAttackable}
                     opacity={isReachable || isAttackable ? 0.75 : 1}
                 />
@@ -93,15 +100,17 @@ export function HexTile({
                     onPointerEnter={(e) => {
                         e.stopPropagation()
                         onTokenHover?.(
-                            `🏠 Garrison ${hex.garrisonToken!.owner === 'player1' ? '(Federación)' : '(Zeon)'} — Rescátala para 2 VP`
+                            hex.garrisonToken!.owner === myPlayerId
+                                ? '🏠 Garrison aliada — Rescátala para +2 VP'
+                                : '🏠 Garrison enemiga — Destrúyela para +2 VP'
                         )
                     }}
                     onPointerLeave={() => onTokenHover?.(null)}
                 >
                     <boxGeometry args={[0.25, 0.25, 0.25]} />
                     <meshStandardMaterial
-                        color={hex.garrisonToken.owner === 'player1' ? '#4fc3f7' : '#ef9a9a'}
-                        emissive={hex.garrisonToken.owner === 'player1' ? '#4fc3f7' : '#ef9a9a'}
+                        color={hex.garrisonToken.owner === 'player1' ? '#ef5350' : '#4fc3f7'}
+                        emissive={hex.garrisonToken.owner === 'player1' ? '#ef5350' : '#4fc3f7'}
                         emissiveIntensity={0.3}
                     />
                 </mesh>

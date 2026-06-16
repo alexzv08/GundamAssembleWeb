@@ -1,6 +1,6 @@
-import { GameState, GameAction, PlayerId } from '../types'
+import { GameState, GameAction, PlayerId, LogCategory } from '../types'
 import { hexKey, findPath, checkLineOfSight, gridDistance, getNeighbors } from './hexGrid'
-import { advanceToken, getNextActivation, reorderSlotForTie } from './timeline'
+import { advanceToken, getNextActivation, reorderSlotForTie, getCurrentRound } from './timeline'
 import {
     getOngoingModifiers, getDashBonus, applyWeaponEffect, isNearObjective,
     triggerAfterDash, triggerAfterRescue, applyBurstAbility, applyCardEffect,
@@ -59,6 +59,10 @@ function getEnemyUnitIds(state: GameState, playerId: PlayerId): Set<string> {
 
 function cloneState(state: GameState): GameState {
     return JSON.parse(JSON.stringify(state))
+}
+
+function pushLog(state: GameState, playerId: PlayerId, message: string, category: LogCategory, hexes: string[] = []): void {
+    state.log.push({ message, playerId, round: getCurrentRound(state.timeline), category, hexes })
 }
 
 function advanceToNextActivation(state: GameState): GameState {
@@ -168,6 +172,13 @@ export function applyAdvance(
 
     newUnit.statusEffects = newUnit.statusEffects.filter(e => e.type !== 'slow')
     newState.actionLog.push({ type: 'ADVANCE', unitId, to })
+    {
+        const from = unit.position!
+        pushLog(newState, playerId,
+            `${state.units[unitId].name} avanzó de (${from.q},${from.r}) a (${to.q},${to.r})`,
+            'move', [hexKey(from), hexKey(to)]
+        )
+    }
 
     // Ventana de respuesta: T16 (Iron Grip) — si el oponente tiene carta after_enemy_advance
     const advOpponent: PlayerId = playerId === 'player1' ? 'player2' : 'player1'
@@ -326,7 +337,9 @@ export function applyAttack(
     resultState.timeline = advanceToken(resultState.timeline, unitId, weapon.tlCost)
 
     const finalTarget = resultState.units[targetId]
-    if (finalTarget.currentHp <= 0) {
+    const targetKilled = finalTarget.currentHp <= 0
+    const targetVp = finalTarget.vp
+    if (targetKilled) {
         resultState.players[playerId].vp += finalTarget.vp
         if (finalTarget.position) {
             const key = hexKey(finalTarget.position)
@@ -346,6 +359,19 @@ export function applyAttack(
     }
 
     resultState.actionLog.push({ type: 'ATTACK', unitId, weaponIndex, targetId })
+    {
+        const critMsg = critCount > 0 ? `, ${critCount} crít` : ''
+        const killMsg = targetKilled ? ` — ¡KO! (+${targetVp} VP)` : ''
+        const noHitMsg = hits === 0 ? ' — Sin impactos' : ''
+        const atkPos = state.units[unitId].position
+        const defPos = state.units[targetId].position
+        const logHexes = [atkPos ? hexKey(atkPos) : null, defPos ? hexKey(defPos) : null].filter(Boolean) as string[]
+        pushLog(resultState, playerId,
+            `${state.units[unitId].name} atacó a ${state.units[targetId].name}` +
+            (hits > 0 ? ` — ${hits} impactos, ${damage} daño${critMsg}` : noHitMsg) + killMsg,
+            'attack', logHexes
+        )
+    }
 
     // Ventana de respuesta post-ataque solo si el defensor sobrevivió (position !== null)
     const atkTargetSurvived = resultState.units[targetId]?.position !== null
@@ -415,6 +441,13 @@ export function applyDash(
 
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'DASH', unitId, to })
+    {
+        const from = unit.position!
+        pushLog(newState, playerId,
+            `${state.units[unitId].name} hizo dash de (${from.q},${from.r}) a (${to.q},${to.r})`,
+            'move', [hexKey(from), hexKey(to)]
+        )
+    }
 
     // Trigger response: Char Kick
     const resultState = triggerAfterDash(newState, unitId)
@@ -436,6 +469,11 @@ export function applyEnergize(state: GameState, unitId: string, playerId: Player
     newState.units[unitId].energy += 1
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'ENERGIZE', unitId })
+    {
+        const pos = state.units[unitId].position
+        pushLog(newState, playerId, `${state.units[unitId].name} se energizó (+1 energía)`,
+            'ability', pos ? [hexKey(pos)] : [])
+    }
 
     return { success: true, newState }
 }
@@ -465,6 +503,12 @@ export function applyRescue(state: GameState, unitId: string, garrisonId: string
     newState.players[playerId].vp += 2
     newState.timeline = advanceToken(newState.timeline, unitId, 2)
     newState.actionLog.push({ type: 'RESCUE', unitId, garrisonId })
+    {
+        const unitPos = state.units[unitId].position
+        const logHexes = [unitPos ? hexKey(unitPos) : null, garrisonKey].filter(Boolean) as string[]
+        pushLog(newState, playerId, `${state.units[unitId].name} rescató una garrison aliada (+2 VP)`,
+            'objective', logHexes)
+    }
 
     // Trigger response: Rescue the Mechanics
     const rescueResult = triggerAfterRescue(newState, unitId)
@@ -545,12 +589,18 @@ export function applyAttackGarrison(
     if (weapon.energyCost) newAttacker.energy -= weapon.energyCost
     newState.timeline = advanceToken(newState.timeline, unitId, weapon.tlCost)
 
-    if (hits > 0) {
-        newState.board[garrisonKey].garrisonToken = null
-        newState.players[playerId].vp += 2
-        newState.actionLog.push({ type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId })
-    } else {
-        newState.actionLog.push({ type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId })
+    {
+        const atkPos = attacker.position
+        const logHexes = [atkPos ? hexKey(atkPos) : null, garrisonKey].filter(Boolean) as string[]
+        if (hits > 0) {
+            newState.board[garrisonKey].garrisonToken = null
+            newState.players[playerId].vp += 2
+            newState.actionLog.push({ type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId })
+            pushLog(newState, playerId, `${attacker.name} destruyó una garrison enemiga (+2 VP)`, 'objective', logHexes)
+        } else {
+            newState.actionLog.push({ type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId })
+            pushLog(newState, playerId, `${attacker.name} atacó una garrison enemiga — sin impactos`, 'attack', logHexes)
+        }
     }
 
     return { success: true, newState }
@@ -606,6 +656,11 @@ export function applyPlayCard(
     newState.players[playerId].tactics.hand.splice(cardIndex, 1)
     newState.players[playerId].tactics.discarded.push(card)
     newState.actionLog.push({ type: 'PLAY_CARD', unitId, cardId })
+    {
+        const pos = state.units[unitId].position
+        pushLog(newState, playerId, `${state.players[playerId].name} jugó "${card.name}"`,
+            'card', pos ? [hexKey(pos)] : [])
+    }
 
     return { success: true, newState }
 }
@@ -624,6 +679,11 @@ export function applyEndActivation(state: GameState, unitId: string, playerId: P
     newState.timeline = advanceToken(newState.timeline, unitId, 1)
     const updated = advanceToNextActivation(newState)
     newState.actionLog.push({ type: 'END_ACTIVATION', unitId })
+    {
+        const pos = state.units[unitId].position
+        pushLog(newState, playerId, `${state.units[unitId].name} terminó su activación`,
+            'end', pos ? [hexKey(pos)] : [])
+    }
 
     return { success: true, newState: updated }
 }
@@ -659,6 +719,7 @@ export function applyPlayResponse(
     newState.players[playerId].tactics.discarded.push(card)
     newState.pendingResponse = null
     newState.actionLog.push({ type: 'PLAY_RESPONSE', cardId })
+    pushLog(newState, playerId, `${state.players[playerId].name} respondió con "${card.name}"`, 'card', [])
 
     return { success: true, newState }
 }
@@ -671,6 +732,7 @@ export function applyPassResponse(state: GameState, playerId: PlayerId): ActionR
     }
     const newState = cloneState(state)
     newState.pendingResponse = null
+    pushLog(newState, playerId, `${state.players[playerId].name} pasó la respuesta`, 'card', [])
     return { success: true, newState }
 }
 

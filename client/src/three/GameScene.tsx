@@ -8,22 +8,26 @@ import { hexKey } from '../game/hexGrid'
 
 interface GameSceneProps {
   gameState: GameState
+  myPlayerId: 'player1' | 'player2' | null
   selectedUnitId: string | null
   reachableHexes: Set<string>
   attackableHexes: Set<string>
   onHexClick: (key: string) => void
   onUnitClick: (unitId: string) => void
   onTokenHover?: (info: string | null) => void
+  logHighlightedHexes?: Set<string>
 }
 
 export function GameScene({
   gameState,
+  myPlayerId,
   selectedUnitId,
   reachableHexes,
   attackableHexes,
   onHexClick,
   onUnitClick,
   onTokenHover,
+  logHighlightedHexes,
 }: GameSceneProps) {
   const selectedUnit = selectedUnitId ? gameState.units[selectedUnitId] : null
   const selectedHexKey = selectedUnit?.position ? hexKey(selectedUnit.position) : null
@@ -47,11 +51,13 @@ export function GameScene({
       <Suspense fallback={null}>
         <GameBoard
           board={gameState.board}
+          myPlayerId={myPlayerId}
           selectedHex={selectedHexKey}
           reachableHexes={reachableHexes}
           attackableHexes={attackableHexes}
           onHexClick={onHexClick}
           onTokenHover={onTokenHover}
+          logHighlightedHexes={logHighlightedHexes}
         />
 
         {Object.values(gameState.units).map(unit => {

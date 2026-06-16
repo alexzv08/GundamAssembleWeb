@@ -92,10 +92,11 @@ export function TimelineBar({ gameState, myPlayerId }: TimelineBarProps) {
                 justifyContent: 'center',
                 padding: '6px 8px',
                 flexShrink: 0,
+                gap: 2,
             }}>
                 <div style={{
                     fontSize: 9, color: p1Color, textTransform: 'uppercase',
-                    letterSpacing: 1, marginBottom: 4,
+                    letterSpacing: 1,
                 }}>
                     {myPlayerId === 'player1' ? '▶ ' : ''}Victory Points
                 </div>
@@ -105,11 +106,21 @@ export function TimelineBar({ gameState, myPlayerId }: TimelineBarProps) {
                     {players.player1.vp}
                 </div>
                 <div style={{
-                    fontSize: 9, color: p1Color, marginTop: 4, textTransform: 'uppercase',
+                    fontSize: 9, color: p1Color, textTransform: 'uppercase',
                     letterSpacing: 1, textAlign: 'center',
                     maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
                     {players.player1.name}
+                </div>
+                <div style={{
+                    fontSize: 9, color: '#f5c518', background: 'rgba(245,197,24,0.1)',
+                    border: '1px solid rgba(245,197,24,0.3)', borderRadius: 4,
+                    padding: '1px 6px', letterSpacing: 1, textTransform: 'uppercase',
+                }}>
+                    {gameState.phase === 'phase1' ? 'Fase 1'
+                        : gameState.phase === 'phase2' ? 'Fase 2'
+                        : gameState.phase === 'setup' ? 'Setup'
+                        : '—'}
                 </div>
             </div>
 

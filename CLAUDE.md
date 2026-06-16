@@ -223,8 +223,10 @@ React re-renderiza: GameBoard, UnitPanel, TimelineBar con el nuevo estado
 |---------|----------|
 | `createRoom(socketId, playerName)` | Genera roomId aleatorio de 6 caracteres (A-Z0-9), crea Room con status 'waiting', registra socketId→roomId. |
 | `joinRoom(roomId, socketId, playerName)` | Añade jugador 2, llama `createServerGame(p1name, p2name)` para generar el GameState inicial, status → 'playing'. |
-| `handleDisconnect(socketId, io)` | Marca el socketId como vacío, inicia timer de 5 min. Si el jugador reconecta antes, cancela el timer. Si expira, borra la sala y emite `OPPONENT_ABANDONED`. |
+| `handleDisconnect(socketId, io)` | Saca al socket de la cola de emparejamiento, marca el socketId como vacío, inicia timer de 5 min. Si el jugador reconecta antes, cancela el timer. Si expira, borra la sala y emite `OPPONENT_ABANDONED`. |
 | `reconnect(roomId, playerId, newSocketId)` | Cancela el timer de limpieza, actualiza socketId del jugador y socketToRoom. Devuelve la sala o null si no existe. |
+| `joinQueue(socketId, playerName)` | Añade al jugador a la cola de emparejamiento. Si ya hay otro esperando: crea sala, une a ambos y devuelve `{matched: true, room, p1SocketId}`. Si no: devuelve `{matched: false}`. |
+| `leaveQueue(socketId)` | Elimina al jugador de la cola de emparejamiento. Devuelve true si estaba en cola. |
 
 ### `server/src/socket/gameEvents.ts`
 
@@ -232,6 +234,8 @@ React re-renderiza: GameBoard, UnitPanel, TimelineBar con el nuevo estado
 |-----------------|---------|
 | `CREATE_ROOM` | Crea sala, emite `ROOM_CREATED` al creador |
 | `JOIN_ROOM` | Une al jugador 2, emite `SQUAD_SELECTION_STARTED` (con roomId) a ambos jugadores |
+| `FIND_MATCH` | Intenta emparejar al jugador con otro en cola. Si hay match: crea sala y emite `SQUAD_SELECTION_STARTED` a ambos. Si no: emite `MATCH_SEARCHING`. |
+| `CANCEL_MATCH` | Saca al jugador de la cola, emite `MATCH_CANCELLED`. |
 | `RECONNECT` | Restaura sesión: cancela timer, re-une socket a la sala, emite `RECONNECT_SUCCESS` con roomStatus/gameState/faction/squadSubmitted |
 | `GAME_ACTION` | Valida turno → genera dados si ATTACK o ATTACK_GARRISON → `applyAction` → `resolveObjectiveControl` → `transitionToPhase2` si procede → `checkGameOver` → emite `GAME_STATE_UPDATE` o `GAME_OVER` |
 
@@ -293,7 +297,7 @@ Sistema **offset odd-r** (pointy-top):
 - [x] Victoria: 20 VP, sin unidades activas, o control de objetivos
 - [x] resolveObjectiveControl: evalúa control de objectiveTokens tras cada acción
 - [x] transitionToPhase2: resetea el timeline cuando todos los tokens se agotan
-- [x] Multijugador WebSocket con salas (código 6 caracteres)
+- [x] Multijugador WebSocket con salas (código 6 caracteres) y emparejamiento aleatorio (cola en servidor)
 - [x] REST API carga JSON de mapas/unidades/cartas
 - [x] 3D con Three.js/R3F, STL loader (solo Tallgeese)
 - [x] UI: TimelineBar, UnitPanel, leyenda de tokens, lobby
@@ -319,7 +323,7 @@ Gundam (Amuro), Zaku II (Char), Tallgeese + 3 más
 - [ ] Animaciones 3D de movimiento (ahora teletransporte)
 - [ ] Modelos STL para todas las unidades (solo Tallgeese)
 - [ ] Chat en partida
-- [ ] Mostrar `actionLog` en UI
+- [x] Log de acciones en UI: panel desplegable bottom-right con mensajes legibles, colores por jugador y número de ronda
 - [ ] Sonidos
 
 ---
@@ -377,3 +381,41 @@ Gundam (Amuro), Zaku II (Char), Tallgeese + 3 más
 - Corregida descripción del spawn: ocurre al inicio de `applyAction` y tras cada acción
 - Eliminado falso bug "return result duplicado en actions.ts:431"
 - Añadidas reglas de changelog y marcado de TODO
+
+### 2026-06-16 — Bug fix: control de objetivos (resolveObjectiveControl)
+- **Causa raíz**: `getAdjacentKeys` en `victory.ts` usaba direcciones axiales puras `{q:±1,r:0}…` sobre un tablero en coordenadas offset. Los vecinos calculados eran incorrectos; las unidades adyacentes a un objetivo no lo capturaban.
+- **Fix**: eliminada `getAdjacentKeys`; sustituida por `getNeighbors` importada de `hexGrid.ts`, que respeta la paridad de fila (odd-r offset).
+- Archivos: `server/src/game/victory.ts`
+
+### 2026-06-16 — Bug fix: hasMoved/hasUsedPrimary se reseteaban al atacar o usar habilidad
+- **Causa raíz**: `clearSelection()` reseteaba ambas flags a `false`, y se llamaba justo antes de `setHasUsedPrimary(true)` en los handlers de ataque/habilidad. React batching ejecuta ambas en el mismo ciclo y el setter más reciente (el de `clearSelection`) ganaba, dejando la flag en `false` y permitiendo volver a actuar.
+- **Fix**: eliminados los resets de `hasMoved`/`hasUsedPrimary` de `clearSelection()` y del callback de `setSelectedUnitId`. Los resets se mueven exclusivamente al bloque de `GAME_STATE_UPDATE` que detecta cambio real de unidad activa (`prevState.activeUnitId !== newState.activeUnitId`). También se añadió reset en `PHASE_TRANSITION`.
+- Archivos: `client/src/App.tsx`
+
+### 2026-06-16 — Colores de garrison y tooltip contextual
+- Garrison del jugador 1: rojo `#ef5350`; del jugador 2: azul `#4fc3f7`.
+- Tooltip contextual: "🏠 Garrison aliada — Rescátala para +2 VP" si es propia, "🏠 Garrison enemiga — Destrúyela para +2 VP" si es del rival.
+- Para ello se propagó la prop `myPlayerId` por la cadena `App.tsx → GameScene → GameBoard → HexTile`.
+- Archivos: `client/src/three/HexTile.tsx`, `client/src/three/GameBoard.tsx`, `client/src/three/GameScene.tsx`, `client/src/App.tsx`
+
+### 2026-06-16 — Eliminación de referencias de facción de la UI
+- Las facciones (Earth Federation / Zeon) ya no se muestran en ningún sitio de la interfaz, porque las unidades son intercambiables entre facciones.
+- En la pantalla de selección de escuadra el header muestra el nombre del jugador en vez de la facción.
+- En UnitPanel se filtraron los traits `'Earth Federation'` y `'Zeon'` de la lista de rasgos mostrados.
+- En la leyenda de tokens se usan los nombres de los jugadores (`gameState.players.player1.name` / `player2.name`).
+- Archivos: `client/src/App.tsx`, `client/src/components/ui/UnitPanel.tsx`
+
+### 2026-06-16 — Log de acciones en UI
+- Nuevo campo `LogEntry { message, playerId, round }` y `log: LogEntry[]` en `GameState` (ambos lados)
+- El servidor genera mensajes legibles en cada `apply*` de `actions.ts` y `applyBurstAbility` de `effects.ts`
+- ATTACK incluye impactos, daño, crits y avisa de KO (+VP); ATTACK_GARRISON diferencia destruida/sin impactos
+- PLAY_CARD / PLAY_RESPONSE / USE_ABILITY muestran el nombre de la carta o habilidad
+- Nuevo componente `ActionLog.tsx`: panel desplegable (bottom-right), auto-scroll al último mensaje, ● de color por jugador (rojo P1, azul P2), número de ronda en cada entrada, contador de entradas cuando está cerrado
+- Archivos: `server/src/types/gameState.ts`, `client/src/types/gameState.ts`, `server/src/game/actions.ts`, `server/src/game/effects.ts`, `server/src/game/createServerGame.ts`, `client/src/game/game.test.ts`, `client/src/components/ui/ActionLog.tsx`, `client/src/App.tsx`
+
+### 2026-06-16 — Sistema de emparejamiento aleatorio (matchmaking)
+- Nueva cola en servidor: `matchmakingQueue` en `RoomManager`. Métodos `joinQueue` y `leaveQueue`.
+- Al desconectarse, el jugador sale automáticamente de la cola (`handleDisconnect` llama `leaveQueue`).
+- Nuevos eventos socket: `FIND_MATCH` (entra en cola o crea sala inmediatamente si hay otro esperando) y `CANCEL_MATCH` (sale de la cola).
+- Lobby rediseñado con 3 estados: **main** (Buscar partida · Sala privada), **private** (crear/unirse con código) y **searching** (buscando — botón Cancelar).
+- Archivos: `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `client/src/App.tsx`

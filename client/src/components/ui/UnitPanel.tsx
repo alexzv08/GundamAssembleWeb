@@ -9,6 +9,7 @@ interface UnitPanelProps {
     hasMoved: boolean
     hasUsedPrimary: boolean
     selectedWeaponIndex: number | null
+    currentTlRound?: number | null
     canRescue?: boolean
     onMove?: () => void
     onDash?: () => void
@@ -47,6 +48,7 @@ export function UnitPanel({
     hasMoved,
     hasUsedPrimary,
     selectedWeaponIndex,
+    currentTlRound,
     canRescue = false,
     onMove,
     onDash,
@@ -63,19 +65,15 @@ export function UnitPanel({
 
     return (
         <div style={{
-            position: 'absolute',
-            bottom: 16,
-            left: 16,
             width: 290,
             background: 'rgba(10,10,20,0.95)',
             border: `1px solid ${isActive ? factionColor : '#333'}`,
             borderRadius: 10,
             color: 'white',
             fontSize: 12,
-            zIndex: 15,
             overflow: 'hidden',
             boxShadow: isActive ? `0 0 12px ${factionColor}44` : 'none',
-            maxHeight: 'calc(100vh - 200px)',
+            maxHeight: 'calc(100vh - 310px)',
             overflowY: 'auto',
         }}>
 
@@ -90,17 +88,26 @@ export function UnitPanel({
                 position: 'sticky',
                 top: 0,
                 zIndex: 1,
+                background: isActive ? `${factionColor}22` : 'rgba(10,10,20,0.98)',
             }}>
                 <div>
                     <div style={{ fontWeight: 'bold', fontSize: 14, color: factionColor }}>
                         {unit.name}
                         {isActive && <span style={{ fontSize: 10, color: '#f5c518', marginLeft: 6 }}>● ACTIVA</span>}
                     </div>
-                    <div style={{ color: '#666', fontSize: 11 }}>{unit.traits.join(' · ')}</div>
+                    <div style={{ color: '#666', fontSize: 11 }}>{unit.traits.filter(t => t !== 'Earth Federation' && t !== 'Zeon').join(' · ')}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ color: '#f5c518', fontSize: 11 }}>VP {unit.vp}</div>
-                    <div style={{ color: '#aaa', fontSize: 11 }}>TL {unit.startingTl}</div>
+                    <div style={{ color: '#aaa', fontSize: 11 }}>
+                        TL {unit.startingTl}
+                        {currentTlRound != null && currentTlRound !== unit.startingTl && (
+                            <span style={{ color: '#f5c518' }}> → {currentTlRound}</span>
+                        )}
+                        {currentTlRound != null && currentTlRound === unit.startingTl && (
+                            <span style={{ color: '#666' }}> (slot {currentTlRound})</span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -154,21 +161,28 @@ export function UnitPanel({
                 {/* Acciones */}
                 {showActions && (
                     <div>
-                        <div style={{ color: '#666', fontSize: 10, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        <div style={{ color: '#666', fontSize: 10, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>
                             Acciones
                         </div>
 
-                        {/* Fila 1: Movimiento */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                            <button onClick={onMove} disabled={hasMoved} style={btn('#1565c0', undefined, hasMoved)}>
-                                🚶 Mover
+                        {/* Movimiento */}
+                        <div style={{ color: '#444', fontSize: 9, marginBottom: 3, letterSpacing: 0.5 }}>MOVIMIENTO</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                            <button
+                                onClick={onDash}
+                                disabled={hasUsedPrimary}
+                                title={hasUsedPrimary ? 'No disponible tras acción primaria' : 'Dash: hasta 2 hexes, cuesta TL. Puede hacerse antes o después de Avanzar.'}
+                                style={btn('#6a1b9a', undefined, hasUsedPrimary)}
+                            >
+                                💨 Dash ×2
                             </button>
-                            <button onClick={onDash} disabled={hasUsedPrimary} style={btn('#6a1b9a', undefined, hasUsedPrimary)}>
-                                💨 Dash
+                            <button onClick={onMove} disabled={hasMoved} style={btn('#1565c0', undefined, hasMoved)}>
+                                🚶 Avanzar
                             </button>
                         </div>
 
-                        {/* Fila 2: Acciones primarias */}
+                        {/* Acción primaria */}
+                        <div style={{ color: '#444', fontSize: 9, marginBottom: 3, letterSpacing: 0.5 }}>ACCIÓN PRIMARIA</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
                             <button onClick={onEnergize} disabled={hasUsedPrimary} style={btn('#e65100', undefined, hasUsedPrimary)}>
                                 ⚡ Energize
@@ -220,7 +234,7 @@ export function UnitPanel({
                     </div>
                 )}
 
-                {/* Armas (solo info si no es turno activo) */}
+                {/* Info de armas (no turno activo) */}
                 {!showActions && (
                     <div>
                         <div style={{ color: '#666', fontSize: 10, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -240,6 +254,9 @@ export function UnitPanel({
                                             <span style={{ color: '#aaa' }}>TL{w.tlCost}</span>
                                         </div>
                                     </div>
+                                    {w.effect && (
+                                        <div style={{ color: '#80cbc4', fontSize: 10, marginBottom: 1 }}>{w.effect}</div>
+                                    )}
                                     {w.critEffect && (
                                         <div style={{ color: '#ff7043', fontSize: 10 }}>★ {w.critEffect}</div>
                                     )}

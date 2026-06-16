@@ -18,6 +18,7 @@ export class RoomManager {
     private rooms = new Map<string, Room>()
     private socketToRoom = new Map<string, string>()
     private cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>()
+    private matchmakingQueue: { socketId: string; playerName: string }[] = []
 
     createRoom(socketId: string, playerName: string): Room {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
@@ -105,7 +106,28 @@ export class RoomManager {
         return room.players.find(p => p.socketId === socketId)?.playerId ?? null
     }
 
+    joinQueue(socketId: string, playerName: string): { matched: true; room: Room; p1SocketId: string } | { matched: false } {
+        this.matchmakingQueue = this.matchmakingQueue.filter(p => p.socketId !== socketId)
+
+        if (this.matchmakingQueue.length > 0) {
+            const opponent = this.matchmakingQueue.shift()!
+            const room = this.createRoom(opponent.socketId, opponent.playerName)
+            this.joinRoom(room.id, socketId, playerName)
+            return { matched: true, room, p1SocketId: opponent.socketId }
+        }
+
+        this.matchmakingQueue.push({ socketId, playerName })
+        return { matched: false }
+    }
+
+    leaveQueue(socketId: string): boolean {
+        const before = this.matchmakingQueue.length
+        this.matchmakingQueue = this.matchmakingQueue.filter(p => p.socketId !== socketId)
+        return this.matchmakingQueue.length < before
+    }
+
     handleDisconnect(socketId: string, io: Server) {
+        this.leaveQueue(socketId)
         const room = this.getRoomBySocket(socketId)
         if (!room) return
 
