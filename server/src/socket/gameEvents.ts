@@ -2,7 +2,7 @@ import { Server, Socket } from 'socket.io'
 import { RoomManager } from '../rooms/roomManager'
 import { applyAction } from '../game/actions'
 import { checkGameOver, transitionToPhase2, resolveObjectiveControl } from '../game/victory'
-import { getNextActivation } from '../game/timeline'
+import { getNextActivation, getCurrentRound } from '../game/timeline'
 import { reorderSlotTokens } from '../game/timeline'
 import { drawCards } from '../game/effects'
 
@@ -160,7 +160,8 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         let gameState = result.newState!
 
         // ── Transición de fase 1 → fase 2 ──────────────────────────────────────
-        if (gameState.phase === 'phase1' && !getNextActivation(gameState.timeline)) {
+        const nextRound = getCurrentRound(gameState.timeline)
+        if (gameState.phase === 'phase1' && nextRound !== null && nextRound > 10) {
             gameState = transitionToPhase2(gameState)
             // Robar 3 cartas para cada jugador al inicio de fase 2
             gameState = drawCards(gameState, 'player1', 3)

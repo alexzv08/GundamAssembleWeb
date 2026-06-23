@@ -419,3 +419,28 @@ Gundam (Amuro), Zaku II (Char), Tallgeese + 3 más
 - Nuevos eventos socket: `FIND_MATCH` (entra en cola o crea sala inmediatamente si hay otro esperando) y `CANCEL_MATCH` (sale de la cola).
 - Lobby rediseñado con 3 estados: **main** (Buscar partida · Sala privada), **private** (crear/unirse con código) y **searching** (buscando — botón Cancelar).
 - Archivos: `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `client/src/App.tsx`
+
+### 2026-06-19 — Sistema de autenticación con Supabase (Google + Discord OAuth)
+- Proveedor: Supabase (`@supabase/supabase-js` en cliente y servidor)
+- Pantalla `AuthScreen.tsx`: login con Google y Discord usando `signInWithOAuth`; redirige de vuelta al origen tras OAuth
+- Socket.io con `autoConnect: false`; el JWT de Supabase se envía en `socket.handshake.auth.token` en cada (re)conexión via callback de `auth`
+- Middleware `io.use()` en servidor valida el JWT con `supabaseAdmin.auth.getUser(token)` antes de permitir conexión; errores `AUTH_REQUIRED` / `AUTH_INVALID` / `AUTH_ERROR`
+- `onAuthStateChange`: SIGNED_IN conecta el socket y va al lobby, SIGNED_OUT desconecta y vuelve a auth, TOKEN_REFRESHED reconecta el socket
+- Nombre del jugador auto-rellenado desde `user_metadata.full_name` / `name` / email
+- Botón "Salir" en lobby llama `supabase.auth.signOut()`
+- Variables de entorno: `client/.env` (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) y `server/.env` (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+- Archivos: `client/src/lib/supabase.ts` (nuevo), `server/src/lib/supabase.ts` (nuevo), `client/src/components/ui/AuthScreen.tsx` (nuevo), `client/src/App.tsx`, `server/src/index.ts`
+
+### 2026-06-23 — Refactor de arquitectura del Timeline (20 slots continuos)
+- **Diseño corregido**: el Timeline tiene 20 slots (rounds 1–20) continuos. Fase 1 = rounds 1–10, Fase 2 = rounds 11–20. Los tokens fluyen sin reset; un token en round 9 con coste 3 va al round 12.
+- **Transición de fase**: antes se detectaba al agotar todos los tokens (`!getNextActivation`); ahora se detecta cuando el token más bajo supera round 10 (`getCurrentRound > 10 && phase === 'phase1'`). Al transicionar: otorgar VP de objetivos + robar 3 cartas por jugador + cambiar `phase = 'phase2'`. El timeline NO se resetea.
+- **Fin de partida**: cuando todos los tokens superan round 20 (se descartan), `getNextActivation()` devuelve null en fase 2 → resolución por VP.
+- **Fix**: bot de self-play entraba en bucle infinito cuando no podía hacer acción primaria (75% intentaba END_ACTIVATION que fallaba, 25% ENERGIZE). Corregido forzando siempre ENERGIZE cuando `!hasUsedPrimaryAction`.
+- **Resultados**: 100/100 partidas completan sin errores ni timeouts (avg 127 acciones), todas las 18 cartas ejercitadas.
+- Archivos: `server/src/game/timeline.ts`, `client/src/game/timeline.ts`, `server/src/game/victory.ts`, `client/src/game/victory.ts`, `server/src/socket/gameEvents.ts`, `client/src/game/game.test.ts`, `client/src/game/actions.ts`, `server/scripts/self-play.ts`, `client/src/types/timeline.ts`, `server/src/types/timeline.ts`
+
+### 2026-06-19 — Mazo de 9 cartas y visor 3D en selección de escuadra
+- `DECK_SIZE` cambiado de 10 a 9 en `client/src/App.tsx`
+- Nuevo componente `UnitCardPreview.tsx`: cada unidad se muestra con un Canvas 3D independiente (React Three Fiber) con el modelo STL rotando lentamente; fallback a esfera coloreada si no hay STL. El borde y glow usan el color del jugador (`#ef5350` P1, `#4fc3f7` P2).
+- El `maxWidth` del contenedor de selección ampliado de 760 a 1100px para acomodar las cards más anchas.
+- Archivos: `client/src/components/ui/UnitCardPreview.tsx` (nuevo), `client/src/App.tsx`

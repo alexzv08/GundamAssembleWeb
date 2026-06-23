@@ -1,7 +1,6 @@
 import { GameState, PlayerId } from '../types'
 import { hexKey, getNeighbors } from './hexGrid'
 import { getNextActivation } from './timeline'
-import { resetForPhase2 } from './timeline'
 
 // ─── RESULTADO DE FIN DE PARTIDA ─────────────────────────────────────────────
 export interface GameOverResult {
@@ -154,22 +153,16 @@ export function transitionToPhase2(state: GameState): GameState {
     // 1. Otorgar VP de objetivos de la fase 1
     const { newState: stateWithVP } = awardObjectiveVP(state)
 
-    // 2. Resetear timeline con los startingTl de cada unidad viva
-    const unitsForReset = Object.values(stateWithVP.units)
-        .filter(u => u.currentHp > 0)
-        .map(u => ({
-            unitId: u.id,
-            playerId: u.playerId,
-            startingTl: u.startingTl,
-        }))
-
-    const newTimeline = resetForPhase2(stateWithVP.timeline, unitsForReset)
+    // 2. El timeline fluye continuo — los tokens ya están en rounds 11-20
+    const firstToken = getNextActivation(stateWithVP.timeline)
 
     return {
         ...stateWithVP,
         phase: 'phase2',
-        timeline: newTimeline,
         roundNumber: 1,
+        activeUnitId: firstToken?.unitId ?? null,
+        activePlayerId: firstToken?.playerId ?? stateWithVP.activePlayerId,
+        hasUsedPrimaryAction: false,
     }
 }
 

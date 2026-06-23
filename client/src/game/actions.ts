@@ -1,6 +1,5 @@
 import type { GameState, GameAction, PlayerId } from '../types'
 import type { AbilityEffect } from '../types/units'
-import type { PendingResponse } from '../types/tactics'
 import { hexKey, hexDistance, findPath, checkLineOfSight, gridDistance, getNeighbors } from './hexGrid'
 import { advanceToken, getNextActivation } from './timeline'
 

@@ -3,7 +3,7 @@ import type { Timeline, TimelineSlot, TimelineToken, PlayerId } from '../types'
 // ─── CREAR TIMELINE VACÍO ─────────────────────────────────────────────────────
 export function createEmptyTimeline(): Timeline {
     const slots: TimelineSlot[] = []
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 20; i++) {
         slots.push({ round: i, tokens: [] })
     }
     return { slots, currentRound: 1 }
@@ -48,7 +48,8 @@ export function getCurrentRound(timeline: Timeline): number | null {
 // Cuando una unidad usa Attack / Dash / Energize / Rescue,
 // su token avanza tlCost posiciones en el Timeline.
 // Si el slot destino ya tiene tokens, el nuevo va DEBAJO de los existentes.
-// Si pasa de round 10 → se descarta (la unidad no activa más esta fase)
+// Si pasa de round 20 → se descarta (la unidad no activa más en toda la partida)
+// Rounds 1–10 = Fase 1, rounds 11–20 = Fase 2 (flujo continuo, sin reset)
 export function advanceToken(
     timeline: Timeline,
     unitId: string,
@@ -81,8 +82,8 @@ export function advanceToken(
         }
     })
 
-    // 3. Si newRound > 10, el token sale del tablero esta fase
-    if (newRound > 10) {
+    // 3. Si newRound > 20, el token se descarta definitivamente
+    if (newRound > 20) {
         return { ...timeline, slots }
     }
 

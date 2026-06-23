@@ -65,9 +65,9 @@ describe('pathfinding', () => {
 
 // ─── TIMELINE ─────────────────────────────────────────────────────────────────
 describe('createEmptyTimeline', () => {
-  it('crea 10 slots vacíos', () => {
+  it('crea 20 slots vacíos', () => {
     const tl = createEmptyTimeline()
-    expect(tl.slots).toHaveLength(10)
+    expect(tl.slots).toHaveLength(20)
     expect(tl.slots.every(s => s.tokens.length === 0)).toBe(true)
   })
 })
@@ -107,9 +107,15 @@ describe('advanceToken', () => {
     tl = advanceToken(tl, 'rx78', 3)
     expect(getUnitRound(tl, 'rx78')).toBe(5)
   })
-  it('elimina el token si supera round 10', () => {
+  it('token en round 9 con coste 3 avanza a round 12 (fase 2)', () => {
     let tl = createEmptyTimeline()
     tl = placeInitialToken(tl, { unitId: 'rx78', playerId: 'player1' }, 9)
+    tl = advanceToken(tl, 'rx78', 3)
+    expect(getUnitRound(tl, 'rx78')).toBe(12)
+  })
+  it('elimina el token si supera round 20', () => {
+    let tl = createEmptyTimeline()
+    tl = placeInitialToken(tl, { unitId: 'rx78', playerId: 'player1' }, 18)
     tl = advanceToken(tl, 'rx78', 3)
     expect(getUnitRound(tl, 'rx78')).toBeNull()
   })
@@ -118,8 +124,8 @@ describe('advanceToken', () => {
 describe('resetForPhase2', () => {
   it('recoloca todos los tokens desde cero', () => {
     let tl = createEmptyTimeline()
-    tl = placeInitialToken(tl, { unitId: 'rx78', playerId: 'player1' }, 9)
-    tl = advanceToken(tl, 'rx78', 3)  // sale del timeline
+    tl = placeInitialToken(tl, { unitId: 'rx78', playerId: 'player1' }, 18)
+    tl = advanceToken(tl, 'rx78', 3)  // 18+3=21 → sale del timeline
     tl = resetForPhase2(tl, [{ unitId: 'rx78', playerId: 'player1', startingTl: 2 }])
     expect(getUnitRound(tl, 'rx78')).toBe(2)
   })
@@ -574,11 +580,12 @@ describe('transitionToPhase2', () => {
     expect(newState.phase).toBe('phase2')
   })
 
-  it('resetea el timeline', () => {
+  it('preserva los tokens del timeline sin resetear', () => {
     const state = makeGameState()
+    // El timeline fluye continuo — los tokens se mantienen donde están
     const newState = transitionToPhase2(state)
-    // rx78 tiene startingTl=2, debe volver al round 2
     expect(getUnitRound(newState.timeline, 'rx78')).toBe(2)
+    expect(getUnitRound(newState.timeline, 'zaku2')).toBe(4)
   })
 })
 

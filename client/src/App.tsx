@@ -10,10 +10,23 @@ import { TimelineBar } from './components/ui/TimelineBar'
 import { TacticsHand } from './components/ui/TacticsHand'
 import { useToasts, ToastContainer } from './components/ui/Toast'
 import { ActionLog } from './components/ui/ActionLog'
+import { UnitCardPreview } from './components/ui/UnitCardPreview'
+import { AuthScreen } from './components/ui/AuthScreen'
+import { ProfileModal } from './components/ui/ProfileModal'
+import { UsernameSetupModal } from './components/ui/UsernameSetupModal'
+import { supabase } from './lib/supabase'
+import type { User } from '@supabase/supabase-js'
 
 const HAND_STRIP_H = 140
 
-const socket: Socket = io('http://localhost:3001')
+const socket: Socket = io('http://localhost:3001', {
+  autoConnect: false,
+  auth: (cb: (data: { token: string | null }) => void) => {
+    supabase.auth.getSession().then(({ data }) => {
+      cb({ token: data.session?.access_token ?? null })
+    })
+  },
+})
 
 function inferHasMoved(actionLog: GameState['actionLog'], activeUnitId: string | null): boolean {
   if (!activeUnitId) return false
@@ -26,12 +39,15 @@ function inferHasMoved(actionLog: GameState['actionLog'], activeUnitId: string |
 }
 
 type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'playing_card'
-type AppScreen = 'lobby' | 'waiting' | 'squad_selection' | 'setup' | 'playing'
+type AppScreen = 'auth' | 'lobby' | 'waiting' | 'squad_selection' | 'setup' | 'playing'
 
 export default function App() {
   const gameData = useGameData()
 
-  const [screen, setScreen] = useState<AppScreen>('lobby')
+  const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<{ username: string; avatar_url: string | null } | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [screen, setScreen] = useState<AppScreen>('auth')
   const [playerName, setPlayerName] = useState('')
   const [roomId, setRoomId] = useState('')
   const [roomInput, setRoomInput] = useState('')
@@ -53,7 +69,7 @@ export default function App() {
   const [pendingCardId, setPendingCardId] = useState<string | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
   const [logHoveredHexes, setLogHoveredHexes] = useState<Set<string>>(new Set())
-  const [squadFaction, setSquadFaction] = useState<string>('Earth Federation')
+  const [, setSquadFaction] = useState<string>('Earth Federation')
   const [selectedSquad, setSelectedSquad] = useState<string[]>([])
   const [selectedDeck, setSelectedDeck] = useState<string[]>([])
   const [squadStep, setSquadStep] = useState<'units' | 'deck'>('units')
@@ -61,6 +77,9 @@ export default function App() {
   const [setupConfirmed, setSetupConfirmed] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [lobbyMode, setLobbyMode] = useState<'main' | 'private'>('main')
+  const [showProfile, setShowProfile] = useState(false)
+  const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false)
+  const [usernameSuggestion, setUsernameSuggestion] = useState('')
 
   const gameStateRef = useRef<GameState | null>(null)
   const lastActionRef = useRef<'moving' | 'dashing' | null>(null)
@@ -80,6 +99,73 @@ export default function App() {
     lastActionRef.current = null
   }, [])
 
+  // ─── AUTH ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    async function applySession(u: User) {
+      setUser(u)
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('id', u.id)
+        .single()
+      if (prof) {
+        setProfile(prof)
+        setPlayerName(prof.username)
+        // Auto-generated fallback username — ask the user to pick a real one
+        if (/^player_[0-9a-f]{8}$/.test(prof.username)) {
+          const meta = u.user_metadata
+          const suggestion = (
+            (meta?.full_name as string) ||
+            (meta?.name as string) ||
+            (meta?.user_name as string) ||
+            ''
+          ).trim().slice(0, 32)
+          setUsernameSuggestion(suggestion)
+          setNeedsUsernameSetup(true)
+        }
+      } else {
+        // Profile not created yet (schema not applied) — show setup with provider name
+        const meta = u.user_metadata
+        const suggestion = (
+          (meta?.full_name as string) ||
+          (meta?.name as string) ||
+          (meta?.user_name as string) ||
+          ''
+        ).trim().slice(0, 32)
+        setUsernameSuggestion(suggestion)
+        setNeedsUsernameSetup(true)
+        setPlayerName(suggestion || 'Piloto')
+      }
+    }
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await applySession(session.user)
+        socket.connect()
+        setScreen('lobby')
+      }
+      setAuthLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        await applySession(session.user)
+        if (!socket.connected) socket.connect()
+        setScreen('lobby')
+        setAuthLoading(false)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        socket.disconnect()
+        setScreen('auth')
+      } else if (event === 'TOKEN_REFRESHED' && socket.connected) {
+        socket.disconnect()
+        socket.connect()
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   // ─── SOCKET EVENTS ────────────────────────────────────────────────────────
   useEffect(() => {
     socket.on('connect', () => {
@@ -95,6 +181,12 @@ export default function App() {
       }
     })
     socket.on('disconnect', () => setConnected(false))
+    socket.on('connect_error', (err) => {
+      if (['AUTH_REQUIRED', 'AUTH_INVALID', 'AUTH_ERROR'].includes(err.message)) {
+        setUser(null)
+        setScreen('auth')
+      }
+    })
 
     socket.on('ROOM_CREATED', ({ roomId, playerId }: { roomId: string; playerId: 'player1' | 'player2' }) => {
       setRoomId(roomId)
@@ -648,6 +740,34 @@ export default function App() {
     }
   }, [selectedUnitId, gameState, myPlayerId])
 
+  // ─── AUTH ─────────────────────────────────────────────────────────────────
+  if (authLoading) return (
+    <div style={{
+      width: '100vw', height: '100vh', background: '#0d0d1a',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 18, color: '#4fc3f7', marginBottom: 8 }}>GUNDAM ASSEMBLE</div>
+        <div style={{ color: '#666' }}>Verificando sesión...</div>
+      </div>
+    </div>
+  )
+
+  if (screen === 'auth' || !user) return <AuthScreen />
+
+  if (needsUsernameSetup) return (
+    <UsernameSetupModal
+      user={user}
+      suggestion={usernameSuggestion}
+      onDone={username => {
+        const p = { username, avatar_url: profile?.avatar_url ?? null }
+        setProfile(p)
+        setPlayerName(username)
+        setNeedsUsernameSetup(false)
+      }}
+    />
+  )
+
   // ─── LOADING ──────────────────────────────────────────────────────────────
   if (!gameData.loaded) return (
     <div style={{
@@ -683,14 +803,51 @@ export default function App() {
           background: '#1a1a2e', border: '1px solid #333', borderRadius: 14,
           padding: '36px 44px', width: 380, color: 'white',
         }}>
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ textAlign: 'center', marginBottom: 28, position: 'relative' }}>
+            {/* Hamburger menu */}
+            {user && (
+              <button
+                onClick={() => setShowProfile(true)}
+                title="Perfil"
+                style={{
+                  position: 'absolute', top: 0, right: 0,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', gap: 4, padding: 4,
+                }}
+              >
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{ display: 'block', width: 18, height: 2, background: '#555', borderRadius: 1 }} />
+                ))}
+              </button>
+            )}
+
             <div style={{ fontSize: 26, fontWeight: 'bold', color: '#4fc3f7', letterSpacing: 2 }}>
               GUNDAM ASSEMBLE
             </div>
             <div style={{ fontSize: 12, color: connected ? '#4caf50' : '#ef5350', marginTop: 6 }}>
               {connected ? '● Conectado' : '● Desconectado'}
             </div>
+            {user && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+                {profile?.avatar_url && (
+                  <img src={profile.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: '50%' }} />
+                )}
+                <span style={{ fontSize: 11, color: '#666' }}>{profile?.username ?? user.email}</span>
+              </div>
+            )}
           </div>
+
+          {showProfile && user && (
+            <ProfileModal
+              user={user}
+              profile={profile}
+              onClose={() => setShowProfile(false)}
+              onProfileUpdated={p => {
+                setProfile(p)
+                setPlayerName(p.username)
+              }}
+            />
+          )}
 
           {/* Nombre */}
           <input
@@ -854,7 +1011,7 @@ export default function App() {
     const availableUnitCards = gameData.allUnitCards
     const availableTacticsCards = gameData.allTacticsCards
     const MAX_SQUAD = 3
-    const DECK_SIZE = 10
+    const DECK_SIZE = 9
     const canGoToDeck = selectedSquad.length === MAX_SQUAD
     const canConfirm = selectedDeck.length === DECK_SIZE && !squadSubmitted
 
@@ -865,7 +1022,7 @@ export default function App() {
       }}>
         <div style={{
           background: '#1a1a2e', border: '1px solid #333', borderRadius: 12,
-          padding: '32px 40px', maxWidth: 760, width: '100%', color: 'white',
+          padding: '32px 40px', maxWidth: 1100, width: '100%', color: 'white',
         }}>
           {/* Cabecera con pasos */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
@@ -903,36 +1060,22 @@ export default function App() {
           {/* PASO 1: Unidades */}
           {squadStep === 'units' && (
             <>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 24 }}>
                 {availableUnitCards.map(card => {
                   const isSelected = selectedSquad.includes(card.cardId)
                   const canSelect = !isSelected && selectedSquad.length < MAX_SQUAD
                   return (
-                    <div
+                    <UnitCardPreview
                       key={card.cardId}
+                      card={card}
+                      isSelected={isSelected}
+                      canSelect={canSelect}
+                      playerColor={myPlayerId === 'player1' ? '#ef5350' : '#4fc3f7'}
                       onClick={() => {
                         if (isSelected) setSelectedSquad(prev => prev.filter(id => id !== card.cardId))
                         else if (canSelect) setSelectedSquad(prev => [...prev, card.cardId])
                       }}
-                      style={{
-                        border: `2px solid ${isSelected ? '#4fc3f7' : '#333'}`,
-                        borderRadius: 8, padding: '12px 16px',
-                        cursor: isSelected || canSelect ? 'pointer' : 'not-allowed',
-                        background: isSelected ? 'rgba(79,195,247,0.1)' : '#0d0d1a',
-                        opacity: (!isSelected && !canSelect) ? 0.4 : 1,
-                        minWidth: 140,
-                      }}
-                    >
-                      <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{card.unitName}</div>
-                      {card.pilot && card.pilot !== card.unitName && (
-                        <div style={{ color: '#888', fontSize: 11, marginBottom: 4 }}>{card.pilot}</div>
-                      )}
-                      <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#aaa', marginTop: 4 }}>
-                        <span>HP {card.hp}</span>
-                        <span>VP {card.vp}</span>
-                        <span>TL {card.tl}</span>
-                      </div>
-                    </div>
+                    />
                   )
                 })}
               </div>
