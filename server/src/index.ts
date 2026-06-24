@@ -13,11 +13,15 @@ import { supabaseAdmin } from './lib/supabase'
 
 const app = express()
 const http = createServer(app)
+const ALLOWED_ORIGINS = process.env.CLIENT_URL
+    ? [process.env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5174']
+    : ['http://localhost:5173', 'http://localhost:5174']
+
 const io = new Server(http, {
-    cors: { origin: ['http://localhost:5173', 'http://localhost:5174'], methods: ['GET', 'POST'] }
+    cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] }
 })
 
-app.use(cors())
+app.use(cors({ origin: ALLOWED_ORIGINS }))
 app.use(express.json())
 
 // Rutas API
@@ -52,4 +56,5 @@ io.on('connection', socket => {
     })
 })
 
-http.listen(3001, () => console.log('Servidor en http://localhost:3001'))
+const PORT = process.env.PORT ?? 3001
+http.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`))

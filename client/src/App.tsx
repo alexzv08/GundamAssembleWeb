@@ -19,7 +19,7 @@ import type { User } from '@supabase/supabase-js'
 
 const HAND_STRIP_H = 140
 
-const socket: Socket = io('http://localhost:3001', {
+const socket: Socket = io(import.meta.env.VITE_SERVER_URL as string, {
   autoConnect: false,
   auth: (cb: (data: { token: string | null }) => void) => {
     supabase.auth.getSession().then(({ data }) => {
