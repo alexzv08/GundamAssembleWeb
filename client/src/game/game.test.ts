@@ -184,8 +184,8 @@ function makeGameState(): GameState {
     units: { rx78, zaku2 },
     timeline,
     players: {
-      player1: { id: 'player1', name: 'P1', vp: 0, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false }, squadUnitIds: ['rx78'] },
-      player2: { id: 'player2', name: 'P2', vp: 0, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false }, squadUnitIds: ['zaku2'] },
+      player1: { id: 'player1', name: 'P1', vp: 0, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false }, squadUnitIds: ['rx78'], deployHex: { q: -2, r: 0 } },
+      player2: { id: 'player2', name: 'P2', vp: 0, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false }, squadUnitIds: ['zaku2'], deployHex: { q: 2, r: 0 } },
     },
     actionLog: [],
     log: [],
