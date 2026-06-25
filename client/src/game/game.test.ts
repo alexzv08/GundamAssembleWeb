@@ -544,7 +544,7 @@ describe('resolveObjectiveControl', () => {
       coord: { q: 1, r: 0 }, terrain: 'normal', elevation: 0,
       occupiedBy: null,
       upgradeToken: null, garrisonToken: null,
-      objectiveToken: { id: 'obj1', vpValue: 2, controlledBy: null }
+      objectiveToken: { id: 'obj1', vpValue: 2, controlledBy: null }, deployZone: null,
     }
 
     // rx78 está en (0,0) — adyacente a (1,0)
@@ -563,7 +563,7 @@ describe('resolveObjectiveControl', () => {
       coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
       occupiedBy: null,
       upgradeToken: null, garrisonToken: null,
-      objectiveToken: { id: 'obj2', vpValue: 3, controlledBy: null }
+      objectiveToken: { id: 'obj2', vpValue: 3, controlledBy: null }, deployZone: null,
     }
 
     // rx78 en (0,0) → adyacente a (0,1) ✓
@@ -596,7 +596,7 @@ describe('awardObjectiveVP', () => {
     state.board['0,1'] = {
       coord: { q: 0, r: 1 }, terrain: 'normal', elevation: 0,
       occupiedBy: null, upgradeToken: null, garrisonToken: null,
-      objectiveToken: { id: 'obj1', vpValue: 3, controlledBy: 'player1' }
+      objectiveToken: { id: 'obj1', vpValue: 3, controlledBy: 'player1' }, deployZone: null,
     }
 
     const { newState, vpAwarded } = awardObjectiveVP(state)

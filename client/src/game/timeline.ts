@@ -161,7 +161,7 @@ export function reorderSlotForTie(
 // Las unidades que no llegaron a actuar en la fase no tienen token.
 // En la Fase 2, las unidades colocan sus tokens según su startingTl de nuevo.
 export function resetForPhase2(
-    timeline: Timeline,
+    _timeline: Timeline,
     units: { unitId: string; playerId: PlayerId; startingTl: number }[]
 ): Timeline {
     // Crear timeline limpio

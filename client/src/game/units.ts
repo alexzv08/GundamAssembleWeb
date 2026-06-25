@@ -1,5 +1,5 @@
-import { Unit } from '../types'
-import { HexCoord } from '../types'
+import type { Unit } from '../types'
+import type { HexCoord } from '../types'
 
 // ─── DEFINICIONES DE UNIDADES ─────────────────────────────────────────────────
 // Estas son las unidades base — se clonan al crear una partida

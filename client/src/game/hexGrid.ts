@@ -132,7 +132,7 @@ export function checkLineOfSight(
   attackerCoord: HexCoord,
   targetCoord: HexCoord,
   board: BoardMap,
-  attackerPlayerId: 'player1' | 'player2',
+  _attackerPlayerId: 'player1' | 'player2',
   enemyUnitPositions: Set<string>
 ): LOSResult {
   if (hexDistance(attackerCoord, targetCoord) <= 1) return { clear: true }

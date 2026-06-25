@@ -23,6 +23,7 @@ export function loadMapFromJSON(mapData: MapData): BoardMap {
                 upgradeToken: null,
                 garrisonToken: null,
                 objectiveToken: null,
+                deployZone: null,
             }
         }
     }
@@ -39,13 +40,13 @@ export function loadMapFromJSON(mapData: MapData): BoardMap {
         scenario.garrisons?.forEach((gar) => {
             const coord = offsetToAxial(gar.col, gar.row)
             const key = hexKey(coord)
-            if (board[key]) board[key].garrisonToken = { id: gar.id, owner: gar.owner ?? 'neutral', hp: gar.hp ?? 0 }
+            if (board[key]) board[key].garrisonToken = { id: gar.id, owner: (gar.owner ?? 'neutral') as 'player1' | 'player2' | 'neutral', hp: gar.hp ?? 0 }
         })
 
         scenario.upgrades?.forEach((upg) => {
             const coord = offsetToAxial(upg.col, upg.row)
             const key = hexKey(coord)
-            if (board[key]) board[key].upgradeToken = { type: upg.type ?? 'attack', value: upg.value ?? 1, revealed: false }
+            if (board[key]) board[key].upgradeToken = { type: (upg.type ?? 'attack') as 'attack' | 'shield' | 'movement' | 'energy', value: upg.value ?? 1, revealed: false }
         })
     }
 
