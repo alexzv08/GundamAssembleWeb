@@ -6,7 +6,7 @@ import {
   createEmptyTimeline, placeInitialToken, getNextActivation,
   advanceToken, getUnitRound, resetForPhase2, reorderSlotForTie
 } from './timeline'
-import { BoardMap } from '../types'
+import type { BoardMap } from '../types'
 import {
   checkGameOver, resolveObjectiveControl,
   transitionToPhase2, awardObjectiveVP
@@ -21,7 +21,7 @@ function makeBoard(): BoardMap {
       board[key] = {
         coord: { q, r }, terrain: 'normal', elevation: 0,
         occupiedBy: null, upgradeToken: null,
-        garrisonToken: null, objectiveToken: null,
+        garrisonToken: null, objectiveToken: null, deployZone: null,
       }
     }
   }
@@ -145,7 +145,7 @@ describe('resolveInitiativeTie', () => {
 
 // ─── IMPORTS ADICIONALES (añade al principio del archivo) ─────────────────────
 import { applyAdvance, applyAttack, applyEnergize, applyDash, applyUseAbility, applyPlayCard, applyAttackGarrison, applyPlayResponse, applyPassResponse } from './actions'
-import { GameState, Unit } from '../types'
+import type { GameState, Unit } from '../types'
 
 // ─── ESTADO DE PRUEBA ─────────────────────────────────────────────────────────
 function makeUnit(id: string, playerId: 'player1' | 'player2', q: number, r: number): Unit {

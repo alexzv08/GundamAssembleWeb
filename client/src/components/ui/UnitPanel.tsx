@@ -80,7 +80,6 @@ export function UnitPanel({
             {/* Cabecera */}
             <div style={{
                 padding: '8px 12px',
-                background: isActive ? `${factionColor}22` : 'rgba(255,255,255,0.04)',
                 borderBottom: '1px solid #222',
                 display: 'flex',
                 justifyContent: 'space-between',

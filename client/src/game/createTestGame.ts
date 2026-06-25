@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { BoardMap, Unit } from '../types'
-import { fetchMap, fetchUnits, UnitCardData } from '../api/gameData'
+import { fetchMap, fetchUnits } from '../api/gameData'
+import type { UnitCardData } from '../api/gameData'
 import { loadMapFromJSON, loadUnitFromJSON } from './loaders'
 import { offsetToAxial } from './hexGrid'
 
