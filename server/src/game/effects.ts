@@ -1,7 +1,7 @@
 import { GameState, PlayerId, LogCategory } from '../types'
 import { WeaponEffect, AbilityEffect } from '../types/units'
 import { CardEffect, PendingResponse } from '../types/tactics'
-import { hexKey, getNeighbors, gridDistance } from './hexGrid'
+import { hexKey, getNeighbors, gridDistance, findPath } from './hexGrid'
 import { advanceToken, getCurrentRound } from './timeline'
 
 // ─── ATTACK CONTEXT ───────────────────────────────────────────────────────────
@@ -448,6 +448,60 @@ export function applyCardEffect(
                     if (gridDistance(unit.position, hex.coord) <= 1) {
                         newState.board[key].objectiveToken = { ...hex.objectiveToken, controlledBy: playerId }
                     }
+                }
+            }
+            break
+        }
+
+        case 'move_and_push': {
+            if (!targetId) return { success: false, error: 'Elige un enemigo para empujar' }
+            const target = newState.units[targetId]
+            if (!target || target.playerId === playerId) return { success: false, error: 'Objetivo inválido' }
+            if (!unit.position || !target.position) return { success: false, error: 'Unidades fuera del tablero' }
+
+            // Move unit up to 2 hexes toward target (excluding target's own hex)
+            const moveRange = effect.range ?? 2
+            const obstacles = new Set<string>(
+                Object.values(newState.units)
+                    .filter(u => u.id !== unitId && u.position && u.currentHp > 0)
+                    .map(u => hexKey(u.position!))
+            )
+            const path = findPath(unit.position, target.position, newState.board, obstacles, moveRange + 1)
+            if (path && path.length >= 2) {
+                const steps = Math.min(moveRange, path.length - 2) // stop before target's hex
+                if (steps > 0) {
+                    const dest = path[steps]
+                    newState.board[hexKey(unit.position)].occupiedBy = null
+                    newState.board[hexKey(dest)].occupiedBy = unitId
+                    newState.units[unitId].position = dest
+                    unit.position = dest
+                }
+            }
+
+            // Push target 1 hex away from unit (only if adjacent)
+            if (gridDistance(unit.position, target.position) <= 1) {
+                let maxDist = -1
+                let pushDest: { q: number; r: number } | null = null
+                for (const n of getNeighbors(target.position)) {
+                    const key = hexKey(n)
+                    if (!newState.board[key] || newState.board[key].occupiedBy) continue
+                    const dist = gridDistance(unit.position, n)
+                    if (dist > maxDist) { maxDist = dist; pushDest = n }
+                }
+                if (pushDest) {
+                    newState.board[hexKey(target.position)].occupiedBy = null
+                    newState.board[hexKey(pushDest)].occupiedBy = targetId
+                    newState.units[targetId].position = pushDest
+                    target.position = pushDest
+                }
+                // Deal 1 damage
+                const dmg = effect.amount ?? 1
+                target.currentHp = Math.max(0, target.currentHp - dmg)
+                if (target.currentHp <= 0) {
+                    newState.players[playerId].vp += target.vp
+                    if (target.position) newState.board[hexKey(target.position)].occupiedBy = null
+                    target.position = null
+                    target.currentHp = target.maxHp
                 }
             }
             break
