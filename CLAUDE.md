@@ -439,6 +439,32 @@ Gundam (Amuro), Zaku II (Char), Tallgeese + 3 más
 - **Resultados**: 100/100 partidas completan sin errores ni timeouts (avg 127 acciones), todas las 18 cartas ejercitadas.
 - Archivos: `server/src/game/timeline.ts`, `client/src/game/timeline.ts`, `server/src/game/victory.ts`, `client/src/game/victory.ts`, `server/src/socket/gameEvents.ts`, `client/src/game/game.test.ts`, `client/src/game/actions.ts`, `server/scripts/self-play.ts`, `client/src/types/timeline.ts`, `server/src/types/timeline.ts`
 
+### 2026-07-01 — Experimental: TimelineBar rediseñada (3 carriles + fase única)
+- `experimental/TimelineBar.tsx`: ahora muestra solo la fase activa (Fase 1 o Fase 2), no ambas a la vez. El cambio ocurre cuando `gameState.phase` pasa a `'phase2'`.
+- Layout cambiado de columnas verticales a **3 filas horizontales**: carril J1 (arriba) · números de turno T1–T10 (centro) · carril J2 (abajo). Mismo esquema visual que el diseño dc.html pero con los colores del tema (cyan J1, rojo J2, fondo oscuro, IBM Plex Mono).
+- Tokens apilables con hover: cuando varios tokens coinciden en un slot se superponen con `margin-left` negativo; al pasar el ratón se separan suavemente (transición CSS de 200 ms).
+- Columna activa resaltada con fondo sutil cyan en las 3 filas y número en blanco con glow.
+- Tablero 3D añadido al `GameScreenPreview`: carga el board real vía `useGameData()` + `GameScene` (requiere servidor en :3001). Mientras carga muestra mensaje de espera.
+- Archivos: `client/src/components/experimental/TimelineBar.tsx`, `client/src/components/experimental/GameScreenPreview.tsx`
+
+### 2026-06-30 — Carpeta experimental de rediseño UI (sin efecto en producción)
+- Creada carpeta `client/src/components/experimental/` con versiones rediseñadas de los 5 componentes principales de la pantalla de partida. Ninguno se importa en producción todavía.
+- Fuentes añadidas a `client/index.html`: Chakra Petch, IBM Plex Sans, IBM Plex Mono (Google Fonts).
+- Tema visual basado en diseño dc.html: fondo oscuro azul marino, tokens cyan (J1) / rojo (J2), tipografía Chakra Petch para cabeceras, IBM Plex Mono para datos numéricos.
+- Componentes creados (mismas props que los originales de `ui/`, son drop-in replacements):
+  - `UnitPanel.tsx` — panel de unidad activa rediseñado
+  - `TimelineBar.tsx` — barra con Fase 1 y Fase 2 separadas + tarjetas VP integradas
+  - `ObjectivesPanel.tsx` — panel de objetivos
+  - `LegendPanel.tsx` — leyenda de tokens
+  - `ActionLog.tsx` — log + chat togglable (bottom-left)
+- `GameScreenPreview.tsx` — pantalla de preview con mock data; acceso via `localhost:5173?preview`
+- El preview se activa en `App.tsx` con un bloque `if (DEV && ?preview)` fácil de localizar y borrar.
+
+**Para quitar el preview por completo:**
+1. En `App.tsx`: borrar el `import { GameScreenPreview }` (línea ~26) y el bloque `// PREVIEW MODE` (línea ~654).
+2. Borrar `client/src/components/experimental/` si ya no se necesita.
+3. Las fuentes en `index.html` pueden quedarse (no afectan nada).
+
 ### 2026-06-19 — Mazo de 9 cartas y visor 3D en selección de escuadra
 - `DECK_SIZE` cambiado de 10 a 9 en `client/src/App.tsx`
 - Nuevo componente `UnitCardPreview.tsx`: cada unidad se muestra con un Canvas 3D independiente (React Three Fiber) con el modelo STL rotando lentamente; fallback a esfera coloreada si no hay STL. El borde y glow usan el color del jugador (`#ef5350` P1, `#4fc3f7` P2).

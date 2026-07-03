@@ -23,6 +23,7 @@ import { SquadSelectionScreen } from './screens/SquadSelectionScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { supabase } from './lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import { GameScreenPreview } from './components/experimental/GameScreenPreview'
 
 const HAND_STRIP_H = 140
 
@@ -649,6 +650,14 @@ export default function App() {
       }
     }
   }, [selectedUnitId, gameState, myPlayerId])
+
+  // ─── PREVIEW MODE (dev only) ─────────────────────────────────────────────
+  // Acceso: localhost:5173?preview  (solo funciona en desarrollo, nunca en prod)
+  // Para quitar: elimina este bloque + la línea de import de GameScreenPreview arriba
+  if (import.meta.env.DEV && location.search.includes('preview')) {
+    return <GameScreenPreview />
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // ─── PANTALLAS PREVIAS ────────────────────────────────────────────────────
   if (authLoading) return (
