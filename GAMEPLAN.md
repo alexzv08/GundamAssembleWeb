@@ -7,6 +7,10 @@ Fuentes oficiales:
 - Reglamento: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/rules/
 - Q&A: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/qa/
 - Unidades: https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/
+- Cartas de Tactics: https://global.bandai-hobby.net/en-us/site/gundam-assemble/tacticscard/ (pendiente de volcar)
+- Otras cartas: https://global.bandai-hobby.net/en-us/site/gundam-assemble/othercard/ (pendiente de volcar)
+- Escenarios y material extra: https://global.bandai-hobby.net/en-us/site/gundam-assemble/data/enrich-gameplay/ (pendiente de volcar)
+- Guía de juego organizado (06/11/2026): escuadra de exactamente 3 Mobile Suits + 9 cartas de Tactics en las partidas normales ✅
 
 ---
 
@@ -57,7 +61,7 @@ Fuentes oficiales:
 
 ## 5. Combate
 
-- ✅ Línea de visión oficial (terreno más alto que ambos; enemigos a la misma elevación; distinta elevación; los aliados no bloquean; la línea que pasa entre dos hexes la elige el atacante)
+- ✅ Línea de visión oficial (terreno más alto que ambos; enemigos a la misma elevación; distinta elevación; los aliados no bloquean; si la línea pasa justo entre dos hexes, el atacante elige en cada punto por separado — Q&A 3)
 - ✅ d10; Accuracy modifica el valor del dado salvo 1 (fallo) y 9-10 (crítico); impacta con 4+
 - ✅ Elevación ±1 Accuracy
 - ✅ Dados = Strength del arma + Strength Upgrades + modificadores (antes los dados extra se perdían)
@@ -70,7 +74,8 @@ Fuentes oficiales:
 - ✅ Ataques que también alcanzan a los adyacentes al objetivo (una sola tirada)
 - ✅ Derrota: VP al rival, Reserva, +2 TL, HP al máximo, sin estados, conserva Energy y Upgrades
 - ⚠️ **Áreas de efecto con plantilla** (patrón "SP" del Guntank): aproximadas como "objetivo + adyacentes"
-- ⚠️ **Elección del jugador** en Push/Pull: se toma automáticamente el primer hex válido
+- ⚠️ **Elección del jugador** en Push/Pull: se toma automáticamente el primer hex válido y siempre la distancia máxima (el Q&A 7 permite elegir mover menos, incluso 0)
+- ✅ Push/Pull hacia un hex más bajo: la unidad cae sin daño (Q&A 10)
 
 ## 6. Habilidades y cartas
 
@@ -80,7 +85,15 @@ Fuentes oficiales:
 - ✅ Cartas Response en el turno del rival (ventana tras daño / rescate / movimiento enemigo)
 - ❌ **RWS** (BIT Stave, Corax, Iśvara) y habilidades que dependen de ellos
 - ❌ **Challenge**, Psycho-Frame Synchrony, Permet Burst, Inspiring Presence, Material Transfer
-- ❌ Cartas de Tactics oficiales (el catálogo actual es el de la demo previa)
+- ❌ Cartas de Tactics oficiales (el catálogo actual es el de la demo previa; la página oficial de cartas aún no está volcada)
+
+## 6b. Q&A oficial revisado (página 1 de 9)
+
+- ✅ Q1 movimiento no fraccionable · Q4 unidad derrotada en su activación · Q6 no terminar donde empezó (Slow no cuenta como moverse) · Q9 Command una vez, Response una por trigger · Q10 caer de terreno elevado sin daño · Q13 dados adicionales no reactivan el crítico · Q14 unidades fuera de la fase siguen usando Response
+- ✅ Q3 línea de visión entre dos hexes, elección por punto
+- ⚠️ Q7 Push/Pull de 0 hexes (no se puede elegir)
+- ❌ Q2 efectos que hacen retroceder fichas en el Timeline (ninguna unidad actual lo usa)
+- ❌ Páginas 2–9 del Q&A sin revisar
 
 ## 7. Objetivos y victoria
 

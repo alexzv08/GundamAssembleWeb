@@ -100,6 +100,15 @@ describe('Línea de visión', () => {
     b['3,2'].elevation = 1
     expect(checkLineOfSight({ q: 1, r: 2 }, { q: 5, r: 2 }, b).clear).toBe(false)
   })
+  it('Q&A 3: entre dos hexes el atacante elige en cada punto por separado', () => {
+    // (1,1)→(1,5) pasa justo entre (1,2)/(2,2) y entre (1,4)/(2,4)
+    const b = makeBoard()
+    b['1,2'].elevation = 1
+    b['2,4'].elevation = 1
+    expect(checkLineOfSight({ q: 1, r: 1 }, { q: 1, r: 5 }, b).clear).toBe(true)
+    b['2,2'].elevation = 1   // ahora los dos candidatos del primer punto bloquean
+    expect(checkLineOfSight({ q: 1, r: 1 }, { q: 1, r: 5 }, b).clear).toBe(false)
+  })
   it('los aliados nunca bloquean (no están en la lista de enemigos)', () => {
     const ally = makeUnit('ally', 'player1', { q: 3, r: 2 })
     const g = makeGame([makeUnit('a', 'player1', { q: 1, r: 2 }), ally, makeUnit('e', 'player2', { q: 5, r: 2 })])

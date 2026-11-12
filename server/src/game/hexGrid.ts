@@ -154,27 +154,29 @@ export function checkLineOfSight(
   const eA = fromHex.elevation
   const eT = toHex.elevation
   const hi = Math.max(eA, eT)
-  let firstReason: string | undefined
 
-  for (const nudge of [1, -1]) {
-    const line = hexLineDraw(from, to, nudge)
-    let blocked: string | undefined
-    for (let i = 1; i < line.length - 1; i++) {
-      const key = hexKey(line[i])
-      const hex = board[key]
-      if (!hex) continue
-      if (hex.elevation > hi) { blocked = `terreno elevado en ${key}`; break }
-      if (eA === eT) {
-        if (enemyBlockers.has(key) && hex.elevation === eA) { blocked = `enemigo en ${key}`; break }
-      } else if (hex.elevation === hi) {
-        blocked = enemyBlockers.has(key) ? `enemigo en ${key}` : `terreno en ${key}`
-        break
-      }
-    }
-    if (!blocked) return { clear: true }
-    firstReason ??= blocked
+  const blocks = (key: string): string | null => {
+    const hex = board[key]
+    if (!hex) return null
+    if (hex.elevation > hi) return `terreno elevado en ${key}`
+    if (eA === eT) return enemyBlockers.has(key) && hex.elevation === eA ? `enemigo en ${key}` : null
+    if (hex.elevation === hi) return enemyBlockers.has(key) ? `enemigo en ${key}` : `terreno en ${key}`
+    return null
   }
-  return { clear: false, reason: `Bloqueado por ${firstReason}` }
+
+  // Q&A oficial (Q.3): en cada punto donde la línea pasa justo entre dos
+  // hexes, el atacante elige cuál cuenta, por separado en cada punto. Las dos
+  // variantes desplazadas de la línea dan, paso a paso, los dos candidatos.
+  const lineA = hexLineDraw(from, to, 1)
+  const lineB = hexLineDraw(from, to, -1)
+  for (let i = 1; i < lineA.length - 1; i++) {
+    const ka = hexKey(lineA[i])
+    const kb = hexKey(lineB[i])
+    const ra = blocks(ka)
+    const rb = ka === kb ? ra : blocks(kb)
+    if (ra && rb) return { clear: false, reason: `Bloqueado por ${ra}` }
+  }
+  return { clear: true }
 }
 
 // ─── MOVIMIENTO ───────────────────────────────────────────────────────────────
