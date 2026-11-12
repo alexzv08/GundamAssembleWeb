@@ -1,0 +1,101 @@
+/**
+ * socket-smoke.ts — prueba de humo de la capa Socket.IO sin Supabase.
+ * Levanta el servidor de sockets con una autenticación falsa (userId en el
+ * handshake), conecta dos clientes y juega hasta el final con acciones simples.
+ *
+ * Uso: cd server && npx tsx scripts/socket-smoke.ts
+ * (necesita socket.io-client, que está en client/node_modules)
+ */
+import { createServer } from 'http'
+import { Server } from 'socket.io'
+import path from 'path'
+import { RoomManager } from '../src/rooms/roomManager'
+import { registerGameEvents } from '../src/socket/gameEvents'
+import { reachableFor } from '../src/game/queries'
+import { keyToHex } from '../src/game/hexGrid'
+import type { GameState } from '../src/types'
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { io: ioc } = require(path.join(__dirname, '../../client/node_modules/socket.io-client'))
+
+const http = createServer()
+const io = new Server(http)
+const rm = new RoomManager()
+io.use((socket, next) => { socket.data.userId = socket.handshake.auth.userId; socket.data.userName = socket.handshake.auth.userId; next() })
+io.on('connection', s => { registerGameEvents(io, s, rm); s.on('disconnect', () => rm.handleDisconnect(s.id, io)) })
+
+http.listen(0, async () => {
+    const port = (http.address() as { port: number }).port
+    const url = `http://localhost:${port}`
+    const a = ioc(url, { auth: { userId: 'ana' } })
+    const b = ioc(url, { auth: { userId: 'bea' } })
+    const intruder = ioc(url, { auth: { userId: 'intruso' } })
+    const wait = (sock: any, ev: string) => new Promise<any>(res => sock.once(ev, res))
+    const fail = (msg: string) => { console.error('FALLO:', msg); process.exit(1) }
+
+    a.emit('CREATE_ROOM', { playerName: 'Ana' })
+    const { roomId } = await wait(a, 'ROOM_CREATED')
+    b.emit('JOIN_ROOM', { roomId, playerName: 'Bea' })
+    await Promise.all([wait(a, 'SQUAD_SELECTION_STARTED'), wait(b, 'SQUAD_SELECTION_STARTED')])
+
+    // El intruso no puede robar la plaza de Ana
+    intruder.emit('RECONNECT', { roomId, playerId: 'player1' })
+    await wait(intruder, 'RECONNECT_FAILED')
+    console.log('✓ reconexión ajena rechazada')
+
+    // Escuadra inválida rechazada
+    a.emit('SELECT_SQUAD', { unitCardIds: ['ST01-U01', 'ST01-U01', 'ST01-U02'], cardIds: [] })
+    const err = await wait(a, 'ACTION_ERROR')
+    console.log('✓ escuadra inválida rechazada:', err.message)
+
+    const fed = ['T01', 'T-02', 'T03', 'T04', 'T05', 'T06', 'T-07', 'T08', 'T09']
+    const zeon = ['T-10', 'T-11', 'T-12', 'T-13', 'T-14', 'T-15', 'T-16', 'T-17', 'T-18']
+    a.emit('SELECT_SQUAD', { unitCardIds: ['ST01-U01', 'PA01-U02', 'PA01-U03'], cardIds: fed })
+    await wait(a, 'SQUAD_ACCEPTED')
+    const started = Promise.all([wait(a, 'GAME_STARTED'), wait(b, 'GAME_STARTED')])
+    b.emit('SELECT_SQUAD', { unitCardIds: ['ST01-U04', 'DM01-U05', 'DM01-U05'], cardIds: zeon })
+    await started
+    console.log('✓ partida creada (con dos copias Mass Produced)')
+
+    let state: GameState | null = null
+    let over = false
+    for (const s of [a, b]) {
+        s.on('GAME_STATE_UPDATE', (p: any) => { state = p.gameState })
+        s.on('PHASE_TRANSITION', (p: any) => { state = p.gameState })
+        s.on('GAME_OVER', (p: any) => { state = p.gameState; over = true })
+        s.on('ACTION_ERROR', (p: any) => console.log('  error:', p.message))
+    }
+    a.emit('CONFIRM_SETUP'); b.emit('CONFIRM_SETUP')
+    await wait(a, 'GAME_STATE_UPDATE')
+    if (state!.phase !== 'phase1') fail('no empezó la fase 1')
+    console.log('✓ fase 1 iniciada, primera unidad desplegada:', !!state!.units[state!.activeUnitId!].position)
+
+    // Fuera de turno → error
+    const other = state!.activePlayerId === 'player1' ? b : a
+    other.emit('GAME_ACTION', { action: { type: 'ENERGIZE', unitId: state!.activeUnitId } })
+    const ot = await wait(other, 'ACTION_ERROR')
+    console.log('✓ acción fuera de turno rechazada:', ot.message)
+
+    // Jugar: avanzar, energize, terminar
+    let steps = 0
+    while (!over && steps < 400) {
+        const s: GameState = state!
+        const sock = s.activePlayerId === 'player1' ? a : b
+        const id = s.activeUnitId!
+        let action
+        if (s.pendingResponse) { (s.pendingResponse.forPlayerId === 'player1' ? a : b).emit('GAME_ACTION', { action: { type: 'PASS_RESPONSE' } }); await wait(a, 'GAME_STATE_UPDATE'); continue }
+        if (!s.activation!.advanced) {
+            const reach = [...reachableFor(s, id, { kind: 'advance' }).keys()]
+            action = reach.length ? { type: 'ADVANCE', unitId: id, to: keyToHex(reach[0]) } : { type: 'ENERGIZE', unitId: id }
+            if (!reach.length) s.activation!.advanced = true
+        } else if (!s.hasUsedPrimaryAction) action = { type: 'ENERGIZE', unitId: id }
+        else action = { type: 'END_ACTIVATION', unitId: id }
+        const next = new Promise(res => { a.once('GAME_STATE_UPDATE', res); a.once('PHASE_TRANSITION', res); a.once('GAME_OVER', res) })
+        sock.emit('GAME_ACTION', { action })
+        await Promise.race([next, new Promise(r => setTimeout(r, 500))])
+        steps++
+    }
+    if (!over) fail('la partida no terminó')
+    console.log(`✓ partida terminada en ${steps} acciones. Ganador: ${state!.winner} (${state!.winReason})`)
+    process.exit(0)
+})

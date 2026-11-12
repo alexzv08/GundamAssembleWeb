@@ -1,8 +1,7 @@
-import type { Unit } from './units'
+import type { Unit, HexCoord } from './units'
 import type { BoardMap } from './board'
 import type { Timeline } from './timeline'
 import type { TacticsState, PendingResponse } from './tactics'
-import type { HexCoord } from './units'
 
 export type PlayerId = 'player1' | 'player2'
 export type GamePhase = 'setup' | 'phase1' | 'phase2' | 'finished'
@@ -17,6 +16,32 @@ export interface LogEntry {
   hexes: string[]
 }
 
+// Estado de la activación en curso (se reinicia al activar cada unidad).
+export interface ActivationState {
+  unitId: string
+  advanced: boolean          // ya hizo su Advance (solo uno por activación)
+  moved: boolean             // se ha movido por cualquier medio (Firing Line)
+  usedCommands: number[]     // índices de habilidades Command ya usadas (1 vez cada una)
+  cardPlayed: boolean        // máx. 1 carta de Tactics por activación
+  freeDashes: number         // Dash adicionales a TL 0 (Zaku Bazooka)
+  freeAttacks: number[]      // ataques adicionales a TL 0 (índice de arma)
+  attacksMade: number[]      // índices de armas con las que ya atacó esta activación
+  strengthBonus: number      // bonos temporales de Command (Full Power, etc.)
+  weaponStrengthBonus: Record<string, number>  // bono por nombre de arma (Frenzied Charge)
+  accuracyBonus: number
+  destroyUpgradeOnHit: boolean
+  deployed: boolean          // la unidad se desplegó al empezar esta activación
+}
+
+// Resumen del último ataque, para mostrar los dados en la UI
+export interface AttackReport {
+  attackerId: string
+  weaponName: string
+  rolls: number[]
+  rerolled: number[]
+  targets: { id: string; kind: 'unit' | 'garrison'; hits: number; crits: number; damage: number; defeated: boolean }[]
+}
+
 export interface GameState {
   gameId: string
   phase: GamePhase
@@ -25,6 +50,7 @@ export interface GameState {
   lastActivePlayer: PlayerId | null
   roundNumber: number
   hasUsedPrimaryAction: boolean
+  activation: ActivationState | null
   board: BoardMap
   units: Record<string, Unit>
   timeline: Timeline
@@ -34,7 +60,9 @@ export interface GameState {
   }
   actionLog: GameAction[]
   log: LogEntry[]
+  lastAttack: AttackReport | null
   winner: PlayerId | null
+  winReason?: string
   pendingResponse: PendingResponse | null
 }
 
@@ -45,6 +73,7 @@ export interface PlayerState {
   tactics: TacticsState
   squadUnitIds: string[]
   deployHex: HexCoord | null
+  garrisonsRescued: number
 }
 
 export type GameAction =
@@ -54,8 +83,8 @@ export type GameAction =
   | { type: 'ENERGIZE'; unitId: string }
   | { type: 'RESCUE'; unitId: string; garrisonId: string }
   | { type: 'ATTACK_GARRISON'; unitId: string; weaponIndex: number; garrisonId: string }
-  | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string }
-  | { type: 'USE_ABILITY'; unitId: string; abilityIndex: number; targetId?: string }
+  | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string; targetHex?: HexCoord }
+  | { type: 'USE_ABILITY'; unitId: string; abilityIndex: number; targetId?: string; targetHex?: HexCoord }
   | { type: 'END_ACTIVATION'; unitId: string }
   | { type: 'PLAY_RESPONSE'; cardId: string; targetId?: string }
   | { type: 'PASS_RESPONSE' }

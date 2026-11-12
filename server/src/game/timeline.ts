@@ -1,4 +1,4 @@
-import type { Timeline, TimelineSlot, TimelineToken, GameState, PlayerId } from '../types'
+import type { Timeline, TimelineSlot, TimelineToken, PlayerId } from '../types'
 
 // ─── CREAR TIMELINE VACÍO ─────────────────────────────────────────────────────
 export function createEmptyTimeline(): Timeline {
@@ -162,27 +162,6 @@ export function reorderSlotForTie(
     })
 
     return { ...timeline, slots }
-}
-
-// ─── RESET DE FASE ────────────────────────────────────────────────────────────
-// Al acabar la Fase 1 (round 10), los tokens que quedaron fuera
-// no vuelven — el reset solo limpia el currentRound.
-// Las unidades que no llegaron a actuar en la fase no tienen token.
-// En la Fase 2, las unidades colocan sus tokens según su startingTl de nuevo.
-export function resetForPhase2(
-    timeline: Timeline,
-    units: { unitId: string; playerId: PlayerId; startingTl: number }[]
-): Timeline {
-    // Crear timeline limpio
-    let newTimeline = createEmptyTimeline()
-
-    // Recolocar todos los tokens con sus startingTl originales
-    for (const unit of units) {
-        const token: TimelineToken = { unitId: unit.unitId, playerId: unit.playerId }
-        newTimeline = placeInitialToken(newTimeline, token, unit.startingTl)
-    }
-
-    return newTimeline
 }
 
 // ─── REORDENAR TOKENS PROPIOS EN UN SLOT (fase de setup) ─────────────────────

@@ -105,17 +105,20 @@ function cubeRound(x: number, y: number, z: number) {
   return { x: rx, y: ry, z: rz }
 }
 
-export function hexLineDraw(a: HexCoord, b: HexCoord): HexCoord[] {
+// nudge: desplazamiento minúsculo para desempatar cuando la línea pasa
+// exactamente entre dos hexes (+1 / -1 eligen uno u otro lado).
+export function hexLineDraw(a: HexCoord, b: HexCoord, nudge = 0): HexCoord[] {
   const dist = hexDistance(a, b)
   if (dist === 0) return [a]
   const ac = offsetToCube(a.q, a.r)
   const bc = offsetToCube(b.q, b.r)
+  const e = 1e-6 * nudge
   const results: HexCoord[] = []
   for (let i = 0; i <= dist; i++) {
     const t = i / dist
-    const rx = ac.x + (bc.x - ac.x) * t
-    const ry = ac.y + (bc.y - ac.y) * t
-    const rz = ac.z + (bc.z - ac.z) * t
+    const rx = ac.x + e + (bc.x - ac.x) * t
+    const ry = ac.y + 2 * e + (bc.y - ac.y) * t
+    const rz = ac.z - 3 * e + (bc.z - ac.z) * t
     const rounded = cubeRound(rx, ry, rz)
     results.push(cubeToOffset(rounded.x, rounded.z))
   }
@@ -123,157 +126,147 @@ export function hexLineDraw(a: HexCoord, b: HexCoord): HexCoord[] {
 }
 
 // ─── LINE OF SIGHT ────────────────────────────────────────────────────────────
+// Core Rulebook v1.2, "Line of Sight". Se traza una línea entre centros:
+//  • Bloquea el terreno a mayor elevación que atacante Y objetivo.
+//  • Misma elevación: bloquean enemigos (unidades, Garrisons, Bases) a esa
+//    misma elevación.
+//  • Distinta elevación: bloquea el terreno o un enemigo a la elevación del
+//    que está más alto.
+//  • Los aliados nunca bloquean.
+//  • Si la línea pasa justo entre dos hexes, el atacante elige → basta con
+//    que una de las dos variantes esté despejada.
 export interface LOSResult {
   clear: boolean
   reason?: string
 }
 
 export function checkLineOfSight(
-  attackerCoord: HexCoord,
-  targetCoord: HexCoord,
+  from: HexCoord,
+  to: HexCoord,
   board: BoardMap,
-  attackerPlayerId: 'player1' | 'player2',
-  enemyUnitPositions: Set<string>
+  enemyBlockers: Set<string> = new Set(),
 ): LOSResult {
-  if (hexDistance(attackerCoord, targetCoord) <= 1) return { clear: true }
+  const fromHex = board[hexKey(from)]
+  const toHex = board[hexKey(to)]
+  if (!fromHex || !toHex) return { clear: false, reason: 'Hex fuera del tablero' }
+  if (hexDistance(from, to) <= 1) return { clear: true }
 
-  const attackerHex = board[hexKey(attackerCoord)]
-  if (!attackerHex) return { clear: false, reason: 'Atacante fuera del tablero' }
+  const eA = fromHex.elevation
+  const eT = toHex.elevation
+  const hi = Math.max(eA, eT)
+  let firstReason: string | undefined
 
-  const attackerElevation = attackerHex.elevation
-  const line = hexLineDraw(attackerCoord, targetCoord)
-  const intermediate = line.slice(1, -1)
-
-  for (const coord of intermediate) {
-    const key = hexKey(coord)
-    const hex = board[key]
-    if (!hex) continue
-
-    if (hex.elevation > attackerElevation) {
-      return { clear: false, reason: `Bloqueado por elevación en ${key}` }
-    }
-
-    const targetHex = board[hexKey(targetCoord)]
-    if (targetHex && attackerElevation > targetHex.elevation) {
-      if (hex.elevation === attackerElevation) {
-        return { clear: false, reason: `Bloqueado por elevación igual al atacante en ${key}` }
+  for (const nudge of [1, -1]) {
+    const line = hexLineDraw(from, to, nudge)
+    let blocked: string | undefined
+    for (let i = 1; i < line.length - 1; i++) {
+      const key = hexKey(line[i])
+      const hex = board[key]
+      if (!hex) continue
+      if (hex.elevation > hi) { blocked = `terreno elevado en ${key}`; break }
+      if (eA === eT) {
+        if (enemyBlockers.has(key) && hex.elevation === eA) { blocked = `enemigo en ${key}`; break }
+      } else if (hex.elevation === hi) {
+        blocked = enemyBlockers.has(key) ? `enemigo en ${key}` : `terreno en ${key}`
+        break
       }
     }
-
-    if (hex.occupiedBy && enemyUnitPositions.has(hex.occupiedBy)) {
-      return { clear: false, reason: `Bloqueado por unidad enemiga en ${key}` }
-    }
+    if (!blocked) return { clear: true }
+    firstReason ??= blocked
   }
-
-  return { clear: true }
+  return { clear: false, reason: `Bloqueado por ${firstReason}` }
 }
 
-// ─── PATHFINDING (A*) ─────────────────────────────────────────────────────────
-export function findPath(
-  start: HexCoord,
-  goal: HexCoord,
-  board: BoardMap,
-  obstacles: Set<string>,
-  maxDistance: number,
-  ignoreTerrainCosts = false
-): HexCoord[] | null {
+// ─── MOVIMIENTO ───────────────────────────────────────────────────────────────
+// Core Rulebook v1.2, "Moving" / "Movement Modifiers" / "Jumping":
+//  • Subir de elevación cuesta +1 por nivel ganado. Bajar no cuesta.
+//  • Si la unidad empieza el movimiento en terreno elevado, salta: su
+//    elevación inicial es la de referencia (solo paga lo que suba por encima)
+//    y puede pasar por encima de enemigos a menor elevación.
+//  • No se puede atravesar enemigos (unidades, Garrisons, Bases) ni terreno
+//    Impassable (salvo Hover). Sí se atraviesan aliados.
+//  • No se puede terminar en un hex ocupado, ni en Impassable.
+//  • Hover ignora las penalizaciones de terreno (elevación incluida).
+// Las penalizaciones al iniciar el movimiento (agua, debris, Engagement) se
+// restan del presupuesto antes de llamar a estas funciones (ver queries.ts).
+export interface MoveOptions {
+  budget: number
+  enemyHexes: Set<string>      // no se pueden atravesar
+  occupiedHexes: Set<string>   // no se puede terminar en ellos
+  hover?: boolean
+  ignoreTerrain?: boolean      // efectos que ignoran penalizaciones de terreno
+}
+
+interface MoveNode { key: string; cost: number }
+
+export function moveStepCost(
+  board: BoardMap, fromKey: string, toKey: string, startElevation: number, opts: MoveOptions,
+): number | null {
+  const from = board[fromKey]
+  const to = board[toKey]
+  if (!from || !to) return null
+  if (to.terrain === 'impassable' && !opts.hover) return null
+  const jumping = startElevation > 0
+  if (opts.enemyHexes.has(toKey) && !(jumping && to.elevation < startElevation)) return null
+  if (opts.hover || opts.ignoreTerrain) return 1
+  const reference = Math.max(from.elevation, startElevation)
+  return 1 + Math.max(0, to.elevation - reference)
+}
+
+function exploreMoves(start: HexCoord, board: BoardMap, opts: MoveOptions) {
   const startKey = hexKey(start)
-  const goalKey = hexKey(goal)
-
-  if (obstacles.has(goalKey)) return null
-  if (!board[goalKey]) return null
-
-  type Node = { coord: HexCoord; cost: number; estimated: number }
-  const open: Node[] = [{ coord: start, cost: 0, estimated: hexDistance(start, goal) }]
-  const cameFrom = new Map<string, string>()
-  const costSoFar = new Map<string, number>([[startKey, 0]])
-
-  while (open.length > 0) {
-    open.sort((a, b) => (a.cost + a.estimated) - (b.cost + b.estimated))
-    const current = open.shift()!
-    const currentKey = hexKey(current.coord)
-
-    if (currentKey === goalKey) {
-      const path: HexCoord[] = []
-      let key = goalKey
-      while (key !== startKey) {
-        path.unshift(keyToHex(key))
-        key = cameFrom.get(key)!
-      }
-      return path
-    }
-
-    for (const neighbor of getNeighbors(current.coord)) {
-      const neighborKey = hexKey(neighbor)
-      if (!board[neighborKey]) continue
-      if (obstacles.has(neighborKey) && neighborKey !== goalKey) continue
-
-      const hex = board[neighborKey]
-      const currentHex = board[currentKey]
-      const elevationCost = ignoreTerrainCosts ? 0 : Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
-      const waterCost = ignoreTerrainCosts ? 0 : (currentHex?.terrain === 'water' ? 1 : 0)
-      const newCost = (costSoFar.get(currentKey) ?? 0) + 1 + elevationCost + waterCost
-
-      if (newCost > maxDistance) continue
-      if (!costSoFar.has(neighborKey) || newCost < costSoFar.get(neighborKey)!) {
-        costSoFar.set(neighborKey, newCost)
-        cameFrom.set(neighborKey, currentKey)
-        open.push({ coord: neighbor, cost: newCost, estimated: hexDistance(neighbor, goal) })
-      }
-    }
-  }
-
-  return null
-}
-
-// ─── HEXES ALCANZABLES ────────────────────────────────────────────────────────
-export function getReachableHexes(
-  start: HexCoord,
-  board: BoardMap,
-  obstacles: Set<string>,
-  maxDistance: number,
-  ignoreTerrainCosts = false
-): HexCoord[] {
-  const reachable: HexCoord[] = []
-  const visited = new Map<string, number>()  // key → menor coste encontrado
-  visited.set(hexKey(start), 0)
-
-  // Cola de prioridad: [coste, coord]
-  const queue: { coord: HexCoord; cost: number }[] = [{ coord: start, cost: 0 }]
+  const startElevation = board[startKey]?.elevation ?? 0
+  const best = new Map<string, number>([[startKey, 0]])
+  const parent = new Map<string, string>()
+  const queue: MoveNode[] = [{ key: startKey, cost: 0 }]
 
   while (queue.length > 0) {
-    // Ordenar por coste — explorar primero los más baratos
     queue.sort((a, b) => a.cost - b.cost)
-    const { coord, cost } = queue.shift()!
-
-    for (const neighbor of getNeighbors(coord)) {
-      const key = hexKey(neighbor)
-      if (!board[key]) continue
-      if (obstacles.has(key)) continue
-
-      const hex = board[key]
-      const currentHex = board[hexKey(coord)]
-      const elevCost = ignoreTerrainCosts ? 0 : Math.max(0, hex.elevation - (currentHex?.elevation ?? 0))
-      const waterCost = ignoreTerrainCosts ? 0 : (currentHex?.terrain === 'water' ? 1 : 0)
-      const newCost = cost + 1 + elevCost + waterCost
-
-      if (newCost > maxDistance) continue
-
-      // Solo añadir si no hemos visitado con menor o igual coste
-      if (!visited.has(key) || newCost < visited.get(key)!) {
-        visited.set(key, newCost)
-        reachable.push(neighbor)
-        queue.push({ coord: neighbor, cost: newCost })
+    const { key, cost } = queue.shift()!
+    if (cost > (best.get(key) ?? Infinity)) continue
+    for (const n of getNeighbors(keyToHex(key))) {
+      const nKey = hexKey(n)
+      const step = moveStepCost(board, key, nKey, startElevation, opts)
+      if (step === null) continue
+      const newCost = cost + step
+      if (newCost > opts.budget) continue
+      if (newCost < (best.get(nKey) ?? Infinity)) {
+        best.set(nKey, newCost)
+        parent.set(nKey, key)
+        queue.push({ key: nKey, cost: newCost })
       }
     }
   }
+  return { startKey, best, parent }
+}
 
-  // Eliminar duplicados
-  const seen = new Set<string>()
-  return reachable.filter(h => {
-    const k = hexKey(h)
-    if (seen.has(k)) return false
-    seen.add(k)
-    return true
-  })
+function canEndOn(board: BoardMap, key: string, startKey: string, opts: MoveOptions): boolean {
+  if (key === startKey) return false
+  const hex = board[key]
+  if (!hex || hex.terrain === 'impassable') return false
+  return !opts.occupiedHexes.has(key)
+}
+
+// Hexes donde la unidad puede terminar su movimiento → coste
+export function getReachableHexes(start: HexCoord, board: BoardMap, opts: MoveOptions): Map<string, number> {
+  const { startKey, best } = exploreMoves(start, board, opts)
+  const result = new Map<string, number>()
+  for (const [key, cost] of best) {
+    if (canEndOn(board, key, startKey, opts)) result.set(key, cost)
+  }
+  return result
+}
+
+// Camino (incluye inicio y destino) o null si no es un destino válido
+export function findPath(start: HexCoord, goal: HexCoord, board: BoardMap, opts: MoveOptions): HexCoord[] | null {
+  const { startKey, best, parent } = exploreMoves(start, board, opts)
+  const goalKey = hexKey(goal)
+  if (!best.has(goalKey) || !canEndOn(board, goalKey, startKey, opts)) return null
+  const path: HexCoord[] = []
+  let cur: string | undefined = goalKey
+  while (cur) {
+    path.unshift(keyToHex(cur))
+    cur = parent.get(cur)
+  }
+  return path
 }

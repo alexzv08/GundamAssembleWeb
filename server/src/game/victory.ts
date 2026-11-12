@@ -1,179 +1,77 @@
-import { GameState, PlayerId } from '../types'
+// Objetivos y victoria (Core Rulebook v1.2, "Controlling Objectives" y "Victory Points").
+// Las funciones MUTAN el estado recibido (el llamador clona).
+import type { GameState, PlayerId } from '../types'
 import { hexKey, getNeighbors } from './hexGrid'
-import { getNextActivation } from './timeline'
+import { otherPlayer } from './queries'
+import { pushLog } from './damage'
 
-// ─── RESULTADO DE FIN DE PARTIDA ─────────────────────────────────────────────
-export interface GameOverResult {
-    isOver: boolean
-    winner: PlayerId | null  // null = empate
-    reason: string
+function unitsAround(state: GameState, key: string): { player1: number; player2: number } {
+    const counts = { player1: 0, player2: 0 }
+    const hex = state.board[key]
+    if (!hex) return counts
+    for (const k of [key, ...getNeighbors(hex.coord).map(hexKey)]) {
+        const occ = state.board[k]?.occupiedBy
+        const unit = occ ? state.units[occ] : null
+        if (unit?.position) counts[unit.playerId]++
+    }
+    return counts
 }
 
-// ─── COMPROBAR FIN DE PARTIDA ─────────────────────────────────────────────────
-// Se llama después de cada acción. Comprueba todas las condiciones de victoria.
-export function checkGameOver(state: GameState): GameOverResult {
-    const notOver = { isOver: false, winner: null, reason: '' }
+export function captureObjective(state: GameState, key: string, player: PlayerId): void {
+    const obj = state.board[key]?.objectiveToken
+    if (!obj) return
+    obj.controlledBy = player
+    pushLog(state, player, `Objetivo ${obj.id} capturado`, 'objective', [key])
+}
 
-    // Solo comprobar si estamos en fase activa
-    if (state.phase === 'setup' || state.phase === 'finished') return notOver
+// Al terminar la activación de una unidad que está en o junto a un Objetivo,
+// lo disputa: si hay más unidades aliadas que enemigas alrededor, un Objetivo
+// neutral pasa a ser suyo y uno del rival vuelve a neutral. El control se
+// mantiene aunque la unidad se vaya.
+export function contestObjectives(state: GameState, unitId: string): void {
+    const unit = state.units[unitId]
+    if (!unit?.position) return
+    const myKey = hexKey(unit.position)
+    const nearby = new Set([myKey, ...getNeighbors(unit.position).map(hexKey)])
 
-    // ── Condición 1: un jugador no tiene unidades vivas ──────────────────────
-    const p1Units = Object.values(state.units).filter(
-        u => u.playerId === 'player1' && u.currentHp > 0
-    )
-    const p2Units = Object.values(state.units).filter(
-        u => u.playerId === 'player2' && u.currentHp > 0
-    )
-
-    if (p1Units.length === 0 && p2Units.length === 0) {
-        return { isOver: true, winner: null, reason: 'Todas las unidades derrotadas — empate' }
-    }
-    if (p1Units.length === 0) {
-        return { isOver: true, winner: 'player2', reason: 'Player 1 sin unidades' }
-    }
-    if (p2Units.length === 0) {
-        return { isOver: true, winner: 'player1', reason: 'Player 2 sin unidades' }
-    }
-
-    // ── Condición 2: fin de Fase 2 (ambas fases completadas) ─────────────────
-    if (state.phase === 'phase2') {
-        const nextToken = getNextActivation(state.timeline)
-        if (!nextToken) {
-            // No quedan tokens en el timeline → la fase 2 terminó
-            return resolveByVP(state, 'Fin de las dos fases')
+    for (const key of nearby) {
+        const obj = state.board[key]?.objectiveToken
+        if (!obj) continue
+        const counts = unitsAround(state, key)
+        const mine = counts[unit.playerId]
+        const theirs = counts[otherPlayer(unit.playerId)]
+        if (mine <= theirs) continue
+        if (obj.controlledBy === null) {
+            captureObjective(state, key, unit.playerId)
+        } else if (obj.controlledBy !== unit.playerId) {
+            obj.controlledBy = null
+            pushLog(state, unit.playerId, `Objetivo ${obj.id} neutralizado`, 'objective', [key])
         }
     }
-
-    return notOver
 }
 
-// ─── RESOLVER POR VP ──────────────────────────────────────────────────────────
-function resolveByVP(state: GameState, reason: string): GameOverResult {
+// Al final de cada Fase: VP por cada Objetivo controlado.
+export function scoreObjectives(state: GameState): { player1: number; player2: number } {
+    const gained = { player1: 0, player2: 0 }
+    for (const [key, hex] of Object.entries(state.board)) {
+        const obj = hex.objectiveToken
+        if (!obj?.controlledBy) continue
+        gained[obj.controlledBy] += obj.vpValue
+        pushLog(state, obj.controlledBy, `Objetivo ${obj.id}: +${obj.vpValue} VP`, 'objective', [key])
+    }
+    state.players.player1.vp += gained.player1
+    state.players.player2.vp += gained.player2
+    return gained
+}
+
+// Ganador al final de la partida. Empate → gana el último jugador que actuó.
+export function decideWinner(state: GameState): { winner: PlayerId; reason: string } {
     const vp1 = state.players.player1.vp
     const vp2 = state.players.player2.vp
-
-    if (vp1 > vp2) return { isOver: true, winner: 'player1', reason: `${reason} — P1 ${vp1} VP vs P2 ${vp2} VP` }
-    if (vp2 > vp1) return { isOver: true, winner: 'player2', reason: `${reason} — P2 ${vp2} VP vs P1 ${vp1} VP` }
-    return { isOver: true, winner: null, reason: `${reason} — Empate a ${vp1} VP` }
-}
-
-// ─── CONTROL DE OBJETIVOS ─────────────────────────────────────────────────────
-// Según las reglas: un objetivo está controlado si hay más unidades aliadas
-// que enemigas en hexes adyacentes + el propio hex al final del round.
-// Se llama al final de cada round (cuando currentRound avanza).
-
-export interface ObjectiveControlResult {
-    objectiveId: string
-    controlledBy: PlayerId | null
-    vpAwarded: number
-    awardedTo: PlayerId | null
-}
-
-export function resolveObjectiveControl(state: GameState): {
-    newState: GameState
-    results: ObjectiveControlResult[]
-} {
-    const results: ObjectiveControlResult[] = []
-    const newState = { ...state, board: { ...state.board } }
-
-    for (const [key, hex] of Object.entries(state.board)) {
-        if (!hex.objectiveToken) continue
-
-        const obj = hex.objectiveToken
-
-        // Contar unidades aliadas y enemigas en el hex y adyacentes
-        const relevantKeys = [key, ...getNeighbors(hex.coord).map(n => hexKey(n))]
-
-        let p1Count = 0
-        let p2Count = 0
-
-        for (const k of relevantKeys) {
-            const h = state.board[k]
-            if (!h?.occupiedBy) continue
-            const unit = state.units[h.occupiedBy]
-            if (!unit || unit.currentHp <= 0) continue
-            if (unit.playerId === 'player1') p1Count++
-            else p2Count++
-        }
-
-        // Determinar control
-        let controlledBy: PlayerId | null = null
-        if (p1Count > p2Count) controlledBy = 'player1'
-        else if (p2Count > p1Count) controlledBy = 'player2'
-        else controlledBy = null  // empate → nadie controla
-
-        // Actualizar control en el tablero
-        newState.board[key] = {
-            ...hex,
-            objectiveToken: { ...obj, controlledBy }
-        }
-
-        results.push({
-            objectiveId: obj.id,
-            controlledBy,
-            vpAwarded: 0,
-            awardedTo: null,
-        })
+    if (vp1 !== vp2) {
+        const winner: PlayerId = vp1 > vp2 ? 'player1' : 'player2'
+        return { winner, reason: `Fin de la partida — ${vp1} VP contra ${vp2} VP` }
     }
-
-    return { newState, results }
-}
-
-// VP de objetivos se otorga al final de cada FASE (no cada round)
-export function awardObjectiveVP(state: GameState): {
-    newState: GameState
-    vpAwarded: { player1: number; player2: number }
-} {
-    let p1VP = 0
-    let p2VP = 0
-
-    for (const hex of Object.values(state.board)) {
-        if (!hex.objectiveToken) continue
-        const { controlledBy, vpValue } = hex.objectiveToken
-        if (controlledBy === 'player1') p1VP += vpValue
-        if (controlledBy === 'player2') p2VP += vpValue
-    }
-
-    const newState = {
-        ...state,
-        players: {
-            player1: { ...state.players.player1, vp: state.players.player1.vp + p1VP },
-            player2: { ...state.players.player2, vp: state.players.player2.vp + p2VP },
-        }
-    }
-
-    return { newState, vpAwarded: { player1: p1VP, player2: p2VP } }
-}
-
-// ─── TRANSICIÓN DE FASE ───────────────────────────────────────────────────────
-// Se llama cuando getNextActivation devuelve null y phase === 'phase1'
-// Otorga VP de objetivos, resetea el timeline y pasa a phase2
-
-export function transitionToPhase2(state: GameState): GameState {
-    // 1. Otorgar VP de objetivos de la fase 1
-    const { newState: stateWithVP } = awardObjectiveVP(state)
-
-    // 2. El timeline fluye continuo — los tokens ya están en rounds 11-20
-    const firstToken = getNextActivation(stateWithVP.timeline)
-
-    return {
-        ...stateWithVP,
-        phase: 'phase2',
-        roundNumber: 1,
-        activeUnitId: firstToken?.unitId ?? null,
-        activePlayerId: firstToken?.playerId ?? stateWithVP.activePlayerId,
-        hasUsedPrimaryAction: false,
-    }
-}
-
-// ─── APLICAR FIN DE PARTIDA AL ESTADO ────────────────────────────────────────
-export function applyGameOver(state: GameState, result: GameOverResult): GameState {
-    // Otorgar VP de objetivos pendientes antes de cerrar
-    const { newState } = awardObjectiveVP(state)
-
-    return {
-        ...newState,
-        phase: 'finished',
-        winner: result.winner,
-    }
+    const winner = state.lastActivePlayer ?? state.activePlayerId
+    return { winner, reason: `Empate a ${vp1} VP — gana quien actuó en último lugar` }
 }

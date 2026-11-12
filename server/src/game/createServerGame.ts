@@ -1,6 +1,10 @@
-import { GameState, BoardMap } from '../types'
-import { createEmptyTimeline, placeInitialToken } from './timeline'
-import { offsetToAxial, hexKey } from './hexGrid'
+// Construye el GameState inicial a partir del mapa, la escuadra y el mazo de
+// cada jugador (Core Rulebook v1.2, "Setup").
+import type { GameState, BoardMap, TerrainType, PlayerId, HexCoord, Unit } from '../types'
+import { createEmptyTimeline, placeInitialToken, reorderSlotForTie } from './timeline'
+import { offsetToAxial, hexKey, getNeighbors } from './hexGrid'
+import { loadUnitCatalog, loadTacticsCatalog, buildUnit, type UnitCardJSON } from './catalog'
+import { rollD10, type Rng } from './combat'
 import fs from 'fs'
 import path from 'path'
 
@@ -17,59 +21,22 @@ interface Scenario {
     deployZones: { player1: ScenarioZone[]; player2: ScenarioZone[] }
 }
 interface MapJSON { cols: number; rows: number; grid: MapCell[][]; scenario?: Scenario }
-interface WeaponJSON { name: string; cost: string; range: string; str: string; effect: string; crit: string; effectData?: any; critData?: any }
-interface AbilityJSON { name: string; type: string; tags: string; effect: string; abilityData?: any }
-interface UnitJSON { unitName: string; pilot: string; faction: string; cardId: string; hp: string; vp: string; tl: string; weapons: WeaponJSON[]; abilities: AbilityJSON[] }
-interface UnitsJSON { cards: UnitJSON[] }
-interface CardJSON { cardId: string; name: string; type: string; faction: string; effect: string; effectData?: any }
-interface CardsJSON { cards: CardJSON[] }
+
+const UPGRADE_TYPES: ('attack' | 'movement' | 'shield')[] = ['attack', 'movement', 'shield']
+const KNOWN_TERRAIN: TerrainType[] = ['water', 'debris', 'impassable', 'minovsky']
 
 function loadJSON<T>(filePath: string): T {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T
 }
 
-function normalizeAbilityType(type: string): 'CMD' | 'ONG' | 'RSP' {
-    if (type === 'burst') return 'CMD'
-    if (type === 'ongoing') return 'ONG'
-    if (type === 'response') return 'RSP'
-    return 'CMD'
+function toTerrain(raw: string): TerrainType {
+    return (KNOWN_TERRAIN as string[]).includes(raw) ? raw as TerrainType : 'normal'
 }
 
-const UPGRADE_TYPES: ('attack' | 'movement' | 'shield')[] = ['attack', 'movement', 'shield']
-
-function getNeighbors(coord: { q: number; r: number }): { q: number; r: number }[] {
-    const { q, r } = coord
-    const isOdd = r & 1
-    if (isOdd) {
-        return [
-            { q: q + 1, r: r }, { q: q - 1, r: r },
-            { q: q, r: r - 1 }, { q: q + 1, r: r - 1 },
-            { q: q, r: r + 1 }, { q: q + 1, r: r + 1 },
-        ]
-    } else {
-        return [
-            { q: q + 1, r: r }, { q: q - 1, r: r },
-            { q: q - 1, r: r - 1 }, { q: q, r: r - 1 },
-            { q: q - 1, r: r + 1 }, { q: q, r: r + 1 },
-        ]
-    }
-}
-
-function findNearestValidHex(
-    coord: { q: number; r: number },
-    board: BoardMap
-): { q: number; r: number } {
+function findNearestValidHex(coord: HexCoord, board: BoardMap): HexCoord {
     if (board[hexKey(coord)]) return coord
-    const neighbors = getNeighbors(coord)
-    for (const n of neighbors) {
-        if (board[hexKey(n)]) return n
-    }
-    // Si ningún vecino es válido, buscar en radio 2
-    for (const n of neighbors) {
-        for (const n2 of getNeighbors(n)) {
-            if (board[hexKey(n2)]) return n2
-        }
-    }
+    for (const n of getNeighbors(coord)) if (board[hexKey(n)]) return n
+    for (const n of getNeighbors(coord)) for (const n2 of getNeighbors(n)) if (board[hexKey(n2)]) return n2
     return coord
 }
 
@@ -82,37 +49,37 @@ function shuffleArray<T>(arr: T[]): T[] {
     return a
 }
 
+export interface CreateGameOptions {
+    mapId?: string
+    rng?: Rng
+}
+
 export function createServerGame(
     player1Name: string,
     player2Name: string,
-    p1UnitCardIds?: string[],
-    p2UnitCardIds?: string[],
-    p1CardIds?: string[],
-    p2CardIds?: string[]
+    p1UnitCardIds: string[],
+    p2UnitCardIds: string[],
+    p1CardIds: string[] = [],
+    p2CardIds: string[] = [],
+    opts: CreateGameOptions = {},
 ): GameState {
+    const rng = opts.rng ?? rollD10
     const dataDir = path.join(__dirname, '../../data')
-    const mapData = loadJSON<MapJSON>(path.join(dataDir, 'maps/DemoMap.json'))
-    const unitData = loadJSON<UnitsJSON>(path.join(dataDir, 'units/unit_library.json'))
-    const cardData = loadJSON<CardsJSON>(path.join(dataDir, 'cards/card_library.json'))
+    const mapData = loadJSON<MapJSON>(path.join(dataDir, `maps/${opts.mapId ?? 'DemoMap'}.json`))
+    const unitCatalog = loadUnitCatalog()
+    const tacticsCatalog = loadTacticsCatalog()
 
-    // ─── CONSTRUIR TABLERO ────────────────────────────────────────────────────
+    // ─── TABLERO ──────────────────────────────────────────────────────────────
     const board: BoardMap = {}
-
     for (let row = 0; row < mapData.rows; row++) {
         for (let col = 0; col < mapData.cols; col++) {
             if (row % 2 === 1 && col === mapData.cols - 1) continue
             const cell = mapData.grid[row][col]
             const coord = offsetToAxial(col, row)
-            const key = hexKey(coord)
-            const elevation = cell.elevation - 1
-
-            board[key] = {
+            board[hexKey(coord)] = {
                 coord,
-                elevation,
-                terrain: elevation >= 3 ? 'elevation_3'
-                    : elevation >= 2 ? 'elevation_2'
-                        : elevation >= 1 ? 'elevation_1'
-                            : cell.terrain === 'water' ? 'water' : 'normal',
+                elevation: cell.elevation - 1,
+                terrain: toTerrain(cell.terrain),
                 occupiedBy: null,
                 upgradeToken: null,
                 garrisonToken: null,
@@ -122,192 +89,109 @@ export function createServerGame(
         }
     }
 
-    // ─── COLOCAR TOKENS DEL ESCENARIO ─────────────────────────────────────────
-    const deployP1Raw = mapData.scenario?.deployZones?.player1 ?? []
-    const deployP2Raw = mapData.scenario?.deployZones?.player2 ?? []
-
-    if (mapData.scenario) {
-        const s = mapData.scenario
-
-        s.objectives.forEach(obj => {
+    const scenario = mapData.scenario
+    if (scenario) {
+        scenario.objectives.forEach(obj => {
             const key = hexKey(offsetToAxial(obj.col, obj.row))
-            if (board[key]) board[key].objectiveToken = {
-                id: obj.id, vpValue: obj.vpValue, controlledBy: null,
-            }
+            if (board[key]) board[key].objectiveToken = { id: obj.id, vpValue: obj.vpValue, controlledBy: null }
         })
-
-        s.garrisons.forEach(gar => {
+        scenario.garrisons.forEach(gar => {
             const key = hexKey(offsetToAxial(gar.col, gar.row))
-            if (board[key]) board[key].garrisonToken = {
-                id: gar.id, owner: gar.owner, hp: gar.hp,
-            }
+            if (board[key]) board[key].garrisonToken = { id: gar.id, owner: gar.owner, hp: 1 }
         })
-
-        s.upgrades.forEach(upg => {
+        scenario.upgrades.forEach(upg => {
             const key = hexKey(offsetToAxial(upg.col, upg.row))
-            if (board[key]) {
-                const resolvedType = upg.type === 'random'
-                    ? UPGRADE_TYPES[Math.floor(Math.random() * UPGRADE_TYPES.length)]
-                    : upg.type as 'attack' | 'movement' | 'shield' | 'energy'
-                board[key].upgradeToken = { type: resolvedType, value: upg.value, revealed: false }
-            }
+            if (!board[key]) return
+            const type = upg.type === 'random'
+                ? UPGRADE_TYPES[Math.floor(Math.random() * UPGRADE_TYPES.length)]
+                : upg.type
+            board[key].upgradeToken = { type, value: upg.value || 1, revealed: false }
         })
     }
 
-    // ─── POSICIONES DE DEPLOY ─────────────────────────────────────────────────
-    const p1DeployRaw = deployP1Raw[0]
-        ? offsetToAxial(deployP1Raw[0].col, deployP1Raw[0].row)
-        : { q: 0, r: 7 }
-    const p2DeployRaw = deployP2Raw[0]
-        ? offsetToAxial(deployP2Raw[0].col, deployP2Raw[0].row)
-        : { q: 12, r: 7 }
+    // ─── BASES ────────────────────────────────────────────────────────────────
+    const zones = {
+        player1: scenario?.deployZones?.player1 ?? [],
+        player2: scenario?.deployZones?.player2 ?? [],
+    }
+    const baseOf = (z: ScenarioZone | undefined, fallback: HexCoord) =>
+        findNearestValidHex(z ? offsetToAxial(z.col, z.row) : fallback, board)
+    const p1Base = baseOf(zones.player1[0], { q: 0, r: 7 })
+    const p2Base = baseOf(zones.player2[0], { q: 12, r: 7 })
+    for (const player of ['player1', 'player2'] as const) {
+        for (const z of zones[player]) {
+            const key = hexKey(findNearestValidHex(offsetToAxial(z.col, z.row), board))
+            if (board[key]) board[key].deployZone = player
+        }
+    }
 
-    // Buscar hex válido más cercano si el deploy está fuera de bounds
-    const p1Deploy = findNearestValidHex(p1DeployRaw, board)
-    const p2Deploy = findNearestValidHex(p2DeployRaw, board)
-
-    // Marcar zonas de despliegue
-    deployP1Raw.forEach(z => {
-        const coord = findNearestValidHex(offsetToAxial(z.col, z.row), board)
-        const key = hexKey(coord)
-        if (board[key]) board[key].deployZone = 'player1'
-    })
-    deployP2Raw.forEach(z => {
-        const coord = findNearestValidHex(offsetToAxial(z.col, z.row), board)
-        const key = hexKey(coord)
-        if (board[key]) board[key].deployZone = 'player2'
-    })
-
-    const allFedCards = unitData.cards.filter(c => c.faction === 'Earth Federation')
-    const allZeonCards = unitData.cards.filter(c => c.faction === 'Zeon')
-
-    const fedCards = p1UnitCardIds
-        ? p1UnitCardIds.map(id => unitData.cards.find(c => c.cardId === id)).filter((c): c is UnitJSON => c !== undefined)
-        : allFedCards.slice(0, 3)
-    const zeonCards = p2UnitCardIds
-        ? p2UnitCardIds.map(id => unitData.cards.find(c => c.cardId === id)).filter((c): c is UnitJSON => c !== undefined)
-        : allZeonCards.slice(0, 3)
-
-    const createUnit = (card: UnitJSON, playerId: 'player1' | 'player2') => ({
-        id: `${card.cardId}_${playerId}`,
-        name: card.unitName,
-        unitType: 'Mobile Suit',
-        traits: [card.faction, ...(card.pilot === 'Mass Produced' ? ['Mass Produced'] : [])],
-        maxHp: parseInt(card.hp),
-        vp: parseInt(card.vp),
-        startingTl: parseInt(card.tl),
-        currentHp: parseInt(card.hp),
-        energy: 0,
-        position: null as { q: number; r: number } | null,
-        weapons: card.weapons.map(w => ({
-            name: w.name,
-            range: parseInt(w.range),
-            strength: parseInt(w.str),
-            tlCost: parseInt(w.cost),
-            effect: w.effect || undefined,
-            critEffect: w.crit || undefined,
-            effectData: w.effectData ?? null,
-            critData: w.critData ?? null,
-        })),
-        abilities: card.abilities.map(a => ({
-            name: a.name,
-            type: normalizeAbilityType(a.type),
-            description: a.effect,
-            energyCost: a.tags.includes('Energy') ? 1 : undefined,
-            abilityData: a.abilityData ?? null,
-        })),
-        statusEffects: [],
-        upgrades: [],
-        playerId,
-        activated: false,
-    })
-
-    const p1Units = fedCards.map(c => createUnit(c, 'player1'))
-    const p2Units = zeonCards.map(c => createUnit(c, 'player2'))
+    // ─── UNIDADES (empiezan en la Reserva) ────────────────────────────────────
+    const pick = (ids: string[], player: PlayerId): Unit[] => ids
+        .map(id => unitCatalog.find(c => c.cardId === id))
+        .filter((c): c is UnitCardJSON => c !== undefined)
+        .map((c, i) => buildUnit(c, player, i))
+    const p1Units = pick(p1UnitCardIds, 'player1')
+    const p2Units = pick(p2UnitCardIds, 'player2')
     const allUnits = [...p1Units, ...p2Units]
 
     // ─── TIMELINE ─────────────────────────────────────────────────────────────
     let timeline = createEmptyTimeline()
-    allUnits.forEach(u => {
-        timeline = placeInitialToken(timeline, { unitId: u.id, playerId: u.playerId }, u.startingTl)
-    })
+    for (const u of allUnits) timeline = placeInitialToken(timeline, { unitId: u.id, playerId: u.playerId }, u.startingTl)
 
-    const firstToken = timeline.slots.find(s => s.tokens.length > 0)?.tokens[0]
-
-    // ─── SPAWN PRIMERA UNIDAD DE CADA JUGADOR ─────────────────────────────────
-    // La unidad a spawnear es la que tiene el TL más bajo (la que activará primero),
-    // no necesariamente la primera en el orden de selección.
-    const firstP1Unit = p1Units.reduce((a, b) => a.startingTl <= b.startingTl ? a : b)
-    const firstP2Unit = p2Units.reduce((a, b) => a.startingTl <= b.startingTl ? a : b)
-
-    const p1DeployKey = hexKey(p1Deploy)
-    const p2DeployKey = hexKey(p2Deploy)
-
-    if (firstP1Unit && board[p1DeployKey] && !board[p1DeployKey].occupiedBy) {
-        firstP1Unit.position = p1Deploy
-        board[p1DeployKey].occupiedBy = firstP1Unit.id
+    // Empieza el jugador con la unidad de TL inicial más bajo. Si empatan, cada
+    // uno tira un dado de ataque y empieza quien saque más.
+    const minTl = (units: Unit[]) => units.length ? Math.min(...units.map(u => u.startingTl)) : 99
+    const m1 = minTl(p1Units)
+    const m2 = minTl(p2Units)
+    let firstPlayer: PlayerId = m1 <= m2 ? 'player1' : 'player2'
+    const log: GameState['log'] = []
+    if (m1 === m2) {
+        let r1 = 0
+        let r2 = 0
+        while (r1 === r2) { r1 = rng(); r2 = rng() }
+        firstPlayer = r1 > r2 ? 'player1' : 'player2'
+        log.push({ message: `Iniciativa: ${player1Name} saca ${r1}, ${player2Name} saca ${r2}`, playerId: firstPlayer, round: null, category: 'end', hexes: [] })
     }
+    const secondPlayer: PlayerId = firstPlayer === 'player1' ? 'player2' : 'player1'
+    // reorderSlotForTie pone primero al jugador que NO actuó el último
+    timeline = reorderSlotForTie(timeline, Math.min(m1, m2), secondPlayer)
+    const firstSlot = timeline.slots.find(s => s.tokens.length > 0)
+    const firstToken = firstSlot?.tokens[0]
 
-    if (firstP2Unit && board[p2DeployKey] && !board[p2DeployKey].occupiedBy) {
-        firstP2Unit.position = p2Deploy
-        board[p2DeployKey].occupiedBy = firstP2Unit.id
-    }
-
-    // ─── CARTAS ───────────────────────────────────────────────────────────────
-    const toTacticsCard = (c: CardJSON) => ({
-        id: c.cardId,
-        name: c.name,
-        type: c.type as 'command' | 'response',
-        faction: c.faction,
-        effect: c.effect,
-        effectData: c.effectData ?? null,
-    })
-
-    const allTactics = cardData.cards.map(toTacticsCard)
-
-    const p1Deck = shuffleArray(
-        p1CardIds && p1CardIds.length > 0
-            ? allTactics.filter(c => p1CardIds.includes(c.id))
-            : allTactics.filter(c => c.faction === 'Earth Federation')
-    )
-    const p2Deck = shuffleArray(
-        p2CardIds && p2CardIds.length > 0
-            ? allTactics.filter(c => p2CardIds.includes(c.id))
-            : allTactics.filter(c => c.faction === 'Zeon')
-    )
-
-    // Robar 3 cartas al inicio de fase 1
+    // ─── MAZOS ────────────────────────────────────────────────────────────────
+    const deckFor = (ids: string[]) => shuffleArray(tacticsCatalog.filter(c => ids.includes(c.id)))
+    const p1Deck = deckFor(p1CardIds)
+    const p2Deck = deckFor(p2CardIds)
     const p1Hand = p1Deck.splice(0, 3)
     const p2Hand = p2Deck.splice(0, 3)
 
-    // ─── GAME STATE ───────────────────────────────────────────────────────────
     return {
         gameId: Math.random().toString(36).substring(2, 10),
         phase: 'setup',
         hasUsedPrimaryAction: false,
-        activePlayerId: firstToken?.playerId ?? 'player1',
-        activeUnitId: firstToken?.unitId ?? p1Units[0].id,
-        lastActivePlayer: null,
-        roundNumber: 1,
+        activation: null,
+        activePlayerId: firstToken?.playerId ?? firstPlayer,
+        activeUnitId: firstToken?.unitId ?? null,
+        lastActivePlayer: secondPlayer,
+        roundNumber: firstSlot?.round ?? 1,
         board,
         units: Object.fromEntries(allUnits.map(u => [u.id, u])),
         timeline,
         players: {
             player1: {
-                id: 'player1', name: player1Name, vp: 0,
-                deployHex: p1Deploy,
+                id: 'player1', name: player1Name, vp: 0, deployHex: p1Base, garrisonsRescued: 0,
                 tactics: { deck: p1Deck, hand: p1Hand, discarded: [], usedResponseThisTurn: false },
                 squadUnitIds: p1Units.map(u => u.id),
             },
             player2: {
-                id: 'player2', name: player2Name, vp: 0,
-                deployHex: p2Deploy,
+                id: 'player2', name: player2Name, vp: 0, deployHex: p2Base, garrisonsRescued: 0,
                 tactics: { deck: p2Deck, hand: p2Hand, discarded: [], usedResponseThisTurn: false },
                 squadUnitIds: p2Units.map(u => u.id),
             },
         },
         actionLog: [],
-        log: [],
+        log,
+        lastAttack: null,
         winner: null,
         pendingResponse: null,
     }

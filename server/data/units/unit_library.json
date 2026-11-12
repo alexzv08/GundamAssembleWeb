@@ -1,319 +1,1419 @@
 {
-  "version": 1,
-  "type": "unit-cards",
+  "version": 2,
+  "source": "https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/",
+  "note": "Unidades oficiales: HP/VP/TL, rasgos y textos copiados de la web oficial. Los valores de las armas (tlCost, range, strength) y los costes de Energy NO aparecen en texto en la web y son PROVISIONALES (provisionalStats=true): revisarlos con las cartas fisicas. Habilidades sin abilityData aun no estan implementadas.",
   "cards": [
     {
-      "uid": 1771805974872,
-      "unitName": "Gundam",
-      "pilot": "Amuro Ray",
-      "faction": "Earth Federation",
-      "cardId": "DM01-U01",
-      "hp": "11",
-      "vp": "05",
-      "tl": "02",
+      "cardId": "ST01-U01",
+      "set": "Starter Set 01",
+      "name": "GUNDAM",
+      "model": "RX-78-2",
+      "signature": "Legendary Hero",
+      "traits": [
+        "Amuro Ray",
+        "Earth Federation"
+      ],
+      "hp": 15,
+      "vp": 8,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Vulcan Guns",
+          "effect": "",
+          "crit": "Roll 2 addtional dice",
+          "tlCost": 1,
+          "range": 2,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "extra_dice",
+            "amount": 2
+          }
+        },
+        {
+          "name": "Beam Saber",
+          "effect": "[After Attack Roll] Deactivate all [Shield] Upgrades on the target.",
+          "crit": "[Damage +2].",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4,
+          "effectData": {
+            "trigger": "after_attack_roll",
+            "type": "deactivate_shields"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 2
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Frenzied Charge",
+          "effect": "Move 2. Beam Saber gains [Strength +1] this activation for each Garrison you've Rescued.",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "move",
+            "amount": 2,
+            "strength": 1
+          }
+        },
+        {
+          "name": "Escape from Side 7",
+          "effect": "After this unit Rescues a Garrison: Gain [Energy 1].",
+          "type": "RSP",
+          "abilityData": {
+            "type": "gain_after_rescue",
+            "upgradeType": "energy",
+            "amount": 1
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "ST01-U02",
+      "set": "Starter Set 01",
+      "name": "Wing Gundam Zero (EW)",
+      "model": "XXXG-00W0",
+      "signature": "Wing of Destruction",
+      "traits": [
+        "Heero Yuy",
+        "G Team"
+      ],
+      "hp": 12,
+      "vp": 9,
+      "tl": 3,
+      "provisionalStats": true,
       "weapons": [
         {
           "name": "Beam Saber",
-          "cost": "2",
-          "range": "1",
-          "str": "02",
-          "effect": "[After Attack Roll] Destroy 1 [Shield] Upgrade on the target.",
-          "crit": "[After Combat Damage] Gain a [Strength] Upgrade.",
-          "dots": 1,
-          "effectData": { "trigger": "after_attack_roll", "type": "destroy_upgrade", "target": "target", "amount": 1, "upgradeType": "shield" },
-          "critData": { "trigger": "after_combat_damage", "type": "gain_upgrade", "target": "self", "upgradeType": "attack" }
+          "effect": "",
+          "crit": "[After Combat Damage] This unit Moves 2, ignoring Engagement.",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4
+        },
+        {
+          "name": "Twin Buster Rifle",
+          "effect": "",
+          "crit": "[Damage +1] for each [Crit] rolled (max. +4).",
+          "tlCost": 4,
+          "range": 5,
+          "strength": 5,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "damage_per_crit",
+            "max": 4
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Full Power",
+          "effect": "This unit gains [Strength +3] this activation.",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "buff_activation",
+            "strength": 3
+          }
+        },
+        {
+          "name": "Zero System",
+          "effect": "This unit's attacks count 7's and 8's as [Crit].",
+          "type": "ONG",
+          "abilityData": {
+            "type": "extended_crit_threshold",
+            "threshold": 7
+          }
+        },
+        {
+          "name": "Hover",
+          "effect": "This unit ignores terrain movement penalties.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "hover"
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "ST01-U03",
+      "set": "Starter Set 01",
+      "name": "Gundam Barbatos Lupus Rex",
+      "model": "ASW-G-08",
+      "signature": "Final Stand",
+      "traits": [
+        "Mikazuki Augus",
+        "Tekkadan"
+      ],
+      "hp": 17,
+      "vp": 10,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Rex Claws",
+          "effect": "",
+          "crit": "[Slow] the target.",
+          "tlCost": 2,
+          "range": 1,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "slow"
+          }
+        },
+        {
+          "name": "Tail Blade",
+          "effect": "[Before Attack Roll] Pull 1 the target.",
+          "crit": "[Damage +1].",
+          "tlCost": 2,
+          "range": 2,
+          "strength": 3,
+          "effectData": {
+            "trigger": "before_attack_roll",
+            "type": "pull",
+            "amount": 1
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 1
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Annihilate",
+          "effect": "If this unit made a Tail Blade attack this activation, it makes an additional Rex Claws attack at [Timeline 0].",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "grant_free_attack",
+            "weapon": "Rex Claws",
+            "requiresWeapon": "Tail Blade"
+          }
+        },
+        {
+          "name": "Alaya-Vijnana Exertion",
+          "effect": "Deal [Damage 3] to this unit. Move 2.",
+          "type": "CMD",
+          "abilityData": {
+            "type": "self_damage_move",
+            "amount": 3,
+            "range": 2
+          }
+        },
+        {
+          "name": "Fight to the End",
+          "effect": "While this unit has: 6 or more [Damage]: Its attacks gain [Strength +1]. 12 or more [Damage]: Its attacks gain an additional [Strength +1].",
+          "type": "ONG",
+          "abilityData": {
+            "type": "strength_per_damage_taken",
+            "steps": [
+              {
+                "damage": 6,
+                "strength": 1
+              },
+              {
+                "damage": 12,
+                "strength": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "ST01-U04",
+      "set": "Starter Set 01",
+      "name": "Char's Zaku II",
+      "model": "MS-06S",
+      "signature": "Fast Encounter",
+      "traits": [
+        "Char Aznable",
+        "Zeon"
+      ],
+      "hp": 12,
+      "vp": 7,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Heat Hawk",
+          "effect": "",
+          "crit": "[After Combat Damage] [Fracture] the target.",
+          "tlCost": 2,
+          "range": 1,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "fracture"
+          }
+        },
+        {
+          "name": "Zaku Bazooka",
+          "effect": "[After Combat Damage] Make an additional Dash at [Timeline 0].",
+          "crit": "[Damage +2].",
+          "tlCost": 3,
+          "range": 3,
+          "strength": 4,
+          "effectData": {
+            "trigger": "after_combat_damage",
+            "type": "free_dash"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 2
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Checkmate",
+          "effect": "This unit's attacks gain [Accuracy +2] and \"[After Attack Roll] Destroy 1 Upgrade on the target.\" this activation.",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "buff_activation",
+            "accuracy": 2,
+            "destroyUpgradeOnHit": true
+          }
+        },
+        {
+          "name": "Three-Times Faster",
+          "effect": "This unit Moves 1 additional hex when Dashing.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "dash_range_bonus",
+            "amount": 1
+          }
+        },
+        {
+          "name": "Char Kick",
+          "effect": "After this unit Dashes: It deals [Damage 1] to an adjacent enemy.",
+          "type": "RSP",
+          "abilityData": {
+            "type": "damage_after_dash",
+            "amount": 1
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "ST01-U05",
+      "set": "Starter Set 01",
+      "name": "Gundam Epyon (EW)",
+      "model": "OZ-13MS",
+      "signature": "Crimson Cataclysm",
+      "traits": [
+        "Zechs Merquise",
+        "White Fang",
+        "OZ"
+      ],
+      "hp": 15,
+      "vp": 9,
+      "tl": 3,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Heat Rod",
+          "effect": "[Before Attack Roll] Pull 1 the target.",
+          "crit": "[Disarm] the target.",
+          "tlCost": 2,
+          "range": 2,
+          "strength": 3,
+          "effectData": {
+            "trigger": "before_attack_roll",
+            "type": "pull",
+            "amount": 1
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "disarm"
+          }
+        },
+        {
+          "name": "Beam Sword",
+          "effect": "",
+          "crit": "[Damage +1].",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 5,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 1
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "No Escape",
+          "effect": "[Slow] an enemy unit within [Range 2].",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "status_enemy",
+            "status": "slow",
+            "range": 2
+          }
+        },
+        {
+          "name": "Exploit Weakness",
+          "effect": "This unit's attacks gain [Strength +2] against enemies with status effects.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "strength_vs_status",
+            "amount": 2
+          }
+        },
+        {
+          "name": "Hover",
+          "effect": "This unit ignores terrain movement penalties.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "hover"
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "ST01-U06",
+      "set": "Starter Set 01",
+      "name": "Gundam Vidar",
+      "model": "ASW-G-XX",
+      "signature": "Cold Justice",
+      "traits": [
+        "Vidar",
+        "Gjallarhorn"
+      ],
+      "hp": 13,
+      "vp": 7,
+      "tl": 1,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Handguns",
+          "effect": "",
+          "crit": "[After Combat Damage] Repeat this attack at [Timeline 0] without this ability.",
+          "tlCost": 2,
+          "range": 3,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "repeat_attack"
+          }
+        },
+        {
+          "name": "Burst Saber",
+          "effect": "",
+          "crit": "[Damage +2].",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 2
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Hunter's Edge",
+          "effect": "Push 2 an adjacent enemy and deal [Damage 1] to it.",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "push_and_damage",
+            "amount": 2
+          }
+        },
+        {
+          "name": "Alaya-Vijnana Type E System",
+          "effect": "If you control 2 or more Objectives, Move 2 and this unit gains [Strength +1] this activation.",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "move",
+            "amount": 2,
+            "strength": 1,
+            "requiresObjectives": 2
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "EX01-U01",
+      "set": "Expansion Pack 01",
+      "name": "Unicorn Gundam (Destroy Mode)",
+      "model": "RX-0",
+      "signature": "Laplace's Guardian",
+      "traits": [
+        "Banagher Links",
+        "Civilian",
+        "Earth Federation",
+        "Londo Bell"
+      ],
+      "hp": 14,
+      "vp": 10,
+      "tl": 3,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Beam Saber",
+          "effect": "",
+          "crit": "[After Combat Damage] Gain 1 [Strength] Upgrade.",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "gain_upgrade",
+            "upgradeType": "attack"
+          }
+        },
+        {
+          "name": "Beam Magnum",
+          "effect": "",
+          "crit": "[Damage +1] for each Upgrade on this unit (max. +4).",
+          "tlCost": 4,
+          "range": 5,
+          "strength": 5,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "damage_per_upgrade",
+            "upgradeType": "any",
+            "max": 4
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Psycho-Frame Synchrony",
+          "effect": "[Before Attack Roll] Another attacker within [Range 3] gets [Strength +1] this attack for each [Strength] Upgrade on this unit.",
+          "type": "RSP"
+        },
+        {
+          "name": "Newtype Destroyer",
+          "effect": "Enemies can't use [Response] abilities while this unit is attacking or being attacked.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "block_enemy_responses"
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "EX01-U02",
+      "set": "Expansion Pack 01",
+      "name": "Torohachi",
+      "model": "TOLRO-800",
+      "signature": "Petite Mobile Suit",
+      "traits": [
+        "Civilian",
+        "Earth Federation",
+        "Mass Produced"
+      ],
+      "hp": 8,
+      "vp": 5,
+      "tl": 1,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Armored Frame",
+          "effect": "",
+          "crit": "[Damage +1] for each [Shield] Upgrade on this unit (max. +4).",
+          "tlCost": 2,
+          "range": 1,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "damage_per_upgrade",
+            "upgradeType": "shield",
+            "max": 4
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Rescue Maneuver",
+          "effect": "Rescue an allied Garrison within [Range 3].",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "rescue_at_range",
+            "range": 3
+          }
+        },
+        {
+          "name": "Supply",
+          "effect": "After this unit Rescues a Garrison: Gain 1 [Shield] Upgrade.",
+          "type": "RSP",
+          "abilityData": {
+            "type": "gain_after_rescue",
+            "upgradeType": "shield",
+            "amount": 1
+          }
+        },
+        {
+          "name": "Material Transfer",
+          "effect": "Redistribute Upgrades among this unit and another allied unit within [Range 3].",
+          "type": "CMD"
+        }
+      ]
+    },
+    {
+      "cardId": "EX01-U03",
+      "set": "Expansion Pack 01",
+      "name": "Delta Plus",
+      "model": "MSN-001A1",
+      "signature": "Rapid Response",
+      "traits": [
+        "Riddhe Marcenas",
+        "Earth Federation",
+        "Londo Bell"
+      ],
+      "hp": 11,
+      "vp": 7,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Twin-Barreled Grenade Launcher",
+          "effect": "",
+          "crit": "[Slow] the target.",
+          "tlCost": 2,
+          "range": 3,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "slow"
+          }
         },
         {
           "name": "Beam Rifle",
-          "cost": "4",
-          "range": "4",
-          "str": "05",
+          "effect": "[Strength +1] for each [Speed] Upgrade on this unit.",
+          "crit": "Gain 1 [Speed] Upgrade.",
+          "tlCost": 3,
+          "range": 4,
+          "strength": 3,
+          "effectData": {
+            "trigger": "always",
+            "type": "strength_per_upgrade",
+            "upgradeType": "movement"
+          },
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "gain_upgrade",
+            "upgradeType": "movement"
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Blitzing Slash",
+          "effect": "After this unit ends its movement: It deals [Damage 1] to each enemy it moved adjacent to.",
+          "type": "RSP",
+          "abilityData": {
+            "type": "damage_after_move",
+            "amount": 1
+          }
+        },
+        {
+          "name": "Jet Through",
+          "effect": "While this unit has at least 1 [Speed] Upgrade, it has Hover.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "hover",
+            "requiredUpgrades": 1,
+            "upgradeType": "movement"
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "EX02-U01",
+      "set": "Expansion Pack 02",
+      "name": "Gundam Aerial",
+      "model": "XVX-016",
+      "signature": "Protective Heroine",
+      "traits": [
+        "Suletta Mercury",
+        "Asticassia"
+      ],
+      "hp": 16,
+      "vp": 10,
+      "tl": 1,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Beam Sabers",
+          "effect": "",
+          "crit": "[After Combat Damage] Repeat this attack at [Timeline 0] without this ability.",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "repeat_attack"
+          }
+        },
+        {
+          "name": "Beam Rifle",
+          "effect": "[Strength +1] for each allied RWS adjacent to the target.",
+          "crit": "[Damage +2].",
+          "tlCost": 3,
+          "range": 4,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 2
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Permet Burst",
+          "effect": "[After Attack Roll] If this unit or another allied unit within [Range 3] is attacking, set 1 die to a [Crit].",
+          "type": "RSP"
+        },
+        {
+          "name": "BIT Stave Direct",
+          "effect": "Deploy or reposition this unit's BIT Stave on an empty hex within [Range 3].",
+          "type": "CMD"
+        },
+        {
+          "name": "Challenge",
+          "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
+          "type": "RSP"
+        }
+      ]
+    },
+    {
+      "cardId": "EX02-U02",
+      "set": "Expansion Pack 02",
+      "name": "Gundam Pharact",
+      "model": "FP/A-77",
+      "signature": "Silent Hunter",
+      "traits": [
+        "Elan Ceres",
+        "Asticassia"
+      ],
+      "hp": 12,
+      "vp": 7,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Beak Foot",
+          "effect": "",
+          "crit": "Roll 2 additional dice.",
+          "tlCost": 2,
+          "range": 1,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "extra_dice",
+            "amount": 2
+          }
+        },
+        {
+          "name": "Beam Arquebus",
+          "effect": "[After Attack Roll] Deactivate all [Shield] Upgrades on the target.",
+          "crit": "[After Combat Damage] This unit Moves 2, ignoring Engagement.",
+          "tlCost": 3,
+          "range": 5,
+          "strength": 4,
+          "effectData": {
+            "trigger": "after_attack_roll",
+            "type": "deactivate_shields"
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Lockdown",
+          "effect": "[After Combat Damage] If this unit attacked an enemy adjacent to this unit's Corax, it applies [Slow] to that enemy unit.",
+          "type": "RSP"
+        },
+        {
+          "name": "Corax Direct",
+          "effect": "Deploy or reposition this unit's Corax on an empty hex within [Range 4].",
+          "type": "CMD"
+        },
+        {
+          "name": "Hover",
+          "effect": "This unit ignores terrain movement penalties.",
+          "type": "ONG",
+          "abilityData": {
+            "type": "hover"
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "EX02-U03",
+      "set": "Expansion Pack 02",
+      "name": "Darilbalde",
+      "model": "MD-0064",
+      "signature": "Frontline Duelist",
+      "traits": [
+        "Guel Jeturk",
+        "Asticassia"
+      ],
+      "hp": 13,
+      "vp": 8,
+      "tl": 3,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Shackle Claw",
+          "effect": "[After Attack Roll] Move 1 towards the target ignoring terrain penalties.",
+          "crit": "[Disarm] the target.",
+          "tlCost": 2,
+          "range": 2,
+          "strength": 3,
+          "effectData": {
+            "trigger": "after_attack_roll",
+            "type": "move_toward_target",
+            "amount": 1
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "disarm"
+          }
+        },
+        {
+          "name": "Beam Saber",
+          "effect": "",
+          "crit": "Deal [Damage 2] to each enemy adjacent to this unit's Iśvara B Type.",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Sundering Strike",
+          "effect": "[Fracture] an adjacent enemy unit.",
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "status_enemy",
+            "status": "fracture",
+            "adjacentOnly": true,
+            "range": 1
+          }
+        },
+        {
+          "name": "Iśvara B Type Direct",
+          "effect": "Deploy or reposition this unit's Iśvara B Type on an empty hex within [Range 2].",
+          "type": "CMD"
+        }
+      ]
+    },
+    {
+      "cardId": "PA01-U01",
+      "set": "Paint Pack 01",
+      "name": "Gundam",
+      "model": "RX-78-2",
+      "signature": "Elite Mobile Suit",
+      "traits": [
+        "Amuro Ray",
+        "Earth Federation"
+      ],
+      "hp": 17,
+      "vp": 10,
+      "tl": 1,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "Beam Saber",
+          "effect": "",
+          "crit": "[After Combat Damage] [Fracture] the target.",
+          "tlCost": 3,
+          "range": 1,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "fracture"
+          }
+        },
+        {
+          "name": "Beam Rifle",
+          "effect": "",
+          "crit": "[Disarm] the target.",
+          "tlCost": 3,
+          "range": 4,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "disarm"
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Toss Away",
+          "effect": "[After Attack Roll] If this unit is attacking, it Pushes 2 the target.",
+          "type": "RSP",
+          "abilityData": {
+            "type": "push_on_attack",
+            "amount": 2
+          }
+        },
+        {
+          "name": "Inspiring Presence",
+          "effect": "[After Attack Roll] If another allied unit within [Range 2] is attacking, reroll up to 3 misses.",
+          "type": "RSP"
+        },
+        {
+          "name": "Challenge",
+          "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
+          "type": "RSP"
+        }
+      ]
+    },
+    {
+      "cardId": "PA01-U02",
+      "set": "Paint Pack 01",
+      "name": "Guncannon",
+      "model": "RX-77-2",
+      "signature": "In Position",
+      "traits": [
+        "Kai Shiden",
+        "Earth Federation"
+      ],
+      "hp": 12,
+      "vp": 7,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "240mm Low-Recoil Cannon",
+          "effect": "",
+          "crit": "[After Combat Damage] [Fracture] the targets.",
+          "tlCost": 3,
+          "range": 5,
+          "strength": 4,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "fracture"
+          }
+        },
+        {
+          "name": "Beam Rifle",
+          "effect": "This attack also targets each enemy adjacent to the target.",
+          "crit": "[Damage +1].",
+          "tlCost": 3,
+          "range": 4,
+          "strength": 3,
+          "effectData": {
+            "trigger": "always",
+            "type": "also_target_adjacent"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 1
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Stunning Shot",
+          "effect": "[After Combat Damage] If this unit attacked, each target moves up 1 [Timeline].",
+          "type": "RSP",
+          "abilityData": {
+            "type": "stun_on_damage",
+            "amount": 1
+          }
+        },
+        {
+          "name": "Firing Line",
+          "effect": "If this unit hasn't moved this activation, its attacks gain [Accuracy +1] and [Strength +1].",
+          "type": "ONG",
+          "abilityData": {
+            "type": "firing_line",
+            "accuracy": 1,
+            "strength": 1
+          }
+        },
+        {
+          "name": "Challenge",
+          "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
+          "type": "RSP"
+        }
+      ]
+    },
+    {
+      "cardId": "PA01-U03",
+      "set": "Paint Pack 01",
+      "name": "Guntank",
+      "model": "RX-75",
+      "signature": "Battlefield Bombarder",
+      "traits": [
+        "Hayato Kobayashi",
+        "Earth Federation"
+      ],
+      "hp": 13,
+      "vp": 7,
+      "tl": 2,
+      "provisionalStats": true,
+      "weapons": [
+        {
+          "name": "120mm Low-Recoil Cannons",
+          "effect": "This attack ignores Line of Sight.",
+          "crit": "[Disarm] the target.",
+          "tlCost": 3,
+          "range": 5,
+          "strength": 4,
+          "effectData": {
+            "trigger": "always",
+            "type": "ignore_los"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "disarm"
+          }
+        },
+        {
+          "name": "Quadruple Bop Missile",
+          "effect": "This attack also targets each enemy adjacent to the target.",
+          "crit": "[Damage +1].",
+          "tlCost": 3,
+          "range": 4,
+          "strength": 3,
+          "effectData": {
+            "trigger": "always",
+            "type": "also_target_adjacent"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 1
+          }
+        }
+      ],
+      "abilities": [
+        {
+          "name": "Coordinated Payload",
+          "effect": "[Before Attack Roll] If this unit is attacking, it gains [Strength +2] this attack for each other allied unit within [Range 3].",
+          "type": "ONG",
+          "abilityData": {
+            "type": "strength_per_ally_nearby",
+            "amount": 2,
+            "range": 3
+          }
+        },
+        {
+          "name": "Crowd Control",
+          "effect": "[After Combat Damage] If this unit dealt [Damage] to 2 or more enemies this attack, draw 1 card.",
+          "type": "RSP",
+          "abilityData": {
+            "type": "draw_on_multi_damage",
+            "amount": 1
+          }
+        }
+      ]
+    },
+    {
+      "cardId": "DM01-U01",
+      "set": "Demo (pre-lanzamiento)",
+      "name": "Gundam",
+      "traits": [
+        "Amuro Ray",
+        "Earth Federation"
+      ],
+      "hp": 11,
+      "vp": 5,
+      "tl": 2,
+      "weapons": [
+        {
+          "name": "Beam Saber",
+          "effect": "[After Attack Roll] Destroy 1 [Shield] Upgrade on the target.",
+          "crit": "[After Combat Damage] Gain a [Strength] Upgrade.",
+          "tlCost": 2,
+          "range": 1,
+          "strength": 2,
+          "effectData": {
+            "trigger": "after_attack_roll",
+            "type": "destroy_upgrade",
+            "target": "target",
+            "amount": 1,
+            "upgradeType": "shield"
+          },
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "gain_upgrade",
+            "target": "self",
+            "upgradeType": "attack"
+          }
+        },
+        {
+          "name": "Beam Rifle",
           "effect": "",
           "crit": "[Crit] +2 [Damage].",
-          "dots": 4,
-          "effectData": null,
-          "critData": { "trigger": "after_attack_roll", "type": "bonus_damage", "amount": 2 }
+          "tlCost": 4,
+          "range": 4,
+          "strength": 5,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 2
+          }
         }
       ],
       "abilities": [
         {
           "name": "White Base Unity",
-          "type": "burst",
-          "tags": "Energy, Command",
           "effect": "If another allied unit within [Range 3] has 1 or fewer Upgrades, it gains an Upgrade of your choice.",
-          "abilityData": null
+          "type": "CMD",
+          "energyCost": 1
         },
         {
           "name": "Newtype Instincts",
-          "type": "ongoing",
-          "tags": "Ongoing",
           "effect": "[After Attack Roll] if this unit is attacking, it rerolls one miss.",
-          "abilityData": { "type": "reroll_one_miss" }
+          "type": "ONG",
+          "abilityData": {
+            "type": "reroll_one_miss"
+          }
         }
-      ],
-      "art": null, "artX": 0, "artY": 0, "artZoom": 100
+      ]
     },
     {
-      "uid": 1771805974873,
-      "unitName": "Guncannon",
-      "pilot": "Kai Shiden",
-      "faction": "Earth Federation",
       "cardId": "DM01-U02",
-      "hp": "10",
-      "vp": "04",
-      "tl": "02",
+      "set": "Demo (pre-lanzamiento)",
+      "name": "Guncannon",
+      "traits": [
+        "Kai Shiden",
+        "Earth Federation"
+      ],
+      "hp": 10,
+      "vp": 4,
+      "tl": 2,
       "weapons": [
         {
           "name": "Beam Rifle",
-          "cost": "2",
-          "range": "3",
-          "str": "02",
           "effect": "",
           "crit": "Slow the target.",
-          "dots": 3,
-          "effectData": null,
-          "critData": { "trigger": "after_attack_roll", "type": "slow", "target": "target" }
+          "tlCost": 2,
+          "range": 3,
+          "strength": 2,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "slow",
+            "target": "target"
+          }
         },
         {
           "name": "Shoulder Cannons",
-          "cost": "3",
-          "range": "3",
-          "str": "04",
           "effect": "",
           "crit": "[After Combat Damage] Dash at [TL 0]. Then, Rescue an adjacent allied Garrison at [TL 0].",
-          "dots": 3,
-          "effectData": null,
-          "critData": null
+          "tlCost": 3,
+          "range": 3,
+          "strength": 4
         }
       ],
       "abilities": [
         {
           "name": "Critical Shot",
-          "type": "burst",
-          "tags": "Energy, Command",
           "effect": "Fracture an enemy unit within [Range 3].",
-          "abilityData": { "type": "fracture_enemy", "range": 3 }
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "status_enemy",
+            "status": "fracture",
+            "range": 3
+          }
         },
         {
           "name": "Federation Courage",
-          "type": "ongoing",
-          "tags": "Ongoing",
           "effect": "While this unit has 2 or more Upgrades, its attacks count 7's and 8's as [Crit].",
-          "abilityData": { "type": "extended_crit_threshold", "threshold": 7, "requiredUpgrades": 2 }
+          "type": "ONG",
+          "abilityData": {
+            "type": "extended_crit_threshold",
+            "threshold": 7,
+            "requiredUpgrades": 2
+          }
         }
-      ],
-      "art": null, "artX": 0, "artY": 0, "artZoom": 100
+      ]
     },
     {
-      "uid": 1771805974874,
-      "unitName": "Guntank",
-      "pilot": "Hayato Kobayashi",
-      "faction": "Earth Federation",
       "cardId": "DM01-U03",
-      "hp": "09",
-      "vp": "03",
-      "tl": "03",
+      "set": "Demo (pre-lanzamiento)",
+      "name": "Guntank",
+      "traits": [
+        "Hayato Kobayashi",
+        "Earth Federation"
+      ],
+      "hp": 9,
+      "vp": 3,
+      "tl": 3,
       "weapons": [
         {
           "name": "4-Tube Missile Launcher",
-          "cost": "2",
-          "range": "3",
-          "str": "02",
           "effect": "This attack deals +1 [Damage] when targeting enemies on or adjacent to an objective.",
           "crit": "[After Combat Damage] Fracture the target.",
-          "dots": 3,
-          "effectData": { "trigger": "always", "type": "bonus_damage_near_objective", "amount": 1 },
-          "critData": { "trigger": "after_combat_damage", "type": "fracture", "target": "target" }
+          "tlCost": 2,
+          "range": 3,
+          "strength": 2,
+          "effectData": {
+            "trigger": "always",
+            "type": "bonus_damage_near_objective",
+            "amount": 1
+          },
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "fracture",
+            "target": "target"
+          }
         },
         {
           "name": "Low-Recoil Cannons",
-          "cost": "4",
-          "range": "4",
-          "str": "04",
           "effect": "This attack ignores Line of Sight.",
           "crit": "Slow the target",
-          "dots": 4,
-          "effectData": { "trigger": "always", "type": "ignore_los" },
-          "critData": { "trigger": "after_attack_roll", "type": "slow", "target": "target" }
+          "tlCost": 4,
+          "range": 4,
+          "strength": 4,
+          "effectData": {
+            "trigger": "always",
+            "type": "ignore_los"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "slow",
+            "target": "target"
+          }
         }
       ],
       "abilities": [
         {
           "name": "Saturated Fire",
-          "type": "burst",
-          "tags": "Energy, Command",
           "effect": "Roll 5 dice. For each [Crit], deal 1 [Damage] to each enemy unit within [Range 4]",
-          "abilityData": { "type": "saturated_fire", "dice": 5, "range": 4 }
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "saturated_fire",
+            "dice": 5,
+            "range": 4
+          }
         },
         {
           "name": "Targeted Shot",
-          "type": "ongoing",
-          "tags": "Ongoing",
           "effect": "While this unit has 2 or more Upgrades, its attacks gain +1 [Accuracy].",
-          "abilityData": { "type": "accuracy_bonus", "amount": 1, "requiredUpgrades": 2 }
+          "type": "ONG",
+          "abilityData": {
+            "type": "accuracy_bonus",
+            "amount": 1,
+            "requiredUpgrades": 2
+          }
         }
-      ],
-      "art": null, "artX": 0, "artY": 0, "artZoom": 100
+      ]
     },
     {
-      "uid": 1771805974875,
-      "unitName": "Char's Zaku II",
-      "pilot": "Char Aznable",
-      "faction": "Zeon",
       "cardId": "DM01-U04",
-      "hp": "08",
-      "vp": "05",
-      "tl": "01",
+      "set": "Demo (pre-lanzamiento)",
+      "name": "Char's Zaku II",
+      "traits": [
+        "Char Aznable",
+        "Zeon"
+      ],
+      "hp": 8,
+      "vp": 5,
+      "tl": 1,
       "weapons": [
         {
           "name": "Heat Hawk",
-          "cost": "2",
-          "range": "1",
-          "str": "03",
           "effect": "",
           "crit": "[After Combat Damage] Fracture the target.",
-          "dots": 1,
-          "effectData": null,
-          "critData": { "trigger": "after_combat_damage", "type": "fracture", "target": "target" }
+          "tlCost": 2,
+          "range": 1,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "fracture",
+            "target": "target"
+          }
         },
         {
           "name": "Machine Gun",
-          "cost": "3",
-          "range": "2",
-          "str": "05",
           "effect": "",
           "crit": "[After Combat Damage] Dash at [TL 0].",
-          "dots": 2,
-          "effectData": null,
-          "critData": null
+          "tlCost": 3,
+          "range": 2,
+          "strength": 5,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "free_dash"
+          }
         }
       ],
       "abilities": [
         {
           "name": "Burst Attack",
-          "type": "burst",
-          "tags": "Energy, Command",
           "effect": "Make a Heat Hawk attack at [TL 0].",
-          "abilityData": null
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "grant_free_attack",
+            "weapon": "Heat Hawk"
+          }
         },
         {
           "name": "Three Times Faster",
-          "type": "ongoing",
-          "tags": "Ongoing",
           "effect": "When this unit Dashes: It moves up to 1 additional hex.",
-          "abilityData": { "type": "dash_range_bonus", "amount": 1 }
+          "type": "ONG",
+          "abilityData": {
+            "type": "dash_range_bonus",
+            "amount": 1
+          }
         },
         {
           "name": "Char Kick",
-          "type": "response",
-          "tags": "Response",
           "effect": "After this unit Dashes: Deal 1 [Damage] to an adjacent enemy.",
-          "abilityData": { "type": "damage_after_dash", "amount": 1 }
+          "type": "RSP",
+          "abilityData": {
+            "type": "damage_after_dash",
+            "amount": 1
+          }
         }
-      ],
-      "art": null, "artX": 0, "artY": 0, "artZoom": 100
+      ]
     },
     {
-      "uid": 1771805974876,
-      "unitName": "Zaku II [Line Breaker]",
-      "pilot": "Mass Produced",
-      "faction": "Zeon",
       "cardId": "DM01-U05",
-      "hp": "09",
-      "vp": "04",
-      "tl": "02",
+      "set": "Demo (pre-lanzamiento)",
+      "name": "Zaku II [Line Breaker]",
+      "traits": [
+        "Zeon",
+        "Mass Produced"
+      ],
+      "hp": 9,
+      "vp": 4,
+      "tl": 2,
       "weapons": [
         {
           "name": "Cracker Grenade",
-          "cost": "2",
-          "range": "3",
-          "str": "02",
           "effect": "[After Combat Damage] Deal 2 [Damage] to each enemy adjacent to the target.",
           "crit": "+1 [Damage]",
-          "dots": 3,
-          "effectData": { "trigger": "after_combat_damage", "type": "splash_damage", "target": "adjacent_enemies", "amount": 2 },
-          "critData": { "trigger": "after_attack_roll", "type": "bonus_damage", "amount": 1 }
+          "tlCost": 2,
+          "range": 3,
+          "strength": 2,
+          "effectData": {
+            "trigger": "after_combat_damage",
+            "type": "splash_damage",
+            "target": "adjacent_enemies",
+            "amount": 2
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "bonus_damage",
+            "amount": 1
+          }
         },
         {
           "name": "Bazooka",
-          "cost": "3",
-          "range": "3",
-          "str": "04",
           "effect": "",
           "crit": "+1 [Damage] for each Garrison you've Rescued.",
-          "dots": 3,
-          "effectData": null,
-          "critData": null
+          "tlCost": 3,
+          "range": 3,
+          "strength": 4
         }
       ],
       "abilities": [
         {
           "name": "Zeon Zealotry",
-          "type": "burst",
-          "tags": "Energy, Command",
           "effect": "Move 5 towards a damaged enemy unit, ignoring terrain penalties.",
-          "abilityData": null
+          "type": "CMD",
+          "energyCost": 1
         },
         {
           "name": "Rescue the Mechanics",
-          "type": "response",
-          "tags": "Response",
           "effect": "After this unit Rescues a Garrison: Another allied unit gains 2 hit points. (cannot gain more hit points than max hit points)",
-          "abilityData": { "type": "heal_ally_after_rescue", "amount": 2 }
+          "type": "RSP",
+          "abilityData": {
+            "type": "heal_ally_after_rescue",
+            "amount": 2
+          }
         }
-      ],
-      "art": null, "artX": 0, "artY": 0, "artZoom": 100
+      ]
     },
     {
-      "uid": 1771805974877,
-      "unitName": "Zaku II [Enforcer]",
-      "pilot": "Mass Produced",
-      "faction": "Zeon",
       "cardId": "DM01-U06",
-      "hp": "11",
-      "vp": "04",
-      "tl": "02",
+      "set": "Demo (pre-lanzamiento)",
+      "name": "Zaku II [Enforcer]",
+      "traits": [
+        "Zeon",
+        "Mass Produced"
+      ],
+      "hp": 11,
+      "vp": 4,
+      "tl": 2,
       "weapons": [
         {
           "name": "Shoulder Bash",
-          "cost": "2",
-          "range": "1",
-          "str": "03",
           "effect": "",
           "crit": "Push 2 the target",
-          "dots": 1,
-          "effectData": null,
-          "critData": { "trigger": "after_combat_damage", "type": "push", "target": "target", "amount": 2 }
+          "tlCost": 2,
+          "range": 1,
+          "strength": 3,
+          "critData": {
+            "trigger": "after_combat_damage",
+            "type": "push",
+            "target": "target",
+            "amount": 2
+          }
         },
         {
           "name": "Heat Hawk",
-          "cost": "4",
-          "range": "1",
-          "str": "05",
           "effect": "[After Attack Roll] Destroy 1 Upgrade on the target.",
           "crit": "Slow the target.",
-          "dots": 1,
-          "effectData": { "trigger": "after_attack_roll", "type": "destroy_upgrade", "target": "target", "amount": 1, "upgradeType": "any" },
-          "critData": { "trigger": "after_attack_roll", "type": "slow", "target": "target" }
+          "tlCost": 4,
+          "range": 1,
+          "strength": 5,
+          "effectData": {
+            "trigger": "after_attack_roll",
+            "type": "destroy_upgrade",
+            "target": "target",
+            "amount": 1,
+            "upgradeType": "any"
+          },
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "slow",
+            "target": "target"
+          }
         }
       ],
       "abilities": [
         {
           "name": "Domination",
-          "type": "burst",
-          "tags": "Energy, Command",
           "effect": "Capture an objective this unit is on or adjacent to.",
-          "abilityData": { "type": "capture_objective", "range": 1 }
+          "type": "CMD",
+          "energyCost": 1,
+          "abilityData": {
+            "type": "capture_objective",
+            "range": 1
+          }
         },
         {
           "name": "Suppressing Presence",
-          "type": "ongoing",
-          "tags": "Ongoing",
           "effect": "This unit gains +1 [Strength] when attacking damaged enemy units.",
-          "abilityData": { "type": "strength_vs_damaged", "amount": 1 }
+          "type": "ONG",
+          "abilityData": {
+            "type": "strength_vs_damaged",
+            "amount": 1
+          }
         }
-      ],
-      "art": null, "artX": 0, "artY": 0, "artZoom": 100
+      ]
     }
   ]
 }

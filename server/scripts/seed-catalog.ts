@@ -14,38 +14,20 @@ import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 import * as path from 'path'
 
-// ── Tipos mínimos para leer los JSON ────────────────────────────────────────
+// ── Tipos mínimos para leer los JSON (formato v2 de unit_library.json) ──────
 
-interface WeaponJSON {
-  name: string
-  cost: string
-  range: string
-  str: string
-  effect: string
-  crit: string
-  dots: number
-  effectData: unknown
-  critData: unknown
-}
-
-interface AbilityJSON {
-  name: string
-  type: string
-  tags: string
-  effect: string
-  abilityData: unknown
-}
+interface WeaponJSON { name: string; tlCost: number; range: number; strength: number }
 
 interface UnitCardJSON {
   cardId: string
-  unitName: string
-  pilot: string
-  faction: string
-  hp: string
-  vp: string
-  tl: string
+  set: string
+  name: string
+  traits: string[]
+  hp: number
+  vp: number
+  tl: number
   weapons: WeaponJSON[]
-  abilities: AbilityJSON[]
+  abilities: unknown[]
 }
 
 interface CommandCardJSON {
@@ -73,9 +55,11 @@ const COMMANDS_FILE = path.join(DATA_DIR, 'cards', 'card_library.json')
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function maxWeaponStat(weapons: WeaponJSON[], field: 'str' | 'range'): number {
-  return weapons.reduce((max, w) => Math.max(max, parseInt(w[field]) || 0), 0)
+function maxWeaponStat(weapons: WeaponJSON[], field: 'strength' | 'range'): number {
+  return weapons.reduce((max, w) => Math.max(max, w[field] || 0), 0)
 }
+
+const FACTIONS = ['Earth Federation', 'Zeon', 'Asticassia', 'Gjallarhorn', 'Tekkadan', 'G Team', 'White Fang', 'OZ', 'Londo Bell']
 
 function log(msg: string) {
   console.log(`[seed] ${msg}`)
@@ -86,43 +70,42 @@ function log(msg: string) {
 async function main() {
   log('Iniciando seed del catálogo...')
 
-  // 1. Upsert del set base DM01
-  log('Insertando set DM01...')
-  const { data: setData, error: setError } = await supabase
-    .from('sets')
-    .upsert({ code: 'DM01', name: 'Gundam Assemble — Base Set', released_at: '2026-01-01' }, { onConflict: 'code' })
-    .select('id')
-    .single()
-
-  if (setError || !setData) {
-    console.error('Error insertando set:', setError)
-    process.exit(1)
+  // 1. Sets (uno por prefijo de cardId: ST01, EX01, PA01, DM01...)
+  const unitsRaw: { cards: UnitCardJSON[] } = JSON.parse(fs.readFileSync(UNITS_FILE, 'utf-8'))
+  const setNames = new Map<string, string>()
+  for (const card of unitsRaw.cards) setNames.set(card.cardId.split('-')[0], card.set)
+  const setIds = new Map<string, string>()
+  for (const [code, name] of setNames) {
+    const { data, error } = await supabase
+      .from('sets')
+      .upsert({ code, name }, { onConflict: 'code' })
+      .select('id')
+      .single()
+    if (error || !data) {
+      console.error(`Error insertando set ${code}:`, error)
+      process.exit(1)
+    }
+    setIds.set(code, data.id)
   }
-  const setId = setData.id
-  log(`Set DM01 id: ${setId}`)
+  log(`${setIds.size} sets insertados/actualizados.`)
 
   // 2. Units
-  const unitsRaw: { cards: UnitCardJSON[] } = JSON.parse(fs.readFileSync(UNITS_FILE, 'utf-8'))
   log(`Procesando ${unitsRaw.cards.length} unidades...`)
-
   const unitRows = unitsRaw.cards.map(card => ({
-    set_id:   setId,
+    set_id:   setIds.get(card.cardId.split('-')[0]),
     code:     card.cardId,
-    name:     card.unitName,
-    pilot:    card.pilot,
-    faction:  card.faction,
-    cost:     parseInt(card.tl),
-    movement: 3,                                      // valor por defecto del motor
-    attack:   maxWeaponStat(card.weapons, 'str'),
-    defense:  0,                                      // sin stat de defensa base
+    name:     card.name,
+    pilot:    card.traits[0] ?? null,
+    faction:  card.traits.find(t => FACTIONS.includes(t)) ?? null,
+    cost:     card.tl,
+    movement: 3,                                      // Advance básico
+    attack:   maxWeaponStat(card.weapons, 'strength'),
+    defense:  0,
     range:    maxWeaponStat(card.weapons, 'range'),
-    hp:       parseInt(card.hp),
-    vp:       parseInt(card.vp),
+    hp:       card.hp,
+    vp:       card.vp,
     role:     'Mobile Suit',
-    abilities: {
-      weapons:   card.weapons,
-      abilities: card.abilities,
-    },
+    abilities: card,                                  // ficha completa
   }))
 
   const { error: unitsError } = await supabase
@@ -140,7 +123,7 @@ async function main() {
   log(`Procesando ${commandsRaw.cards.length} cartas de táctica...`)
 
   const commandRows = commandsRaw.cards.map(card => ({
-    set_id:  setId,
+    set_id:  setIds.get('DM01') ?? [...setIds.values()][0],
     code:    card.cardId,
     name:    card.name,
     faction: card.faction,
