@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react'
 import type { BoardMap } from '../types/board'
-import type { Unit } from '../types/units'
 import { fetchMap, fetchUnits, fetchCards } from '../api/gameData'
 import type { UnitCardData, TacticsCardData } from '../api/gameData'
-import { loadMapFromJSON, loadUnitFromJSON } from './loaders'
-import { offsetToAxial } from './hexGrid'
+import { loadMapFromJSON } from './loaders'
 
 export interface GameData {
     board: BoardMap
-    federationCards: UnitCardData[]
-    zeonCards: UnitCardData[]
     allUnitCards: UnitCardData[]
     allTacticsCards: TacticsCardData[]
     loaded: boolean
@@ -19,8 +15,6 @@ export interface GameData {
 export function useGameData(): GameData {
     const [data, setData] = useState<GameData>({
         board: {},
-        federationCards: [],
-        zeonCards: [],
         allUnitCards: [],
         allTacticsCards: [],
         loaded: false,
@@ -31,12 +25,8 @@ export function useGameData(): GameData {
         Promise.all([fetchMap('DemoMap'), fetchUnits(), fetchCards()])
             .then(([mapData, unitsData, cardsData]) => {
                 const board = loadMapFromJSON(mapData)
-                const fed = unitsData.cards.filter(c => c.faction === 'Earth Federation')
-                const zeon = unitsData.cards.filter(c => c.faction === 'Zeon')
                 setData({
                     board,
-                    federationCards: fed,
-                    zeonCards: zeon,
                     allUnitCards: unitsData.cards,
                     allTacticsCards: cardsData.cards,
                     loaded: true,
@@ -49,29 +39,4 @@ export function useGameData(): GameData {
     }, [])
 
     return data
-}
-
-export function createUnitsFromCards(
-    fedCards: UnitCardData[],
-    zeonCards: UnitCardData[],
-): { p1Units: Unit[]; p2Units: Unit[] } {
-    const fedPositions = [
-        offsetToAxial(0, 6),
-        offsetToAxial(0, 7),
-        offsetToAxial(0, 8),
-    ]
-    const zeonPositions = [
-        offsetToAxial(13, 6),
-        offsetToAxial(13, 7),
-        offsetToAxial(13, 8),
-    ]
-
-    const p1Units = fedCards.slice(0, 3).map((card, i) =>
-        loadUnitFromJSON(card, 'player1', fedPositions[i])
-    )
-    const p2Units = zeonCards.slice(0, 3).map((card, i) =>
-        loadUnitFromJSON(card, 'player2', zeonPositions[i])
-    )
-
-    return { p1Units, p2Units }
 }

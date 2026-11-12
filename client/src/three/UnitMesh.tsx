@@ -4,6 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { Unit } from '../types'
 import { hexToWorld } from './hexUtils'
 import { useSTLModel } from './useSTLModel'
+import { modelUrlFor, DEFAULT_MODEL_SCALE } from './models'
 
 interface UnitMeshProps {
   unit: Unit
@@ -13,30 +14,12 @@ interface UnitMeshProps {
   onClick?: () => void
 }
 
-const STL_MODELS: Record<string, string> = {
-  'Gundam': '/models/Gundam.stl',
-  'Guncannon': '/models/Guncannon.stl',
-  'Guntank': '/models/GunTank.stl',
-  "Char's Zaku II": "/models/Char's Zaku.stl",
-  'Zaku II [Line Breaker]': '/models/Zaku II.stl',
-  'Zaku II [Enforcer]': '/models/Zaku.stl',
-}
-
-const STL_SCALES: Record<string, [number, number, number]> = {
-  'Gundam': [0.02, 0.02, 0.02],
-  'Guncannon': [0.02, 0.02, 0.02],
-  'Guntank': [0.02, 0.02, 0.02],
-  "Char's Zaku II": [0.02, 0.02, 0.02],
-  'Zaku II [Line Breaker]': [0.02, 0.02, 0.02],
-  'Zaku II [Enforcer]': [0.02, 0.02, 0.02],
-}
-
 export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, onClick }: UnitMeshProps) {
   const meshRef = useRef<Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
-  const stlUrl = STL_MODELS[unit.name] ?? null
-  const stlScale = STL_SCALES[unit.name] ?? [0.02, 0.02, 0.02]
+  const stlUrl = modelUrlFor(unit.cardId)
+  const stlScale = DEFAULT_MODEL_SCALE
   const stlGeometry = useSTLModel(stlUrl ?? '')
 
   if (!unit.position || unit.currentHp <= 0) return null

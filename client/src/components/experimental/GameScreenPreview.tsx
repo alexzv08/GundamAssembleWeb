@@ -26,6 +26,8 @@ const MOCK_STATE: GameState = {
     lastActivePlayer: null,
     roundNumber: 4,
     hasUsedPrimaryAction: false,
+    activation: null,
+    lastAttack: null,
     winner: null,
     pendingResponse: null,
     actionLog: [],
@@ -33,12 +35,12 @@ const MOCK_STATE: GameState = {
     players: {
         player1: {
             id: 'player1', name: 'Amuro', vp: 41,
-            deployHex: { q: 0, r: 0 }, squadUnitIds: ['gundam', 'guncannon'],
+            deployHex: { q: 0, r: 0 }, squadUnitIds: ['gundam', 'guncannon'], garrisonsRescued: 0,
             tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
         },
         player2: {
             id: 'player2', name: 'Char', vp: 20,
-            deployHex: { q: 10, r: 7 }, squadUnitIds: ['zaku', 'gouf'],
+            deployHex: { q: 10, r: 7 }, squadUnitIds: ['zaku', 'gouf'], garrisonsRescued: 0,
             tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false },
         },
     },
@@ -198,10 +200,9 @@ const MOCK_HAND = [
 
 const PLEX = "'IBM Plex Sans', system-ui, sans-serif"
 const MONO = "'IBM Plex Mono', monospace"
-const CHAKRA = "'Chakra Petch', sans-serif"
 
 export function GameScreenPreview() {
-    const [myPlayer, setMyPlayer] = useState<'player1' | 'player2'>('player1')
+    const [myPlayer] = useState<'player1' | 'player2'>('player1')
     const [hasMoved, setHasMoved] = useState(false)
     const [hasUsedPrimary, setHasUsedPrimary] = useState(false)
     const [selectedWeapon, setSelectedWeapon] = useState<number | null>(null)

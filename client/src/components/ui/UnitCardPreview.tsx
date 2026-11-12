@@ -1,43 +1,20 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Group } from 'three'
 import { useSTLModel } from '../../three/useSTLModel'
+import { modelUrlFor, DEFAULT_MODEL_SCALE } from '../../three/models'
 import type { UnitCardData } from '../../api/gameData'
 
-const STL_MODELS: Record<string, string> = {
-  'Gundam': '/models/Gundam.stl',
-  'Guncannon': '/models/Guncannon.stl',
-  'Guntank': '/models/GunTank.stl',
-  "Char's Zaku II": "/models/Char's Zaku.stl",
-  'Zaku II [Line Breaker]': '/models/Zaku II.stl',
-  'Zaku II [Enforcer]': '/models/Zaku.stl',
-  'Tallgeese': '/models/Tallgeese.stl',
-}
-
-const STL_SCALES: Record<string, [number, number, number]> = {
-  'Gundam': [0.02, 0.02, 0.02],
-  'Guncannon': [0.02, 0.02, 0.02],
-  'Guntank': [0.02, 0.02, 0.02],
-  "Char's Zaku II": [0.02, 0.02, 0.02],
-  'Zaku II [Line Breaker]': [0.02, 0.02, 0.02],
-  'Zaku II [Enforcer]': [0.02, 0.02, 0.02],
-  'Tallgeese': [0.02, 0.02, 0.02],
-}
-
-function RotatingModel({ unitName, color }: { unitName: string; color: string }) {
+function RotatingModel({ url, color }: { url: string | null; color: string }) {
   const groupRef = useRef<Group>(null)
-  const stlUrl = STL_MODELS[unitName] ?? null
-  const geometry = useSTLModel(stlUrl ?? '')
-  const scale = STL_SCALES[unitName] ?? [0.02, 0.02, 0.02]
-
+  const geometry = useSTLModel(url ?? '')
   useFrame(() => {
     if (groupRef.current) groupRef.current.rotation.y += 0.012
   })
-
   return (
     <group ref={groupRef}>
-      {geometry && stlUrl ? (
-        <mesh geometry={geometry} scale={scale} rotation={[-Math.PI / 2, 0, 0]}>
+      {geometry && url ? (
+        <mesh geometry={geometry} scale={DEFAULT_MODEL_SCALE} rotation={[-Math.PI / 2, 0, 0]}>
           <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} />
         </mesh>
       ) : (
@@ -52,23 +29,31 @@ function RotatingModel({ unitName, color }: { unitName: string; color: string })
 
 interface UnitCardPreviewProps {
   card: UnitCardData
-  isSelected: boolean
+  copies: number
   canSelect: boolean
   playerColor: string
   onClick: () => void
 }
 
-export function UnitCardPreview({ card, isSelected, canSelect, playerColor, onClick }: UnitCardPreviewProps) {
+// El visor 3D solo se monta mientras el ratón está encima: con muchas cartas,
+// un Canvas por carta agotaría los contextos WebGL del navegador.
+export function UnitCardPreview({ card, copies, canSelect, playerColor, onClick }: UnitCardPreviewProps) {
+  const [hovered, setHovered] = useState(false)
+  const isSelected = copies > 0
   const interactive = isSelected || canSelect
-  const borderColor = isSelected ? playerColor : '#333'
   const modelColor = isSelected ? playerColor : '#9ab0cc'
+  const url = modelUrlFor(card.cardId)
+  const affiliations = card.traits.filter((_, i) => i > 0 || card.traits.length === 1)
 
   return (
     <div
       onClick={interactive ? onClick : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={card.abilities.map(a => `${a.name}: ${a.effect}`).join('\n')}
       style={{
-        width: 160,
-        border: `2px solid ${borderColor}`,
+        width: 168,
+        border: `2px solid ${isSelected ? playerColor : '#333'}`,
         borderRadius: 10,
         overflow: 'hidden',
         cursor: interactive ? 'pointer' : 'not-allowed',
@@ -79,35 +64,38 @@ export function UnitCardPreview({ card, isSelected, canSelect, playerColor, onCl
         flexShrink: 0,
       }}
     >
-      <div style={{ height: 150, background: '#0e1220', position: 'relative' }}>
-        <Canvas
-          camera={{ position: [0, 1.5, 4], fov: 45 }}
-          style={{ width: '100%', height: '100%' }}
-          gl={{ antialias: true }}
-        >
-          <ambientLight intensity={1.2} />
-          <directionalLight position={[3, 4, 3]} intensity={2.5} />
-          <directionalLight position={[-2, 2, -1]} intensity={1.0} />
-          <directionalLight position={[0, -2, 3]} intensity={0.5} />
-          <RotatingModel unitName={card.unitName} color={modelColor} />
-        </Canvas>
+      <div style={{ height: 120, background: '#0e1220', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {hovered ? (
+          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} style={{ width: '100%', height: '100%' }}>
+            <ambientLight intensity={1.2} />
+            <directionalLight position={[3, 4, 3]} intensity={2.5} />
+            <directionalLight position={[-2, 2, -1]} intensity={1.0} />
+            <RotatingModel url={url} color={modelColor} />
+          </Canvas>
+        ) : (
+          <div style={{ textAlign: 'center', color: '#556', fontSize: 11, padding: 8 }}>
+            <div style={{ fontSize: 26, marginBottom: 4, color: modelColor }}>◆</div>
+            {card.model ?? card.cardId}
+          </div>
+        )}
+        <div style={{ position: 'absolute', top: 6, left: 8, fontSize: 9, color: '#778', letterSpacing: 0.5 }}>{card.cardId}</div>
         {isSelected && (
           <div style={{
-            position: 'absolute', top: 6, right: 8,
-            width: 20, height: 20, borderRadius: '50%',
-            background: playerColor, color: '#000',
+            position: 'absolute', top: 6, right: 8, minWidth: 20, height: 20, borderRadius: 10,
+            background: playerColor, color: '#000', padding: '0 4px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12, fontWeight: 'bold', pointerEvents: 'none',
-          }}>✓</div>
+          }}>{copies > 1 ? `×${copies}` : '✓'}</div>
+        )}
+        {card.provisionalStats && (
+          <div title="Valores de armas y Energy provisionales: revisar con la carta física"
+            style={{ position: 'absolute', bottom: 4, right: 6, fontSize: 9, color: '#f5c518' }}>stats provisionales</div>
         )}
       </div>
-      <div style={{ padding: '10px 12px', background: '#111827' }}>
-        <div style={{ fontWeight: 'bold', color: 'white', fontSize: 13, marginBottom: 2 }}>
-          {card.unitName}
-        </div>
-        {card.pilot && card.pilot !== card.unitName && (
-          <div style={{ color: '#888', fontSize: 10, marginBottom: 6 }}>{card.pilot}</div>
-        )}
+      <div style={{ padding: '8px 10px', background: '#111827' }}>
+        <div style={{ fontWeight: 'bold', color: 'white', fontSize: 13 }}>{card.name}</div>
+        {card.signature && <div style={{ color: '#4fc3f7', fontSize: 10, fontStyle: 'italic' }}>{card.signature}</div>}
+        <div style={{ color: '#888', fontSize: 10, margin: '2px 0 6px' }}>{affiliations.join(' · ')}</div>
         <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#aaa' }}>
           <span>HP {card.hp}</span>
           <span>VP {card.vp}</span>

@@ -11,42 +11,45 @@ export interface MapData {
     }[][]
 }
 
+// Formato v2 de server/data/units/unit_library.json
 export interface WeaponData {
     name: string
-    cost: string
-    range: string
-    str: string
+    tlCost: number
+    range: number
+    strength: number
     effect: string
     crit: string
-    dots: number
 }
 
 export interface AbilityData {
     name: string
-    type: string
-    tags: string
+    type: 'CMD' | 'ONG' | 'RSP' | 'SETUP'
     effect: string
+    energyCost?: number
+    abilityData?: unknown
 }
 
 export interface UnitCardData {
-    uid: number
-    unitName: string
-    pilot: string
-    faction: string
     cardId: string
-    hp: string
-    vp: string
-    tl: string
+    set: string
+    name: string
+    model?: string
+    signature?: string
+    traits: string[]
+    hp: number
+    vp: number
+    tl: number
+    provisionalStats?: boolean
     weapons: WeaponData[]
     abilities: AbilityData[]
 }
 
 export interface TacticsCardData {
-    uid: number
+    cardId: string
     name: string
     type: string
     faction: string
-    cardId: string
+    signature?: string
     effect: string
 }
 

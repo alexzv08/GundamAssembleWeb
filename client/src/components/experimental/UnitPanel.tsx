@@ -25,6 +25,7 @@ const ABILITY_TYPE = {
     CMD: { bg: '#d27d2e', label: 'Command' },
     ONG: { bg: '#3a9b4e', label: 'Ongoing' },
     RSP: { bg: '#6a1b9a', label: 'Response' },
+    SETUP: { bg: '#455a64', label: 'Setup' },
 }
 
 const MONO = "'IBM Plex Mono', monospace"

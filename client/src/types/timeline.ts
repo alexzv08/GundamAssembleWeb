@@ -1,3 +1,4 @@
+// AUTO-GENERADO por scripts/sync-shared.mjs desde server/src — NO EDITAR AQUÍ.
 // Un token en el Timeline
 export interface TimelineToken {
     unitId: string

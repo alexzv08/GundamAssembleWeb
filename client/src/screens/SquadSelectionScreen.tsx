@@ -1,8 +1,10 @@
 import { UnitCardPreview } from '../components/ui/UnitCardPreview'
 import type { UnitCardData, TacticsCardData } from '../api/gameData'
+import { DEFAULT_SQUAD_SIZE, requiredDeckSize, cardRestriction, validateSquad, type DeckCard } from '../game/deckRules'
 
-const MAX_SQUAD = 3
-const DECK_SIZE = 9
+const MAX_SQUAD = DEFAULT_SQUAD_SIZE
+
+const toDeckCard = (c: TacticsCardData): DeckCard => ({ id: c.cardId, name: c.name, faction: c.faction, signature: c.signature })
 
 interface SquadSelectionScreenProps {
   playerName: string
@@ -27,8 +29,13 @@ export function SquadSelectionScreen({
   squadStep, onSetSquadStep,
   squadSubmitted, onConfirm,
 }: SquadSelectionScreenProps) {
-  const canGoToDeck = selectedSquad.length === MAX_SQUAD
-  const canConfirm = selectedDeck.length === DECK_SIZE && !squadSubmitted
+  const squadError = validateSquad(selectedSquad, availableUnitCards, MAX_SQUAD)
+  const canGoToDeck = squadError === null
+  const squadCards = selectedSquad.map(id => availableUnitCards.find(u => u.cardId === id)).filter((u): u is UnitCardData => !!u)
+  const deckCards = availableTacticsCards.map(toDeckCard)
+  const deckSize = requiredDeckSize(selectedSquad, availableUnitCards, deckCards)
+  const canConfirm = selectedDeck.length === deckSize && !squadSubmitted
+  const sets = [...new Set(availableUnitCards.map(c => c.set))]
   const playerColor = myPlayerId === 'player1' ? '#ef5350' : '#4fc3f7'
 
   return (
@@ -69,28 +76,39 @@ export function SquadSelectionScreen({
 
         <div style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>
           {squadStep === 'units'
-            ? `Elige ${MAX_SQUAD} unidades (${selectedSquad.length}/${MAX_SQUAD})`
-            : `Elige exactamente ${DECK_SIZE} cartas (${selectedDeck.length}/${DECK_SIZE})`}
+            ? `Elige ${MAX_SQUAD} unidades (${selectedSquad.length}/${MAX_SQUAD}). No se repiten salvo las Mass Produced: haz clic otra vez para añadir otra copia.`
+            : deckSize === 0
+              ? 'Ninguna carta del catálogo actual es compatible con esta escuadra: jugarás sin mazo de Tactics.'
+              : deckSize < 9
+              ? `Tu escuadra solo puede usar ${deckSize} cartas: inclúyelas todas (${selectedDeck.length}/${deckSize})`
+              : `Elige exactamente ${deckSize} cartas (${selectedDeck.length}/${deckSize}). Las cartas con rasgo exigen una unidad con ese rasgo.`}
         </div>
 
         {/* Paso 1: Unidades */}
         {squadStep === 'units' && (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 24 }}>
-              {availableUnitCards.map(card => {
-                const isSelected = selectedSquad.includes(card.cardId)
-                const canSelect = !isSelected && selectedSquad.length < MAX_SQUAD
-                return (
-                  <UnitCardPreview
-                    key={card.cardId}
-                    card={card}
-                    isSelected={isSelected}
-                    canSelect={canSelect}
-                    playerColor={playerColor}
-                    onClick={() => onToggleUnit(card.cardId)}
-                  />
-                )
-              })}
+            <div style={{ maxHeight: '58vh', overflowY: 'auto', marginBottom: 24, paddingRight: 4 }}>
+              {sets.map(set => (
+                <div key={set} style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: '#778', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{set}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+                    {availableUnitCards.filter(c => c.set === set).map(card => {
+                      const copies = selectedSquad.filter(id => id === card.cardId).length
+                      const canSelect = selectedSquad.length < MAX_SQUAD && (copies === 0 || card.traits.includes('Mass Produced'))
+                      return (
+                        <UnitCardPreview
+                          key={card.cardId}
+                          card={card}
+                          copies={copies}
+                          canSelect={canSelect}
+                          playerColor={playerColor}
+                          onClick={() => onToggleUnit(card.cardId)}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             <button
               disabled={!canGoToDeck}
@@ -112,8 +130,9 @@ export function SquadSelectionScreen({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
               {availableTacticsCards.map(card => {
                 const isSelected = selectedDeck.includes(card.cardId)
-                const isFull = selectedDeck.length >= DECK_SIZE
-                const isCommand = card.type === 'command'
+                const restriction = cardRestriction(toDeckCard(card), squadCards)
+                const isFull = selectedDeck.length >= deckSize || restriction !== null
+                const isCommand = card.type !== 'response'
                 const isFed = card.faction === 'Earth Federation'
                 const artColor = isFed
                   ? (isCommand ? 'linear-gradient(160deg, #0d47a1 0%, #1565c0 50%, #29b6f6 100%)'
@@ -126,6 +145,7 @@ export function SquadSelectionScreen({
                 return (
                   <div
                     key={card.cardId}
+                    title={restriction ?? card.effect}
                     onClick={() => canToggle && onToggleCard(card.cardId)}
                     style={{
                       width: 118, borderRadius: 8, overflow: 'hidden',
@@ -171,13 +191,13 @@ export function SquadSelectionScreen({
                         color: isCommand ? '#90caf9' : '#ce93d8',
                         textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5,
                       }}>
-                        {isCommand ? 'Comando' : 'Respuesta'}
+                        {card.type === 'attack' ? 'Ataque' : isCommand ? 'Comando' : 'Respuesta'}
                       </div>
                       <div style={{
                         fontSize: 9.5, color: '#9ca3af', lineHeight: 1.35,
                         display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                       }}>
-                        {card.effect}
+                        {restriction ?? card.effect}
                       </div>
                     </div>
                   </div>

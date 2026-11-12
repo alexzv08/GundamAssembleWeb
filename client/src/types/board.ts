@@ -1,3 +1,4 @@
+// AUTO-GENERADO por scripts/sync-shared.mjs desde server/src — NO EDITAR AQUÍ.
 import type { TerrainType, HexCoord } from './units'
 
 // Un hexágono del tablero

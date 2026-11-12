@@ -27,7 +27,7 @@ const CATEGORY_STYLE: Record<LogCategory, { label: string; color: string }> = {
 
 type Panel = 'log' | 'chat' | null
 
-export function ActionLog({ log, myPlayerId, onHoverHexes }: ActionLogProps) {
+export function ActionLog({ log, onHoverHexes }: ActionLogProps) {
     const [open, setOpen] = useState<Panel>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
     const countRef = useRef(0)

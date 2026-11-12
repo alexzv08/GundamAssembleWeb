@@ -17,6 +17,9 @@ export function hexToWorld(q: number, r: number, elevation: number = 0): [number
 
 export function terrainColor(terrain: string, elevation: number): string {
     if (terrain === 'water') return '#4a90d9'
+    if (terrain === 'debris') return '#6b5d4f'
+    if (terrain === 'impassable') return '#2b2b2b'
+    if (terrain === 'minovsky') return '#7e57c2'
     if (elevation >= 3) return '#888888'
     if (elevation >= 2) return '#a0856b'
     if (elevation >= 1) return '#7a9e5a'

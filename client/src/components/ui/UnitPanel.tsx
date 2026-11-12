@@ -6,7 +6,10 @@ interface UnitPanelProps {
     isMyUnit: boolean
     isMyTurn: boolean
     isSelected: boolean
-    hasMoved: boolean
+    advanced: boolean
+    usedCommands: number[]
+    freeDashes: number
+    freeAttacks: number[]
     hasUsedPrimary: boolean
     selectedWeaponIndex: number | null
     currentTlRound?: number | null
@@ -21,9 +24,10 @@ interface UnitPanelProps {
     onCancel?: () => void
 }
 
-const abilityTypeColor = (type: 'CMD' | 'ONG' | 'RSP') => {
+const abilityTypeColor = (type: 'CMD' | 'ONG' | 'RSP' | 'SETUP') => {
     if (type === 'CMD') return { bg: '#e65100', label: 'Command' }
     if (type === 'ONG') return { bg: '#2e7d32', label: 'Ongoing' }
+    if (type === 'SETUP') return { bg: '#455a64', label: 'Setup' }
     return { bg: '#6a1b9a', label: 'Response' }
 }
 
@@ -39,13 +43,20 @@ const btn = (bg: string, border?: string, disabled?: boolean) => ({
     opacity: disabled ? 0.5 : 1,
 })
 
+const UPGRADE_LABEL: Record<string, string> = {
+    attack: 'Strength', movement: 'Speed', shield: 'Shield', energy: 'Energy',
+}
+
 export function UnitPanel({
     unit,
     isActive,
     isMyUnit,
     isMyTurn,
     isSelected,
-    hasMoved,
+    advanced,
+    usedCommands,
+    freeDashes,
+    freeAttacks,
     hasUsedPrimary,
     selectedWeaponIndex,
     currentTlRound,
@@ -94,7 +105,9 @@ export function UnitPanel({
                         {unit.name}
                         {isActive && <span style={{ fontSize: 10, color: '#f5c518', marginLeft: 6 }}>● ACTIVA</span>}
                     </div>
-                    <div style={{ color: '#666', fontSize: 11 }}>{unit.traits.filter(t => t !== 'Earth Federation' && t !== 'Zeon').join(' · ')}</div>
+                    {unit.signature && <div style={{ color: '#4fc3f7', fontSize: 10, fontStyle: 'italic' }}>{unit.signature}</div>}
+                    <div style={{ color: '#666', fontSize: 11 }}>{unit.traits.join(' · ')}</div>
+                    {!unit.position && <div style={{ color: '#f5c518', fontSize: 10 }}>En la Reserva — se despliega en su próxima activación</div>}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ color: '#f5c518', fontSize: 11 }}>VP {unit.vp}</div>
@@ -142,12 +155,16 @@ export function UnitPanel({
                 {/* Upgrades y status */}
                 {(unit.upgrades.length > 0 || unit.statusEffects.length > 0) && (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {unit.upgrades.map((upg, i) => (
-                            <span key={i} style={{
-                                padding: '2px 6px', borderRadius: 4, fontSize: 10,
-                                background: '#1a3a1a', border: '1px solid #2e7d32', color: '#81c784',
-                            }}>+{upg.value} {upg.type}</span>
-                        ))}
+                        {unit.upgrades.map((upg, i) => {
+                            const used = upg.type === 'shield' && upg.active === false
+                            return (
+                                <span key={i} title={used ? 'Shield usado: se reactiva al inicio de su próxima activación' : undefined} style={{
+                                    padding: '2px 6px', borderRadius: 4, fontSize: 10,
+                                    background: '#1a3a1a', border: '1px solid #2e7d32', color: '#81c784',
+                                    opacity: used ? 0.4 : 1, textDecoration: used ? 'line-through' : 'none',
+                                }}>{UPGRADE_LABEL[upg.type] ?? upg.type}{upg.value > 1 ? ` ×${upg.value}` : ''}</span>
+                            )
+                        })}
                         {unit.statusEffects.map((eff, i) => (
                             <span key={i} style={{
                                 padding: '2px 6px', borderRadius: 4, fontSize: 10,
@@ -169,13 +186,13 @@ export function UnitPanel({
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
                             <button
                                 onClick={onDash}
-                                disabled={hasUsedPrimary}
-                                title={hasUsedPrimary ? 'No disponible tras acción primaria' : 'Dash: hasta 2 hexes, cuesta TL. Puede hacerse antes o después de Avanzar.'}
-                                style={btn('#6a1b9a', undefined, hasUsedPrimary)}
+                                disabled={hasUsedPrimary && freeDashes === 0}
+                                title={freeDashes > 0 ? 'Dash adicional a TL 0' : hasUsedPrimary ? 'Ya usaste tu acción primaria' : 'Dash (acción primaria): hasta 2 hexes, 2 TL'}
+                                style={btn('#6a1b9a', undefined, hasUsedPrimary && freeDashes === 0)}
                             >
-                                💨 Dash ×2
+                                💨 Dash{freeDashes > 0 ? ' (TL 0)' : ''}
                             </button>
-                            <button onClick={onMove} disabled={hasMoved} style={btn('#1565c0', undefined, hasMoved)}>
+                            <button onClick={onMove} disabled={advanced} title="Advance: hasta 3 hexes, sin coste de TL, una vez por activación" style={btn('#1565c0', undefined, advanced)}>
                                 🚶 Avanzar
                             </button>
                         </div>
@@ -197,9 +214,9 @@ export function UnitPanel({
                         </div>
 
                         {/* Armas */}
-                        {!hasUsedPrimary && (
+                        {(!hasUsedPrimary || freeAttacks.length > 0) && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 4 }}>
-                                {unit.weapons.map((weapon, idx) => (
+                                {unit.weapons.map((weapon, idx) => (hasUsedPrimary && !freeAttacks.includes(idx)) ? null : (
                                     <button
                                         key={idx}
                                         onClick={() => onAttack?.(idx)}
@@ -214,7 +231,7 @@ export function UnitPanel({
                                     >
                                         ⚔ {weapon.name}
                                         <span style={{ color: '#aaa', marginLeft: 6 }}>
-                                            R{weapon.range} · S{weapon.strength} · TL{weapon.tlCost}
+                                            R{weapon.range} · S{weapon.strength} · TL{hasUsedPrimary ? 0 : weapon.tlCost}
                                         </span>
                                     </button>
                                 ))}
@@ -223,8 +240,13 @@ export function UnitPanel({
 
                         {/* Pasar / Cancelar */}
                         <div style={{ display: 'flex', gap: 4 }}>
-                            <button onClick={onEndTurn} style={{ ...btn('#333', '1px solid #555'), flex: 1 }}>
-                                Pasar turno →
+                            <button
+                                onClick={onEndTurn}
+                                disabled={!hasUsedPrimary}
+                                title={hasUsedPrimary ? undefined : 'Antes debes hacer una acción primaria (Atacar, Dash, Energize o Rescue)'}
+                                style={{ ...btn('#333', '1px solid #555', !hasUsedPrimary), flex: 1 }}
+                            >
+                                Terminar activación →
                             </button>
                             <button onClick={onCancel} style={btn('transparent', '1px solid #444')}>
                                 ✕
@@ -274,7 +296,7 @@ export function UnitPanel({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {unit.abilities.map((ab, i) => {
                                 const { bg, label } = abilityTypeColor(ab.type)
-                                const canUse = showActions && !hasUsedPrimary && ab.type === 'CMD'
+                                const canUse = showActions && ab.type === 'CMD' && !usedCommands.includes(i)
                                 const noEnergy = ab.energyCost != null && unit.energy < ab.energyCost
                                 const notImplemented = !ab.abilityData
                                 const disabled = noEnergy || notImplemented

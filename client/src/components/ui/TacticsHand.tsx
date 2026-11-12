@@ -9,12 +9,13 @@ interface TacticsHandProps {
     onPlayCard: (cardId: string) => void
     pendingResponseTrigger?: ResponseTrigger | null
     onPassResponse?: () => void
+    cardPlayed?: boolean
 }
 
-const cardTypeColor = (type: 'command' | 'response', active: boolean) =>
-    !active ? '#333' : type === 'command' ? '#e65100' : '#6a1b9a'
+const cardTypeColor = (type: 'command' | 'response' | 'attack', active: boolean) =>
+    !active ? '#333' : type === 'command' ? '#e65100' : type === 'attack' ? '#b71c1c' : '#6a1b9a'
 
-export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayCard, pendingResponseTrigger, onPassResponse }: TacticsHandProps) {
+export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayCard, pendingResponseTrigger, onPassResponse, cardPlayed = false }: TacticsHandProps) {
     const isRspWindow = !!pendingResponseTrigger
 
     return (
@@ -66,7 +67,7 @@ export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayC
             {/* Cartas */}
             {hand.map(card => {
                 const rspMatch = card.type === 'response' && card.effectData?.trigger === pendingResponseTrigger
-                const canPlay = isRspWindow ? rspMatch : isMyTurn && card.type === 'command'
+                const canPlay = isRspWindow ? rspMatch : isMyTurn && card.type !== 'response' && !cardPlayed
                 const isSelected = selectedCardId === card.id
                 return (
                     <div
@@ -100,7 +101,7 @@ export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayC
                                 color: canPlay ? 'white' : '#555',
                                 flexShrink: 0,
                             }}>
-                                {card.type === 'command' ? 'CMD' : 'RSP'}
+                                {card.type === 'command' ? 'CMD' : card.type === 'attack' ? 'ATK' : 'RSP'}
                             </span>
                             <span style={{
                                 fontWeight: 'bold', fontSize: 10,

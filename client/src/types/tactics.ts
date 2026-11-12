@@ -1,3 +1,4 @@
+// AUTO-GENERADO por scripts/sync-shared.mjs desde server/src — NO EDITAR AQUÍ.
 // ─── CARD EFFECTS ─────────────────────────────────────────────────────────────
 
 export type ResponseTrigger = 'after_combat_damage' | 'after_rescue' | 'after_enemy_advance'
@@ -15,11 +16,17 @@ export interface CardEffect {
 
 // ─── TACTICS CARD ─────────────────────────────────────────────────────────────
 
+// Tipos oficiales: Attack (sustituye al ataque primario), Command (durante tu
+// activación) y Response (cuando se cumple su condición, en cualquier turno).
+// faction = rasgo requerido para incluirla en el mazo ('' = sin requisito).
+// signature = título de firma de la unidad que puede jugarla.
 export interface TacticsCard {
     id: string
     name: string
-    type: 'command' | 'response'
+    type: 'command' | 'response' | 'attack'
     faction: string
+    signature?: string
+    tlCost?: number
     effect: string
     effectData?: CardEffect | null
 }
