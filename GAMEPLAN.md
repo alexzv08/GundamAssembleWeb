@@ -1,134 +1,108 @@
 # GAMEPLAN — Gundam Assemble Web
-# Comparativa: Reglas Oficiales vs Implementación
+# Reglas oficiales (Core Rulebook v1.2, 06/11/2026) frente a la implementación
 
-`✅ hecho` | `⚠️ parcial/bug` | `❌ falta`
+`✅ hecho` | `⚠️ parcial / aproximado` | `❌ falta`
 
----
-
-## 1. Preparación de la Partida
-
-- ❌ **Selección de escuadra** — cada jugador elige su squad antes de la partida (ahora hardcodeado: Fed=3 primeras cartas Fed, Zeon=3 primeras cartas Zeon)
-- ❌ **Límite de escuadra** — una copia por unidad excepto rasgo "Mass Produced"
-- ⚠️ **Mazo de tácticas** — 9 cartas por mazo, 3 robadas al inicio ✅ pero el filtro de facción es incorrecto (todas las cartas federación tienen `faction: "Earth Federation"`, ninguna tiene `faction: "Guntank"` etc.)
-- ✅ **Robo inicial** — 3 cartas al inicio de Fase 1, 3 adicionales al pasar a Fase 2
-- ✅ **Inicio del Timeline** — tokens colocados en su TL inicial impreso en carta
+Fuentes oficiales:
+- Reglamento: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/rules/
+- Q&A: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/qa/
+- Unidades: https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/
 
 ---
 
-## 2. Sistema de Línea Temporal (Timeline)
+## 1. Preparación y construcción de escuadra
 
-- ✅ Track compartido 1–10, 2 Fases (20 rondas totales)
-- ✅ Activación de tokens: se salta casillas vacías, activa el round más bajo
-- ✅ **Empate durante partida** — activa primero quien NO actuó antes
-- ✅ **Nuevas unidades** — se colocan debajo de las ya existentes en el slot
-- ❌ **Orden inicial de tokens propios** — al colocar tokens en el mismo slot al inicio, cada jugador elige el orden de apilado de sus propias unidades (quién activa primero entre sus unidades); ahora el orden lo determina el orden de creación, no hay selección
-- ✅ **Empate entre jugadores** — activa primero el oponente del jugador que actuó último (sin d10, misma regla todo el juego)
+- ✅ **Escuadra libre**: cualquier combinación de unidades, sin bandos fijos
+- ✅ **Sin copias** del mismo número de carta salvo rasgo *Mass Produced* (ids únicos por copia)
+- ✅ **Mazo de 9 cartas** sin repetir; cartas con rasgo exigen una unidad con ese rasgo; cartas de firma exigen la unidad con ese título
+- ⚠️ **Tamaño del mazo**: el catálogo actual solo tiene 18 cartas (todas con rasgo Earth Federation o Zeon). Si la escuadra tiene menos de 9 elegibles, se exigen todas
+- ✅ **Validación en el servidor** (`deckRules.ts`, compartido con la pantalla de selección)
+- ✅ **Robo inicial** 3 cartas; +3 al acabar la Fase 1
+- ✅ **Orden propio en el Timeline**: cada jugador reordena sus fichas apiladas (pantalla de setup)
+- ✅ **Iniciativa**: empieza quien tenga el TL inicial más bajo; si empatan, tirada de dado
+- ❌ **Tamaño de escuadra por escenario** (3 o 5): fijo en 3
+- ❌ **Habilidades de Setup** (tipo `SETUP` existe, sin efectos)
+- ❌ **Carriers**
 
----
+## 2. Timeline
 
-## 3. Turno de Activación
+- ✅ 20 rondas continuas (Fase 1 = 1–10, Fase 2 = 11–20); más de 20 sale del Timeline
+- ✅ Se paga el TL al declarar la acción
+- ✅ Nuevas fichas debajo de las existentes; empates: actúa primero quien NO actuó el último
+- ✅ Al terminar la activación **no** se paga TL extra
 
-- ✅ **ADVANCE** — movimiento básico hasta 3 hexes, coste 0 TL
-- ✅ **ATTACK** — usa un arma, paga su TL cost, requiere rango y LoS
-- ✅ **DASH** — 2 hexes adicionales, 2 TL, acción primaria; puede hacerse antes o después de ADVANCE
-- ✅ **ENERGIZE** — +1 energía, 2 TL, acción primaria
-- ✅ **RESCUE** — garrison aliada adyacente, +2 VP, 2 TL, acción primaria
-- ⚠️ **USE_ABILITY (CMD)** — implementado; algunas habilidades tienen lógica, otras devuelven "no implementada"
-- ⚠️ **PLAY_CARD** — implementado; cartas con `effectData` funcionan, las demás muestran "no implementada"
-- ❌ **Acción primaria OBLIGATORIA** — las reglas exigen exactamente una acción primaria por activación; actualmente se puede terminar sin hacer ninguna (END_ACTIVATION sin primary)
-- ⚠️ **Movimiento no reanudable** — ADVANCE solo se puede hacer una vez por activación ✅; pero no se bloquea si el jugador hizo otra acción antes del ADVANCE (regla: el movimiento no se retoma tras otra acción)
+## 3. Despliegue y activación
 
----
+- ✅ Las unidades empiezan en la **Reserva** y se despliegan en su Base al activarse
+- ✅ Si no hay sitio para desplegar: Energize (2 TL) y sigue en la Reserva
+- ✅ No se puede terminar la activación sobre la Base (si aún se puede mover)
+- ✅ **Acción primaria obligatoria y única** (Attack, Dash, Energize, Rescue)
+- ✅ **Advance** una vez por activación, 3 hexes + Speed Upgrades
+- ✅ **Command** una vez por activación cada una; no gastan la acción primaria
+- ✅ **Una carta de Tactics** por activación; las de tipo Attack sustituyen al ataque primario
+- ✅ Acciones adicionales a TL 0 (Dash adicional, ataque adicional)
+- ✅ Si la unidad activa es derrotada, su activación termina
 
-## 4. Movimiento y Terreno
+## 4. Movimiento y terreno
 
-- ✅ Una unidad por hex
-- ✅ Se puede atravesar aliados; enemigos bloquean el paso
-- ✅ **Penalización agua** — +1 coste de movimiento al entrar en hex de agua
-- ✅ **Penalización elevación** — +1 coste al subir a hex de mayor elevación
-- ❌ **Rasgo Hover** — ignora todos los costes de terreno y elevación; no implementado
+- ✅ Subir cuesta +1 por nivel; bajar no cuesta
+- ✅ **Saltar** desde terreno elevado (pasa huecos y enemigos más bajos)
+- ✅ Atravesar aliados sí, enemigos / Garrisons enemigas / Base enemiga no
+- ✅ **Engagement**: −1 al movimiento y obligación de atacar a un enemigo trabado
+- ✅ **Agua y Debris**: −1 al movimiento iniciado dentro; −1 Accuracy al atacar a / desde ellos
+- ✅ **Impassable**: solo se cruza con Hover y nunca se termina dentro
+- ✅ **Minovsky Particles**: −2 Accuracy a no adyacentes (no acumulable)
+- ✅ **Hover** (y Hover condicionado a Upgrades, p.ej. Jet Through)
+- ✅ Recoger Upgrades / Energy al terminar un movimiento o desplegar
 
----
+## 5. Combate
 
-## 5. Sistema de Combate
+- ✅ Línea de visión oficial (terreno más alto que ambos; enemigos a la misma elevación; distinta elevación; los aliados no bloquean; la línea que pasa entre dos hexes la elige el atacante)
+- ✅ d10; Accuracy modifica el valor del dado salvo 1 (fallo) y 9-10 (crítico); impacta con 4+
+- ✅ Elevación ±1 Accuracy
+- ✅ Dados = Strength del arma + Strength Upgrades + modificadores (antes los dados extra se perdían)
+- ✅ Efectos de crítico una sola vez por ataque; se aplican aunque los Shields eviten todo el daño
+- ✅ Shields: se aplican tras el resto de efectos, se ponen boca abajo y se reactivan en la siguiente activación
+- ✅ Fracture: +3 si recibe 3+ de daño de combate en un ataque
+- ✅ Disarm: repite todos los impactos y no hay efectos de crítico
+- ✅ Slow: el siguiente Advance no mueve
+- ✅ Push / Pull con colisiones (2 de daño)
+- ✅ Ataques que también alcanzan a los adyacentes al objetivo (una sola tirada)
+- ✅ Derrota: VP al rival, Reserva, +2 TL, HP al máximo, sin estados, conserva Energy y Upgrades
+- ⚠️ **Áreas de efecto con plantilla** (patrón "SP" del Guntank): aproximadas como "objetivo + adyacentes"
+- ⚠️ **Elección del jugador** en Push/Pull: se toma automáticamente el primer hex válido
 
-- ✅ **Dados d10** — el servidor genera d10 (1–10); críticos en 9 y 10
-- ✅ **Precisión base** — impacta con 4 o más
-- ✅ **High Ground** — atacante en elevación superior: impacta con 3 o más (threshold −1)
-- ✅ **Low Ground** — atacante en elevación inferior: impacta con 5 o más (threshold +1)
-- ✅ **Impactos críticos** — 9 o 10 en el dado; `roll >= 9` sobre d10
-- ✅ **Shield** — absorbe hits equivalentes a su valor; se elimina al usarse
-- ✅ **Fracture** — activa con `damage >= 3` (3 o más daño)
-- ✅ **Slow** — cancela ADVANCE; DASH y cartas siguen disponibles
-- ✅ **Disarm** — los 9 y 10 cuentan como hit normal, sin efecto crítico
-- ✅ Efectos de arma on-hit y on-crit (slow, fracture, push, splash, etc.)
+## 6. Habilidades y cartas
 
----
+- ✅ Ongoing: Zero System, Firing Line, Exploit Weakness, Fight to the End, Coordinated Payload, Three-Times Faster, Hover, Newtype Destroyer…
+- ✅ Command: Full Power, Checkmate, No Escape, Sundering Strike, Hunter's Edge, Frenzied Charge, Alaya-Vijnana, Annihilate, Rescue Maneuver…
+- ✅ Response automáticas: Char Kick, Blitzing Slash, Escape from Side 7, Supply, Toss Away, Stunning Shot, Crowd Control
+- ✅ Cartas Response en el turno del rival (ventana tras daño / rescate / movimiento enemigo)
+- ❌ **RWS** (BIT Stave, Corax, Iśvara) y habilidades que dependen de ellos
+- ❌ **Challenge**, Psycho-Frame Synchrony, Permet Burst, Inspiring Presence, Material Transfer
+- ❌ Cartas de Tactics oficiales (el catálogo actual es el de la demo previa)
 
-## 6. Habilidades y Cartas de Táctica
+## 7. Objetivos y victoria
 
-- ✅ **CMD (Command)** — activadas durante el turno de la unidad
-- ✅ **ONG (Ongoing)** — pasivas siempre activas (accuracy bonus, crit threshold, dash range, strength vs damaged, reroll miss)
-- ⚠️ **RSP (Response)** — algunos triggers automáticos implementados (Char Kick tras Dash, Rescue the Mechanics tras Rescue); triggers en turno enemigo no implementados
-- ❌ **Cartas React (RSP)** — cartas de respuesta jugadas durante el turno del oponente; no hay interfaz ni engine para jugarlas fuera del propio turno
+- ✅ Se disputan al **terminar la activación** en o junto al Objetivo; con mayoría, uno neutral se captura y uno del rival se neutraliza; el control se mantiene
+- ✅ VP de Objetivos al final de **cada** Fase
+- ✅ Garrison enemiga destruida +2 VP; Garrison aliada rescatada +2 VP
+- ✅ Empate a VP: gana el último jugador que actuó
+- ✅ Eliminada la "victoria por eliminar todas las unidades" (no existe en las reglas)
 
----
+## 8. Datos
 
-## 7. Puntuación y Mecánicas de VP
+- ✅ Las 15 unidades oficiales (ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos, firma y textos oficiales
+- ⚠️ **Coste de TL, alcance y Strength de las armas, y costes de Energy: PROVISIONALES**. La web oficial solo los muestra en la imagen de la carta. Hay que revisarlos en `server/data/units/unit_library.json` (`provisionalStats: true`)
+- ✅ Se conservan las 6 unidades de la demo (DM01)
 
-- ✅ **Derrotar unidades** — atacante gana los VP de la carta del enemigo
-- ✅ **Reaparición** — HP reset, token avanza +2 TL, respawn en deployHex
-- ✅ **Garrison enemiga destruida** — da 2 VP al atacante
-- ✅ **Garrison aliada rescatada** — +2 VP correcto
-- ✅ **Objetivos en tablero** — `resolveObjectiveControl` se llama tras cada acción; `controlledBy` se actualiza en tiempo real
-- ✅ **VP de objetivo** — 5 VP por objetivo (según reglas)
-- ✅ **Victoria al final de Fase 2** — gana quien tiene más VP
-- ✅ **Victoria por eliminar todas las unidades enemigas**
-- ❌ **Victoria por 20 VP instantánea** — mencionada en el CLAUDE.md pero NO existe en las reglas oficiales ni en el código; eliminar referencia
+## 9. Multijugador / Red
 
----
+- ✅ Salas privadas y emparejamiento; reconexión 5 min **solo para el mismo usuario autenticado**
+- ✅ El servidor valida escuadra, mazo, turno y reglas, y tira todos los dados
 
-## 8. Multijugador / Red
+## 10. Pendiente (UI / 3D)
 
-- ✅ Salas con código 6 chars
-- ✅ WebSocket tiempo real (Socket.io)
-- ✅ Anti-cheat: dados y validación en servidor
-- ❌ Reconexión — sala se destruye al desconectarse
-
----
-
-## 9. UI
-
-- ✅ Lobby + waiting room
-- ✅ TimelineBar (slots 1–10 con fichas)
-- ✅ UnitPanel (HP, armas, habilidades, botones de acción)
-- ✅ TacticsHand (panel de cartas en fase 2, arriba-derecha)
-- ✅ Highlights de hexes (reachable azul, attackable rojo — unidades y garrisons enemigas)
-- ✅ Leyenda de tokens en tablero
-- ⚠️ actionLog — existe en state, no se muestra en UI
-- ❌ Selector de mapa en lobby
-- ❌ Chat en partida
-
----
-
-## 10. 3D / Visual
-
-- ✅ Tablero hexagonal 3D (Three.js + React Three Fiber)
-- ✅ OrbitControls (cámara libre)
-- ✅ STL loader — solo Tallgeese tiene modelo
-- ❌ Animaciones de movimiento (ahora teletransporte instantáneo)
-- ❌ Modelos STL para otras unidades
-- ❌ Sonidos
-
----
-
-## Bugs Prioritarios a Corregir
-
-| Prioridad | Bug | Estado |
-|-----------|-----|--------|
-| ✅ Corregido | Dados d8 → d10 | `gameEvents.ts`, `effects.ts`, `actions.ts` |
-| ✅ Corregido | Objetivos nunca otorgaban VP | `resolveObjectiveControl` llamado tras cada acción |
-| ✅ Corregido | Garrison destruida daba 1 VP en vez de 2 | `actions.ts`, `effects.ts` |
-| ✅ Corregido | Fracture activaba con `> 3` en vez de `>= 3` | `server/actions.ts`, `client/actions.ts` |
-| ✅ Corregido | VP de objetivo 3 → 5 | `DemoMap.json` |
-| 🟡 Pendiente | Acción primaria no obligatoria | `server/src/game/actions.ts` |
+- ❌ Animaciones de movimiento, sonidos, chat, selector de mapa
+- ❌ Elegir manualmente el hex en Push/Pull y la plantilla de AoE
+- ❌ Modelos STL ligeros (GLB + Draco) en lugar de 143 MB de STL

@@ -2,7 +2,9 @@
 
 ## Descripción del proyecto
 
-Juego de táctica por turnos en tablero hexagonal, temática Gundam, multijugador en tiempo real. Dos jugadores se enfrentan controlando unidades con stats de cartas reales. UI en español.
+Juego de táctica por turnos en tablero hexagonal, temática Gundam, multijugador en tiempo real. Implementa el **Core Rulebook v1.2** oficial de Gundam Assemble (06/11/2026). UI en español.
+
+Fuentes oficiales: reglas en https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/rules/ y unidades en https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/. El estado regla por regla está en `GAMEPLAN.md`.
 
 ---
 
@@ -20,34 +22,138 @@ cd client && npm run dev
 
 ## Verificación antes de entregar cambios
 
-Ejecutar siempre en este orden antes de dar una tarea por terminada:
-
 ```bash
-# 1. Type check cliente (detecta errores de tipos sin arrancar)
-cd client && npx tsc --noEmit
+# 1. Copiar el código compartido al cliente (si se tocó server/src/types o los módulos compartidos)
+node scripts/sync-shared.mjs
 
-# 2. Type check servidor
-cd server && npx tsc --noEmit
+# 2. Servidor: tipos (código + tests + scripts) y tests del motor
+cd server && npm run typecheck && npm test
 
-# 3. Tests unitarios (engine: hexGrid, timeline, actions, victory)
-cd client && npm test
+# 3. Partidas completas bot contra bot (detecta bloqueos y estados inválidos)
+cd server && npm run selfplay
 
-# 4. Lint cliente
-cd client && npm run lint
+# 4. Cliente: tipos y lint
+cd client && npx tsc --noEmit -p tsconfig.app.json && npm run lint
 ```
 
 ### Reglas para no romper lo existente
 
-- **Tipos duplicados**: `client/src/types/` y `server/src/types/` deben mantenerse en sync. Cambiar un tipo en un lado obliga a cambiarlo en el otro.
-- **Engine autoritativo**: toda lógica de juego vive en `server/src/game/`. El cliente solo calcula highlights visuales. No añadir validaciones de juego en el cliente.
-- **cloneState**: toda función en `actions.ts` debe trabajar sobre una copia (`cloneState`), nunca mutar el estado recibido.
-- **Tests**: al modificar `hexGrid.ts`, `timeline.ts`, `actions.ts` o `victory.ts` en el cliente, verificar que los tests de `game.test.ts` siguen pasando.
-- **Ambos lados**: funciones como `hexGrid.ts` existen en cliente y servidor. Cambios de lógica deben aplicarse en los dos archivos.
-- **Tests nuevos**: al añadir una nueva acción, mecánica o función de engine, añadir al menos un test en `client/src/game/game.test.ts` que cubra el caso base y el caso de error/rechazo. No entregar funcionalidad nueva sin test.
+- **Una sola fuente de verdad**: los tipos (`server/src/types/`) y los módulos `hexGrid.ts`, `timeline.ts`, `queries.ts` y `deckRules.ts` se editan SOLO en `server/src` y se copian al cliente con `node scripts/sync-shared.mjs`. Las copias llevan cabecera `AUTO-GENERADO`; un test falla si están desincronizadas.
+- **Código compartido sin dependencias de Node**: los módulos compartidos solo importan tipos y otros módulos compartidos (nada de `fs`), y usan `import type`.
+- **Engine autoritativo**: la validación vive en `server/src/game/`. El cliente usa `queries.ts` solo para resaltar hexes; nunca valida acciones.
+- **Una copia por acción**: cada `apply*` de `actions.ts` hace `cloneState` una vez y luego muta esa copia; los helpers de `damage.ts`, `effects.ts`, `combat.ts`, `victory.ts` y `activation.ts` MUTAN el estado que reciben.
+- **Derrotas siempre con `defeatUnit`** (damage.ts) y daño siempre con `damageUnit`/`damageAt`: así se aplican Shields, Fracture, VP, +2 TL y la vuelta a la Reserva de forma coherente.
+- **Dados**: las funciones de ataque reciben un `rng: () => number` (d10). En producción es `Math.random`; en tests se pasa una secuencia fija con `dice(...)`.
+- **Tests nuevos**: toda regla o efecto nuevo lleva al menos un test en `server/src/game/__tests__/engine.test.ts` (caso base y caso de rechazo).
 
-### Registro de cambios y seguimiento del TODO
+### Registro de cambios
 
-- **Changelog**: al terminar cualquier implementación o corrección, añadir una entrada al final de la sección `## Changelog` de este archivo con la fecha, qué se hizo y qué archivos se modificaron.
+- Al terminar cualquier cambio, añadir una entrada al final de `## Changelog` con fecha, qué se hizo y archivos.
+- Mantener `GAMEPLAN.md` al día (✅ / ⚠️ / ❌ por regla).
+
+---
+
+## Stack técnico
+
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | React 19 + TypeScript + Vite |
+| 3D | Three.js 0.183 + React Three Fiber + Drei |
+| Backend | Express 5 + Socket.io 4.8 |
+| Auth / BD | Supabase |
+| Tests | Vitest (servidor) |
+| Datos del juego | JSON en `server/data/` |
+
+---
+
+## Arquitectura
+
+```
+scripts/sync-shared.mjs   — copia el código compartido de server/src a client/src
+
+server/src/
+  index.ts                — Express + Socket.io + middleware de auth (JWT de Supabase)
+  types/                  — tipos (COMPARTIDOS → client/src/types)
+  game/                   — MOTOR AUTORITATIVO
+    hexGrid.ts            — (compartido) coordenadas, distancia, LoS oficial, movimiento (saltos, Impassable, Hover)
+    timeline.ts           — (compartido) Timeline de 20 rondas, avance de fichas, desempates
+    queries.ts            — (compartido) Engagement, presupuesto de movimiento, objetivos atacables, Accuracy por terreno
+    deckRules.ts          — (compartido) validación de escuadra y mazo
+    engine.ts             — processAction(): punto de entrada (turno → acción → fin de activación si la unidad cae)
+    actions.ts            — apply* de cada acción + applyAction (dispatcher)
+    activation.ts         — beginActivation (despliegue, Shields), endActivation, cambio de fase, fin de partida, startGame
+    combat.ts             — resolveAttack: secuencia oficial de ataque (antes/después de la tirada, crits, daño)
+    damage.ts             — cloneState, damageUnit, defeatUnit, Garrisons, Push/Pull con colisiones, Shields
+    effects.ts            — modificadores Ongoing, habilidades Command, Response automáticas, cartas de Tactics
+    victory.ts            — disputa de Objetivos, puntuación por fase, ganador
+    catalog.ts            — carga unit_library.json / card_library.json y construye las unidades
+    createServerGame.ts   — GameState inicial (tablero, unidades en Reserva, Timeline, iniciativa, mazos)
+    __tests__/            — tests del motor
+  rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId)
+  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION llama a processAction
+  routes/                 — /api/maps, /api/units, /api/cards, /api/auth
+server/data/
+  units/unit_library.json — 15 unidades oficiales + 6 de la demo (formato v2)
+  cards/card_library.json — 18 cartas de Tactics (demo)
+  maps/                   — mapas
+server/scripts/
+  self-play.ts            — partidas bot contra bot (npm run selfplay)
+  socket-smoke.ts         — prueba de la capa Socket.IO sin Supabase (npm run smoke)
+  seed-catalog.ts         — vuelca el catálogo a Supabase
+
+client/src/
+  App.tsx                 — pantallas + socket + handlers de UI
+  game/                   — copias compartidas + loaders/useGameData (datos de la API)
+  screens/                — lobby, espera, selección de escuadra (usa deckRules), setup
+  components/ui/          — UnitPanel, TacticsHand, TimelineBar, ActionLog…
+  three/                  — escena 3D; models.ts asocia cardId → modelo STL
+tools/map-editor.html     — editor de mapas
+```
+
+---
+
+## Flujo de una acción
+
+```
+[Cliente] clic → App.tsx calcula resaltados con queries.ts (reachableFor / attackableHexes)
+    ↓  socket.emit('GAME_ACTION', { action })
+[Servidor] gameEvents → processAction(state, action, playerId)
+    ↓  comprueba fase y turno (las Response las puede enviar el rival)
+    ↓  applyAction → apply* valida, clona, aplica (dados con rng del servidor)
+    ↓  si la unidad activa ha caído → endActivation
+    ↓  endActivation → contestObjectives → siguiente ficha → cambio de fase / fin de partida
+io.emit GAME_STATE_UPDATE | PHASE_TRANSITION | GAME_OVER  (con lastAttack.rolls para el popup de dados)
+```
+
+---
+
+## Reglas clave implementadas (Core Rulebook v1.2)
+
+- **Activación**: una acción primaria obligatoria (Attack, Dash 2 TL, Energize 2 TL, Rescue 2 TL); Advance (3 hexes + Speed) una vez; cada Command una vez y sin gastar la primaria; máx. 1 carta de Tactics; no se termina sobre la Base.
+- **Estado de la activación** en `GameState.activation` (advanced, usedCommands, cardPlayed, freeDashes, freeAttacks, bonos temporales). El cliente lo lee de ahí.
+- **Ataque**: dados = Strength + Strength Upgrades + modificadores. Accuracy suma al dado salvo 1 (fallo) y 9-10 (crit). Impacto con 4+. Crit una vez por ataque. Daño = impactos + bonus − Shields activos (que se ponen boca abajo); Fracture +3 si el daño es 3+; Disarm repite los impactos y anula crits.
+- **Engagement**: adyacente a enemigo a la misma elevación → −1 movimiento y debe atacar a un trabado.
+- **Objetivos**: se disputan al terminar la activación; mayoría captura (neutral) o neutraliza (rival). Puntúan al final de cada fase.
+- **Fin**: tras la Fase 2; empate → gana el último que actuó.
+
+---
+
+## Datos de unidades (`server/data/units/unit_library.json`, v2)
+
+Cada carta: `cardId, set, name, model, signature, traits[], hp, vp, tl, provisionalStats, weapons[{name, effect, crit, tlCost, range, strength, effectData, critData}], abilities[{name, effect, type: CMD|ONG|RSP|SETUP, energyCost, abilityData}]`.
+
+- Los textos son los oficiales. `effectData` / `critData` / `abilityData` son la versión ejecutable (ver tipos en `types/units.ts`). Si `abilityData` falta, la habilidad se muestra pero no está implementada.
+- **Los valores numéricos de las armas y los costes de Energy son provisionales**: la web oficial no los publica en texto.
+
+---
+
+## Sistema de coordenadas
+
+Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se desplazan media celda a la derecha. La distancia se calcula en cúbico. Conversión a 3D en `client/src/three/hexUtils.ts`.
+
+---
+
+## Changelog` de este archivo con la fecha, qué se hizo y qué archivos se modificaron.
 - **Marcar como hecho**: si el cambio implementado corresponde a un ítem del `## Pendiente / TODO`, cambiar su `[ ]` por `[x]` y moverlo a la sección `### Mecánicas funcionales` con una descripción actualizada.
 
 ---
@@ -470,3 +576,13 @@ Gundam (Amuro), Zaku II (Char), Tallgeese + 3 más
 - Nuevo componente `UnitCardPreview.tsx`: cada unidad se muestra con un Canvas 3D independiente (React Three Fiber) con el modelo STL rotando lentamente; fallback a esfera coloreada si no hay STL. El borde y glow usan el color del jugador (`#ef5350` P1, `#4fc3f7` P2).
 - El `maxWidth` del contenedor de selección ampliado de 760 a 1100px para acomodar las cards más anchas.
 - Archivos: `client/src/components/ui/UnitCardPreview.tsx` (nuevo), `client/src/App.tsx`
+
+
+### 2026-11-12 — Motor reescrito según el Core Rulebook v1.2 y unidades oficiales
+- **Bugs corregidos**: los dados extra (Strength Upgrades y bonos) se perdían porque el servidor tiraba solo `weapon.strength`; `RECONNECT` permitía ocupar la plaza de otro jugador sin comprobar el usuario; `SELECT_SQUAD` no validaba nada; Advance se podía repetir; Command y cartas gastaban la acción primaria; Slow bloqueaba el movimiento para siempre; terminar la activación costaba +1 TL; los VP de Objetivos de la Fase 2 no se otorgaban; derrotas tratadas de 8 formas distintas.
+- **Reglas nuevas**: Engagement, saltos, Impassable/Debris/Minovsky, LoS oficial, Shields boca abajo, Disarm oficial, Accuracy sobre el dado, despliegue desde la Reserva, no terminar en la Base, Objetivos por disputa, empate para el último en actuar, iniciativa con dado, construcción de escuadra/mazo oficial (Mass Produced, rasgos, firmas).
+- **Arquitectura**: motor dividido en engine/actions/activation/combat/damage/effects/victory/catalog; `processAction` es el único punto de entrada (gameEvents y self-play ya no duplican la lógica de fases). Código compartido copiado al cliente con `scripts/sync-shared.mjs`; borradas las copias muertas del cliente (actions, victory, units, createTestGame).
+- **Datos**: `unit_library.json` v2 con las 15 unidades oficiales (stats de armas provisionales) + 6 de la demo.
+- **Tests**: 58 tests del motor en el servidor (los antiguos probaban la copia del cliente, no el motor real); `npm run selfplay` (200/200 partidas) y `npm run smoke` (Socket.IO).
+- **Cliente**: resaltados con `queries.ts`; estado de activación leído del servidor; selección de escuadra con copias Mass Produced y mazo validado; visor 3D de las tarjetas solo bajo el ratón (evita agotar contextos WebGL); `three/models.ts` por cardId; lint sin errores.
+- Archivos: casi todo `server/src/game/*`, `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `server/src/types/*`, `server/data/units/unit_library.json`, `server/scripts/*`, `client/src/App.tsx`, `client/src/screens/SquadSelectionScreen.tsx`, `client/src/components/ui/*`, `client/src/three/*`, `scripts/sync-shared.mjs`, `GAMEPLAN.md`, `README.md`.

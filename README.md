@@ -11,7 +11,7 @@ Proyecto personal de Alejandro de la Torre Ruiz. Fan project sin ánimo de lucro
 - **Motor de reglas autoritativo en el servidor**: el cliente solo calcula ayudas visuales; el servidor valida cada acción y tira los dados (anti-trampas).
 - **Acciones de juego**: avanzar (pathfinding A*), atacar con línea de visión y modificadores, dash, energize, rescate de guarniciones, habilidades y cartas de táctica.
 - **Línea temporal** de activaciones en dos fases, con desempates por iniciativa.
-- **Selección de escuadra y mazo** antes de cada partida.
+- **Selección de escuadra y mazo** antes de cada partida, validada con las reglas oficiales de construcción.
 - **Reconexión**: la sala se mantiene 5 minutos si un jugador se desconecta.
 - **Registro de acciones** en pantalla.
 - **Login con Google y Discord** mediante Supabase.
@@ -79,10 +79,37 @@ Requisitos: Node.js 20 o superior y un proyecto de Supabase.
 
 ## Tests
 
+El motor de reglas se prueba contra el código autoritativo del servidor:
+
 ```bash
-cd client
-npm test
+cd server
+npm test              # tests unitarios del motor (reglas del Core Rulebook v1.2)
+npm run typecheck     # tipos de servidor, tests y scripts
+npm run selfplay      # 100 partidas bot contra bot de principio a fin
+npm run smoke         # prueba de humo de la capa Socket.IO (sin Supabase)
 ```
+
+## Código compartido
+
+Los tipos, el tablero hexagonal, el Timeline, las consultas de reglas y las
+reglas de construcción de mazo viven en `server/src` y se copian al cliente con:
+
+```bash
+node scripts/sync-shared.mjs
+```
+
+Las copias del cliente llevan una cabecera `AUTO-GENERADO` y no se editan a mano;
+un test falla si quedan desincronizadas.
+
+## Datos de unidades
+
+`server/data/units/unit_library.json` contiene las 15 unidades oficiales
+(ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos y textos de la
+[web oficial](https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/),
+más las 6 unidades de la demo previa al lanzamiento. Los valores numéricos de las
+armas (coste de TL, alcance, Strength) y los costes de Energy no aparecen en texto
+en la web oficial: son provisionales (`provisionalStats: true`) hasta revisarlos
+con las cartas físicas.
 
 ## Autor
 
