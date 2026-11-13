@@ -834,3 +834,103 @@ describe('Remote Weapon Systems (Q&A 110)', () => {
     expect(Object.values(g.rws).every(r => r.position === null)).toBe(true)
   })
 })
+
+// ─── ELECCIONES DEL JUGADOR Y RESPONSE ESPECIALES ────────────────────────────
+
+describe('Elecciones del jugador', () => {
+  const tactics = loadTacticsCatalog()
+  const card = (name: string) => structuredClone(tactics.find(c => c.name === name)!)
+
+  it('On-Site Integration: Upgrade a elegir (sin elección se rechaza)', () => {
+    const g = makeGame([makeUnit('a', 'player1', A)])
+    g.players.player1.tactics.hand = [card('On-Site Integration')]
+    const id = g.players.player1.tactics.hand[0].id
+    expect(processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id }, 'player1').success).toBe(false)
+    const s = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, choice: 'shield' }, 'player1').state!
+    expect(s.units.a.upgrades).toEqual([{ type: 'shield', value: 1, active: true }])
+  })
+  it('Special OPs: hasta 3 Londo Bell, cada una con una Upgrade distinta', () => {
+    const lb = { traits: ['Londo Bell'] }
+    const g = makeGame([makeUnit('a', 'player1', A, lb), makeUnit('b', 'player1', { q: 2, r: 4 }, lb)])
+    g.players.player1.tactics.hand = [card('Special OPs')]
+    const id = g.players.player1.tactics.hand[0].id
+    expect(processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, choices: ['a=attack', 'b=attack'] }, 'player1').success).toBe(false)
+    const s = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, choices: ['a=attack', 'b=movement'] }, 'player1').state!
+    expect(s.units.b.upgrades[0].type).toBe('movement')
+  })
+  it('Material Transfer reparte las Upgrades y reactiva las Shields que cambian de unidad', () => {
+    const mt: Ability = { name: 'Material Transfer', type: 'CMD', description: '', abilityData: { type: 'redistribute_upgrades', range: 3 } }
+    const g = makeGame([
+      makeUnit('a', 'player1', A, { abilities: [mt], upgrades: [{ type: 'shield', value: 1, active: false }, { type: 'attack', value: 1 }] }),
+      makeUnit('b', 'player1', { q: 2, r: 4 }),
+    ])
+    const s = processAction(g, { type: 'USE_ABILITY', unitId: 'a', abilityIndex: 0, targetId: 'b', choices: ['ally', 'self'] }, 'player1').state!
+    expect(s.units.a.upgrades).toEqual([{ type: 'attack', value: 1 }])
+    expect(s.units.b.upgrades).toEqual([{ type: 'shield', value: 1, active: true }])
+  })
+  it('las Response con Energy se pueden desactivar por unidad, también fuera de turno', () => {
+    const payload: Ability = { name: 'Coordinated Payload', type: 'RSP', description: '', energyCost: 1, abilityData: { type: 'strength_per_ally_nearby', amount: 2, range: 3 } }
+    const g = makeGame([makeUnit('a', 'player1', A, { abilities: [payload], energy: 1 }), makeUnit('ally', 'player1', { q: 2, r: 3 }), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    expect(processAction(g, { type: 'SET_AUTO_RESPONSES', unitId: 'e', enabled: false }, 'player2').success).toBe(true)
+    const off = processAction(g, { type: 'SET_AUTO_RESPONSES', unitId: 'a', enabled: false }, 'player1').state!
+    const s = applyAttack(off, 'a', 0, 'e', 'player1', dice()).newState!
+    expect(s.lastAttack!.rolls).toHaveLength(3)
+    expect(s.units.a.energy).toBe(1)
+  })
+})
+
+describe('Challenge, Protective Shot e Iron-Blooded Tenacity', () => {
+  const tactics = loadTacticsCatalog()
+  const card = (name: string) => structuredClone(tactics.find(c => c.name === name)!)
+  const challenge: Ability = { name: 'Challenge', type: 'RSP', description: '', abilityData: { type: 'challenge', range: 2 } }
+
+  it('Challenge: el aliado se cambia por el defensor y recibe el ataque', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', A),
+      makeUnit('e', 'player2', { q: 5, r: 2 }),
+      makeUnit('guard', 'player2', { q: 6, r: 3 }, { abilities: [challenge] }),
+    ])
+    const s1 = applyAttack(g, 'a', 0, 'e', 'player1', dice()).newState!
+    expect(s1.pendingResponse).toMatchObject({ forPlayerId: 'player2', trigger: 'before_attack_roll' })
+    const s2 = processAction(s1, { type: 'USE_RESPONSE_ABILITY', unitId: 'guard', abilityIndex: 0 }, 'player2', dice(5, 5, 5)).state!
+    expect(s2.units.guard.position).toEqual({ q: 5, r: 2 })
+    expect(s2.units.guard.currentHp).toBe(7)
+    expect(s2.units.e.currentHp).toBe(10)
+  })
+  it('Interception da Challenge a un aliado sin la habilidad', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 }), makeUnit('b', 'player2', { q: 6, r: 3 })])
+    g.players.player2.tactics.hand = [card('Interception')]
+    const s1 = applyAttack(g, 'a', 0, 'e', 'player1', dice()).newState!
+    const s2 = processAction(s1, { type: 'PLAY_RESPONSE', cardId: s1.players.player2.tactics.hand[0].id }, 'player2', dice(5, 5, 5)).state!
+    expect(s2.units.b.currentHp).toBe(7)
+  })
+  it('Protective Shot: el Gundam dispara al enemigo que termina su movimiento a 3 hexes (TL 1)', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 1, r: 2 }),
+      makeUnit('g', 'player2', { q: 5, r: 2 }, { signature: 'Elite Mobile Suit', startingTl: 5, weapons: [weapon({ name: 'Beam Rifle', range: 3, strength: 3 })] }),
+    ])
+    g.players.player2.tactics.hand = [card('Protective Shot')]
+    const s1 = processAction(g, { type: 'ADVANCE', unitId: 'a', to: { q: 3, r: 2 } }, 'player1').state!
+    expect(s1.pendingResponse).toMatchObject({ forPlayerId: 'player2', movedUnitId: 'a' })
+    const s2 = processAction(s1, { type: 'PLAY_RESPONSE', cardId: s1.players.player2.tactics.hand[0].id }, 'player2', dice(5, 5, 5)).state!
+    expect(s2.units.a.currentHp).toBe(7)
+    expect(getUnitRound(s2.timeline, 'g')).toBe(6)
+  })
+  it('Iron-Blooded Tenacity deja al Barbatos a 1 HP en vez de caer', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('b', 'player2', { q: 5, r: 2 }, { signature: 'Final Stand', currentHp: 2 })])
+    g.players.player2.tactics.hand = [card('Iron-Blooded Tenacity')]
+    const s = applyAttack(g, 'a', 0, 'b', 'player1', dice(5, 5, 5)).newState!
+    expect(s.units.b.currentHp).toBe(1)
+    expect(s.units.b.position).not.toBeNull()
+    expect(s.players.player1.vp).toBe(0)
+  })
+  it('Bit Assault recoloca todas las RWS y cada una hace 1 de daño a un enemigo adyacente', () => {
+    const g = makeGame([makeUnit('a', 'player1', A, { signature: 'Protective Heroine' }), makeUnit('e', 'player2', { q: 5, r: 5 })])
+    g.rws.r1 = { id: 'r1', kind: 'bit_stave', name: 'BIT', owner: 'player1', ownerUnitId: 'a', position: { q: 0, r: 0 }, vp: 2 }
+    g.players.player1.tactics.hand = [card('Bit Assault')]
+    const id = g.players.player1.tactics.hand[0].id
+    const s = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, choices: ['r1=6,5'] }, 'player1').state!
+    expect(s.rws.r1.position).toEqual({ q: 6, r: 5 })
+    expect(s.units.e.currentHp).toBe(9)
+  })
+})

@@ -19,12 +19,13 @@ interface TacticsHandProps {
     onPassResponse?: () => void
     cardPlayed?: boolean
     canRespond?: (card: TacticsCard) => boolean
+    responseAbilities?: { key: string; label: string; onUse: () => void }[]
 }
 
 const cardTypeColor = (type: 'command' | 'response' | 'attack', active: boolean) =>
     !active ? '#333' : type === 'command' ? '#e65100' : type === 'attack' ? '#b71c1c' : '#6a1b9a'
 
-export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayCard, pendingResponseTrigger, onPassResponse, cardPlayed = false, canRespond }: TacticsHandProps) {
+export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayCard, pendingResponseTrigger, onPassResponse, cardPlayed = false, canRespond, responseAbilities = [] }: TacticsHandProps) {
     const isRspWindow = !!pendingResponseTrigger
 
     return (
@@ -139,6 +140,14 @@ export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayC
             })}
 
             {/* Botón pasar respuesta */}
+            {isRspWindow && responseAbilities.map(ra => (
+                <button key={ra.key} onClick={ra.onUse} title="Habilidad Response de tu unidad" style={{
+                    flexShrink: 0, alignSelf: 'center', padding: '8px 12px', background: '#4a148c',
+                    border: '1px solid #ce93d8', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 11,
+                }}>
+                    ⚡ {ra.label}
+                </button>
+            ))}
             {isRspWindow && onPassResponse && (
                 <button
                     onClick={onPassResponse}

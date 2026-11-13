@@ -7,14 +7,15 @@ import { hexKey, findPath, gridDistance, getNeighbors } from './hexGrid'
 import { advanceToken } from './timeline'
 import {
     moveOptionsFor, checkAttackTarget, checkAttackTargetWith, targetAt, baseOwnerAt, reachableFor,
+    responseAbilityOptions, challengeOptions, canPlayResponseCard,
 } from './queries'
 import { cloneState, pushLog } from './damage'
 import {
-    startAttack, rollD10, closeResponseWindow, isAttackResponse, canPlayAttackResponse, applyAttackResponse, type Rng,
+    startAttack, rollD10, closeResponseWindow, isAttackResponse, canPlayAttackResponse, applyAttackResponse, performChallenge, type Rng,
 } from './combat'
 import {
     applyCommandAbility, applyCardEffect, applyResponseCardEffect, collectTokens,
-    triggerAfterDash, triggerAfterMove, adjacentEnemyKeys, rescueGarrison,
+    triggerAfterDash, triggerAfterMove, adjacentEnemyKeys, rescueGarrison, type Choice,
 } from './effects'
 import { contestObjectives } from './victory'
 import { endActivation } from './activation'
@@ -89,18 +90,23 @@ export function applyAdvance(state: GameState, unitId: string, to: HexCoord, pla
     return { success: true, newState: s }
 }
 
-// Carta Response "Iron Grip" (después de que un enemigo termine su movimiento adyacente)
-function openAdvanceResponseWindow(s: GameState, unitId: string, playerId: PlayerId): void {
+// Ventana Response del rival cuando una unidad termina un movimiento:
+// Iron Grip (demo, enemigo adyacente) y Protective Shot (enemigo a 3 hexes).
+export function openAdvanceResponseWindow(s: GameState, unitId: string, playerId: PlayerId): void {
     const opponent: PlayerId = playerId === 'player1' ? 'player2' : 'player1'
-    const hasCard = s.players[opponent].tactics.hand.some(c =>
-        c.type === 'response' && c.effectData?.trigger === 'after_enemy_advance')
     const pos = s.units[unitId].position
-    if (!hasCard || !pos) return
+    if (!pos || s.pendingResponse) return
+    const candidate: GameState = { ...s, pendingResponse: { trigger: 'after_enemy_advance', forPlayerId: opponent, movedUnitId: unitId } }
     const adjacentToOpponent = getNeighbors(pos).some(n => {
         const occ = s.board[hexKey(n)]?.occupiedBy
         return occ && s.units[occ]?.playerId === opponent
     })
-    if (adjacentToOpponent) s.pendingResponse = { trigger: 'after_enemy_advance', forPlayerId: opponent, movedUnitId: unitId }
+    const playable = s.players[opponent].tactics.hand.some(c => {
+        if (c.type !== 'response' || c.effectData?.trigger !== 'after_enemy_advance') return false
+        if (c.effectData.type === 'protective_shot') return canPlayResponseCard(candidate, opponent, c)
+        return adjacentToOpponent
+    })
+    if (playable) s.pendingResponse = candidate.pendingResponse
 }
 
 export function applyDash(state: GameState, unitId: string, to: HexCoord, playerId: PlayerId): ActionResult {
@@ -123,6 +129,7 @@ export function applyDash(state: GameState, unitId: string, to: HexCoord, player
     moveAlongPath(s, unitId, to, free ? 'hizo un Dash adicional' : 'hizo Dash', playerId)
     triggerAfterDash(s, unitId)
     s.actionLog.push({ type: 'DASH', unitId, to })
+    openAdvanceResponseWindow(s, unitId, playerId)
     return { success: true, newState: s }
 }
 
@@ -236,7 +243,7 @@ export function applyAttackGarrison(
 
 export function applyUseAbility(
     state: GameState, unitId: string, abilityIndex: number, playerId: PlayerId,
-    targetId?: string, targetHex?: HexCoord, rng: Rng = rollD10,
+    targetId?: string, targetHex?: HexCoord, rng: Rng = rollD10, pick: Choice = {},
 ): ActionResult {
     const err = validateTurn(state, unitId, playerId) ?? requireOnBoard(state, unitId)
     if (err) return fail(err)
@@ -250,12 +257,13 @@ export function applyUseAbility(
     if (unit.energy < energyCost) return fail('Energy insuficiente')
 
     const s = cloneState(state)
-    const res = applyCommandAbility(s, unitId, abilityIndex, playerId, targetId, targetHex, rng)
+    const res = applyCommandAbility(s, unitId, abilityIndex, playerId, targetId, targetHex, rng, pick)
     if (!res.success) return fail(res.error!)
     s.activation!.usedCommands.push(abilityIndex)
     s.units[unitId].energy -= energyCost
     if (ability.tlCost) s.timeline = advanceToken(s.timeline, unitId, ability.tlCost)
     s.actionLog.push({ type: 'USE_ABILITY', unitId, abilityIndex, targetId, targetHex })
+    if (s.units[unitId].position && hexKey(s.units[unitId].position!) !== hexKey(unit.position!)) openAdvanceResponseWindow(s, unitId, playerId)
     pushLog(s, playerId, `${unit.name} usó "${ability.name}"`, 'ability')
     return { success: true, newState: s }
 }
@@ -265,7 +273,7 @@ export function applyUseAbility(
 
 export function applyPlayCard(
     state: GameState, unitId: string, cardId: string, playerId: PlayerId,
-    targetId?: string, targetHex?: HexCoord, rng: Rng = rollD10,
+    targetId?: string, targetHex?: HexCoord, rng: Rng = rollD10, pick: Choice = {},
 ): ActionResult {
     const err = validateTurn(state, unitId, playerId)
     if (err) return fail(err)
@@ -298,7 +306,7 @@ export function applyPlayCard(
         if (!check.ok) return fail(check.reason!)
         s.timeline = advanceToken(s.timeline, unitId, card.weapon.tlCost)
     } else {
-        const res = applyCardEffect(s, playerId, unitId, card.effectData!, targetId, targetHex)
+        const res = applyCardEffect(s, playerId, unitId, card.effectData!, targetId, targetHex, pick)
         if (!res.success) return fail(res.error!)
     }
     if (card.tlCost) s.timeline = advanceToken(s.timeline, unitId, card.tlCost)
@@ -309,6 +317,9 @@ export function applyPlayCard(
     s.actionLog.push({ type: 'PLAY_CARD', unitId, cardId, targetId, targetHex })
     pushLog(s, playerId, `${s.players[playerId].name} jugó "${card.name}"`, 'card')
     if (attackKey && card.weapon) startAttack(s, unitId, card.weapon, attackKey, rng)
+    const before = state.units[unitId].position
+    const after = s.units[unitId].position
+    if (before && after && hexKey(before) !== hexKey(after)) openAdvanceResponseWindow(s, unitId, playerId)
     return { success: true, newState: s }
 }
 
@@ -371,6 +382,37 @@ export function applyPassResponse(state: GameState, playerId: PlayerId, rng: Rng
     return { success: true, newState: s }
 }
 
+// ─── HABILIDADES RESPONSE DE UNIDAD (Challenge) ───────────────────────────────
+
+export function applyUseResponseAbility(state: GameState, unitId: string, abilityIndex: number, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
+    if (!state.pendingResponse || state.pendingResponse.forPlayerId !== playerId) return fail('No hay ventana de respuesta para ti')
+    if (!responseAbilityOptions(state, playerId).some(o => o.unitId === unitId && o.abilityIndex === abilityIndex)) {
+        return fail('Esa habilidad no se puede usar ahora')
+    }
+    const s = cloneState(state)
+    const unit = s.units[unitId]
+    const ability = unit.abilities[abilityIndex]
+    const opt = challengeOptions(s, playerId).find(o => o.challengerId === unitId)!
+    unit.energy -= ability.energyCost ?? 0
+    performChallenge(s, unitId, opt.defenderId)
+    s.actionLog.push({ type: 'USE_RESPONSE_ABILITY', unitId, abilityIndex })
+    // Se puede combinar con otra respuesta al mismo momento; si ya no queda nada, se cierra
+    const hand = s.players[playerId].tactics.hand
+    if (responseAbilityOptions(s, playerId).length === 0 && !hand.some(c => canPlayResponseCard(s, playerId, c))) closeResponseWindow(s, rng)
+    return { success: true, newState: s }
+}
+
+// ─── PREFERENCIAS ─────────────────────────────────────────────────────────────
+// Activa o desactiva el uso automático de las Response con coste de Energy de
+// una unidad propia. Se puede cambiar en cualquier momento.
+export function applySetAutoResponses(state: GameState, unitId: string, enabled: boolean, playerId: PlayerId): ActionResult {
+    const unit = state.units[unitId]
+    if (!unit || unit.playerId !== playerId) return fail('Esa unidad no es tuya')
+    const s = cloneState(state)
+    s.units[unitId].autoResponses = enabled
+    return { success: true, newState: s }
+}
+
 // ─── DISPATCHER ───────────────────────────────────────────────────────────────
 
 export function applyAction(state: GameState, action: GameAction, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
@@ -382,8 +424,10 @@ export function applyAction(state: GameState, action: GameAction, playerId: Play
         case 'DASH': return applyDash(state, action.unitId, action.to, playerId)
         case 'ENERGIZE': return applyEnergize(state, action.unitId, playerId)
         case 'RESCUE': return applyRescue(state, action.unitId, action.garrisonId, playerId)
-        case 'USE_ABILITY': return applyUseAbility(state, action.unitId, action.abilityIndex, playerId, action.targetId, action.targetHex, rng)
-        case 'PLAY_CARD': return applyPlayCard(state, action.unitId, action.cardId, playerId, action.targetId, action.targetHex, rng)
+        case 'USE_ABILITY': return applyUseAbility(state, action.unitId, action.abilityIndex, playerId, action.targetId, action.targetHex, rng, action)
+        case 'PLAY_CARD': return applyPlayCard(state, action.unitId, action.cardId, playerId, action.targetId, action.targetHex, rng, action)
+        case 'SET_AUTO_RESPONSES': return applySetAutoResponses(state, action.unitId, action.enabled, playerId)
+        case 'USE_RESPONSE_ABILITY': return applyUseResponseAbility(state, action.unitId, action.abilityIndex, playerId, rng)
         case 'END_ACTIVATION': return applyEndActivation(state, action.unitId, playerId)
         case 'PLAY_RESPONSE': return applyPlayResponse(state, action.cardId, playerId, rng)
         case 'PASS_RESPONSE': return applyPassResponse(state, playerId, rng)

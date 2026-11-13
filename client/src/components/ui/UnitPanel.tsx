@@ -22,6 +22,7 @@ interface UnitPanelProps {
     onRescue?: () => void
     onEndTurn?: () => void
     onCancel?: () => void
+    onToggleAutoResponses?: (enabled: boolean) => void
 }
 
 const abilityTypeColor = (type: 'CMD' | 'ONG' | 'RSP' | 'SETUP') => {
@@ -69,6 +70,7 @@ export function UnitPanel({
     onRescue,
     onEndTurn,
     onCancel,
+    onToggleAutoResponses,
 }: UnitPanelProps) {
     const factionColor = unit.playerId === 'player1' ? '#4fc3f7' : '#ef9a9a'
     const hpPercent = unit.currentHp / unit.maxHp
@@ -286,6 +288,16 @@ export function UnitPanel({
                             ))}
                         </div>
                     </div>
+                )}
+
+                {/* Response con coste de Energy: uso automático activable */}
+                {isMyUnit && onToggleAutoResponses && unit.abilities.some(a => a.type === 'RSP' && (a.energyCost ?? 0) > 0 && a.abilityData) && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#aaa', cursor: 'pointer' }}
+                        title="Si está activo, sus habilidades Response con coste de Energy se usan solas cuando se cumple su condición">
+                        <input type="checkbox" checked={unit.autoResponses !== false}
+                            onChange={e => onToggleAutoResponses(e.target.checked)} />
+                        Usar Response con Energy automáticamente
+                    </label>
                 )}
 
                 {/* Habilidades */}

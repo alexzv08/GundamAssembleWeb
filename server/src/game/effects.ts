@@ -2,7 +2,7 @@
 // Tactics. Las funciones que reciben `state` lo MUTAN (el llamador clona).
 import type { GameState, PlayerId, HexCoord, AbilityEffect } from '../types'
 import type { CardEffect, PendingResponse } from '../types/tactics'
-import { hexKey, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
+import { hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
 import { upgradeCount, enemyHexes, moveOptionsFor, rwsDeployHexes, alliedRws, rwsAdjacentTo, isEmptyHex, targetAt } from './queries'
 import { damageUnit, damageAt, destroyGarrison, forceMove, pushLog } from './damage'
 import { advanceToken } from './timeline'
@@ -132,6 +132,7 @@ export function useResponseAbility(state: GameState, unitId: string, type: strin
     if (!ability?.abilityData) return null
     const cost = ability.energyCost ?? 0
     if (unit.energy < cost) return null
+    if (cost > 0 && unit.autoResponses === false) return null   // el jugador la ha desactivado
     unit.energy -= cost
     pushLog(state, unit.playerId, `${unit.name} usa "${ability.name}"${cost ? ` (−${cost} Energy)` : ''}`, 'ability')
     return ability.abilityData
@@ -240,9 +241,30 @@ function abilityMove(state: GameState, unitId: string, amount: number, to: HexCo
 
 // ─── HABILIDADES COMMAND ──────────────────────────────────────────────────────
 
+export interface Choice { choice?: string; choices?: string[] }
+
+const UPGRADE_CHOICES = ['attack', 'movement', 'shield']
+
+// Material Transfer: `choices[i]` dice quién se queda la Upgrade i de la lista
+// [...upgrades de la unidad, ...upgrades del aliado]: 'self' o 'ally'.
+function redistribute(state: GameState, selfId: string, allyId: string, choices: string[] | undefined): EffectResult {
+    const self = state.units[selfId]
+    const ally = state.units[allyId]
+    const all = [...self.upgrades, ...ally.upgrades]
+    if (!choices || choices.length !== all.length || choices.some(c => c !== 'self' && c !== 'ally')) {
+        return fail('Indica para cada Upgrade qué unidad se la queda')
+    }
+    // Las Shields que cambian de unidad se reactivan (Q&A 45)
+    const moved = (u: typeof all[number], toSelf: boolean, fromSelf: boolean) =>
+        u.type === 'shield' && toSelf !== fromSelf ? { ...u, active: true } : u
+    self.upgrades = all.map((u, i) => [u, i] as const).filter(([, i]) => choices[i] === 'self').map(([u, i]) => moved(u, true, i < self.upgrades.length))
+    ally.upgrades = all.map((u, i) => [u, i] as const).filter(([, i]) => choices[i] === 'ally').map(([u, i]) => moved(u, false, i < all.length - ally.upgrades.length))
+    return ok
+}
+
 export function applyCommandAbility(
     state: GameState, unitId: string, abilityIndex: number, playerId: PlayerId,
-    targetId: string | undefined, targetHex: HexCoord | undefined, rng: () => number,
+    targetId: string | undefined, targetHex: HexCoord | undefined, rng: () => number, pick: Choice = {},
 ): EffectResult {
     const unit = state.units[unitId]
     const ability = unit.abilities[abilityIndex]
@@ -348,6 +370,37 @@ export function applyCommandAbility(
             return ok
         }
 
+        case 'upgrade_ally_choice': {
+            const ally = targetId ? state.units[targetId] : null
+            if (!unit.position || !ally?.position || ally.playerId !== playerId || ally.id === unitId) return fail('Elige otra unidad aliada')
+            if (gridDistance(unit.position, ally.position) > (d.range ?? 3)) return fail(`Fuera de alcance (${d.range ?? 3})`)
+            if (ally.upgrades.length > (d.amount ?? 1)) return fail('Ese aliado tiene demasiadas Upgrades')
+            if (!pick.choice || !UPGRADE_CHOICES.includes(pick.choice)) return fail('Elige el tipo de Upgrade')
+            gainUpgrade(state, ally.id, pick.choice)
+            return ok
+        }
+
+        case 'redistribute_upgrades': {
+            const ally = targetId ? state.units[targetId] : null
+            if (!unit.position || !ally?.position || ally.playerId !== playerId || ally.id === unitId) return fail('Elige otra unidad aliada')
+            if (gridDistance(unit.position, ally.position) > (d.range ?? 3)) return fail(`Fuera de alcance (${d.range ?? 3})`)
+            return redistribute(state, unitId, ally.id, pick.choices)
+        }
+
+        case 'move_toward_damaged': {
+            // Zeon Zealotry: "Move 5 towards a damaged enemy unit, ignoring terrain penalties."
+            if (!unit.position || !targetHex) return fail('Elige el hex de destino')
+            const damaged = Object.values(state.units).filter(u => u.playerId !== playerId && u.position && u.currentHp < u.maxHp)
+            if (damaged.length === 0) return fail('No hay enemigos dañados')
+            const path = findPath(unit.position, targetHex, state.board,
+                moveOptionsFor(state, unitId, { kind: 'move', base: d.amount ?? 5, ignoreTerrain: true }))
+            if (!path) return fail('Destino no alcanzable')
+            const closer = damaged.some(e => gridDistance(targetHex, e.position!) < gridDistance(unit.position!, e.position!))
+            if (!closer) return fail('Debes acercarte a un enemigo dañado')
+            moveUnitTo(state, unitId, targetHex, path)
+            return ok
+        }
+
         case 'deploy_rws': {
             // "Deploy or reposition this unit's <RWS> on an empty hex within [Range N]."
             const rws = Object.values(state.rws ?? {}).find(r => r.ownerUnitId === unitId && r.kind === d.rws)
@@ -377,7 +430,7 @@ export function applyCommandAbility(
 
 export function applyCardEffect(
     state: GameState, playerId: PlayerId, unitId: string, effect: CardEffect,
-    targetId?: string, targetHex?: HexCoord,
+    targetId?: string, targetHex?: HexCoord, pick: Choice = {},
 ): EffectResult {
     const unit = state.units[unitId]
     if (!unit) return fail('Unidad no encontrada')
@@ -550,6 +603,54 @@ export function applyCardEffect(
                 return fail(`Necesitas haber derrotado ${effect.threshold ?? 3} Garrisons`)
             }
             if (state.activation) state.activation.strengthBonus += effect.strength ?? 4
+            return ok
+        }
+
+        // ── Upgrade a elegir ──
+        case 'gain_upgrade_choice':
+            if (!pick.choice || !UPGRADE_CHOICES.includes(pick.choice)) return fail('Elige el tipo de Upgrade')
+            gainUpgrade(state, unitId, pick.choice)
+            return ok
+
+        case 'special_ops': {
+            // "Up to three of your Londo Bell units on the battlefield gain 1 different Upgrade of your choice."
+            // choices = ["unitId=tipo", ...]
+            const pairs = (pick.choices ?? []).map(c => c.split('='))
+            if (pairs.length === 0 || pairs.length > 3) return fail('Elige hasta 3 unidades Londo Bell')
+            const types = pairs.map(p => p[1])
+            if (new Set(types).size !== types.length || types.some(t => !UPGRADE_CHOICES.includes(t))) return fail('Cada unidad debe recibir una Upgrade distinta')
+            if (new Set(pairs.map(p => p[0])).size !== pairs.length) return fail('No repitas unidades')
+            for (const [id] of pairs) {
+                const u = state.units[id]
+                if (!u?.position || u.playerId !== playerId || !u.traits.includes('Londo Bell')) return fail('Solo unidades Londo Bell aliadas en el tablero')
+            }
+            for (const [id, t] of pairs) gainUpgrade(state, id, t)
+            return ok
+        }
+
+        case 'bit_assault': {
+            // "Gundam Aerial repositions all ally and enemy Remote Weapon Systems onto any empty hexes
+            //  on the battlefield. Each RWS deals [Damage 1] to an enemy unit adjacent to it." (Q&A 46)
+            // choices = ["rwsId=q,r", ...] con todas las RWS del tablero
+            const onBoard = Object.values(state.rws ?? {}).filter(r => r.position)
+            if (onBoard.length === 0) return fail('No hay RWS en el tablero')
+            const dest = new Map((pick.choices ?? []).map(c => c.split('=') as [string, string]))
+            if (dest.size !== onBoard.length || onBoard.some(r => !dest.has(r.id))) return fail('Elige un hex para cada RWS del tablero')
+            if (new Set(dest.values()).size !== dest.size) return fail('Cada RWS necesita un hex distinto')
+            const saved = onBoard.map(r => [r.id, r.position] as const)
+            for (const r of onBoard) r.position = null          // se retiran todas y se comprueba que el destino esté vacío
+            for (const [id, key] of dest) {
+                if (!isEmptyHex(state, key)) {
+                    for (const [rid, pos] of saved) state.rws[rid].position = pos
+                    return fail(`El hex ${key} no está vacío`)
+                }
+                state.rws[id].position = keyToHex(key)
+            }
+            // Todas se mueven antes de hacer daño (Q&A 46)
+            for (const r of onBoard) {
+                const enemy = getNeighbors(r.position!).map(hexKey).map(k => targetAt(state, k, playerId)).find(t => t?.kind === 'unit')
+                if (enemy) damageUnit(state, enemy.id, 1)
+            }
             return ok
         }
 

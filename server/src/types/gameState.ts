@@ -90,8 +90,10 @@ export type GameAction =
   | { type: 'RESCUE'; unitId: string; garrisonId: string }
   | { type: 'ATTACK_GARRISON'; unitId: string; weaponIndex: number; garrisonId: string }
   | { type: 'ATTACK_RWS'; unitId: string; weaponIndex: number; rwsId: string }
-  | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string; targetHex?: HexCoord }
-  | { type: 'USE_ABILITY'; unitId: string; abilityIndex: number; targetId?: string; targetHex?: HexCoord }
+  | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string; targetHex?: HexCoord; choice?: string; choices?: string[] }
+  | { type: 'USE_ABILITY'; unitId: string; abilityIndex: number; targetId?: string; targetHex?: HexCoord; choice?: string; choices?: string[] }
+  | { type: 'SET_AUTO_RESPONSES'; unitId: string; enabled: boolean }
+  | { type: 'USE_RESPONSE_ABILITY'; unitId: string; abilityIndex: number }
   | { type: 'END_ACTIVATION'; unitId: string }
   | { type: 'PLAY_RESPONSE'; cardId: string; targetId?: string }
   | { type: 'PASS_RESPONSE' }

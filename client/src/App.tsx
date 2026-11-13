@@ -2,15 +2,18 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
+import type { Unit } from './types/units'
 import { hexKey, gridDistance } from './game/hexGrid'
-import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex } from './game/queries'
-import { getNeighbors } from './game/hexGrid'
+import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
+import { getNeighbors, keyToHex } from './game/hexGrid'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
 import { UnitPanel } from './components/ui/UnitPanel'
 import { TimelineBar } from './components/ui/TimelineBar'
 import { TacticsHand } from './components/ui/TacticsHand'
 import { ToastContainer } from './components/ui/Toast'
+import { ChoiceModal, type ChoiceRequest } from './components/ui/ChoiceModal'
+import { UPGRADE_OPTIONS } from './components/ui/choiceOptions'
 import { useToasts } from './components/ui/useToasts'
 import { ActionLog } from './components/ui/ActionLog'
 import { AuthScreen } from './components/ui/AuthScreen'
@@ -39,7 +42,7 @@ const socket: Socket = io(import.meta.env.VITE_SERVER_URL as string, {
   },
 })
 
-type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'ability_hex' | 'playing_card' | 'card_hex'
+type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'ability_hex' | 'playing_card' | 'card_hex' | 'ally_target' | 'bit_assault'
 type AppScreen = 'auth' | 'lobby' | 'waiting' | 'squad_selection' | 'setup' | 'playing'
 
 export default function App() {
@@ -66,6 +69,9 @@ export default function App() {
   const [selectedWeaponIndex, setSelectedWeaponIndex] = useState<number | null>(null)
   const [pendingAbilityIndex, setPendingAbilityIndex] = useState<number | null>(null)
   const [pendingCardId, setPendingCardId] = useState<string | null>(null)
+  const [choice, setChoice] = useState<ChoiceRequest | null>(null)
+  const allyPickRef = useRef<((allyId: string) => void) | null>(null)
+  const [bitAssault, setBitAssault] = useState<{ unitId: string; cardId: string; queue: string[]; picks: string[] } | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
   const [logHoveredHexes, setLogHoveredHexes] = useState<Set<string>>(new Set())
   const [selectedSquad, setSelectedSquad] = useState<string[]>([])
@@ -369,6 +375,15 @@ export default function App() {
 
     setPanelUnitId(unitId)
 
+    if (selectionMode === 'ally_target' && unit.playerId === myPlayerId && unitId !== selectedUnitId && allyPickRef.current) {
+      const pick = allyPickRef.current
+      allyPickRef.current = null
+      setSelectionMode('none')
+      setAttackableHexes(new Set())
+      pick(unitId)
+      return
+    }
+
     if (selectionMode === 'attacking' && selectedUnitId && unit.playerId !== myPlayerId) {
       socket.emit('GAME_ACTION', { action: { type: 'ATTACK', unitId: selectedUnitId, weaponIndex: selectedWeaponIndex ?? 0, targetId: unitId } })
       clearSelection()
@@ -438,6 +453,23 @@ export default function App() {
     if (!reachableHexes.has(key)) return
     const [q, r] = key.split(',').map(Number)
 
+    if (selectionMode === 'bit_assault' && bitAssault) {
+      const picks = [...bitAssault.picks, `${bitAssault.queue[0]}=${key}`]
+      const queue = bitAssault.queue.slice(1)
+      if (queue.length === 0) {
+        socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId: bitAssault.unitId, cardId: bitAssault.cardId, choices: picks } })
+        setBitAssault(null)
+        clearSelection()
+        return
+      }
+      const next = new Set(reachableHexes)
+      next.delete(key)
+      setReachableHexes(next)
+      setBitAssault({ ...bitAssault, queue, picks })
+      setMessage(`Bit Assault — elige un hex vacío para ${gameState.rws[queue[0]].name}`)
+      return
+    }
+
     if (selectionMode === 'card_hex' && pendingCardId) {
       socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId: selectedUnitId, cardId: pendingCardId, targetHex: { q, r } } })
       clearSelection()
@@ -459,7 +491,7 @@ export default function App() {
       setReachableHexes(new Set())
       setSelectionMode('none')
     }
-  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, clearSelection])
+  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, bitAssault, clearSelection])
 
   const handleAttackMode = useCallback((weaponIndex: number) => {
     if (!gameState || !selectedUnitId) return
@@ -497,6 +529,54 @@ export default function App() {
       setMessage(`${ability.name} — elige un enemigo`)
       return
     }
+    const emitAbility = (extra: object) => {
+      socket.emit('GAME_ACTION', { action: { type: 'USE_ABILITY', unitId: selectedUnitId, abilityIndex, ...extra } })
+      clearSelection()
+    }
+    const pickAlly = (range: number, filter: (u: Unit) => boolean, then: (allyId: string) => void) => {
+      const allies = Object.values(gameState.units).filter(u => u.playerId === myPlayerId && u.id !== selectedUnitId && u.position &&
+        unit.position && gridDistance(unit.position, u.position) <= range && filter(u))
+      if (allies.length === 0) { setMessage(`${ability.name}: no hay aliados válidos`); return }
+      allyPickRef.current = then
+      setSelectionMode('ally_target')
+      setAttackableHexes(new Set(allies.map(u => hexKey(u.position!))))
+      setReachableHexes(new Set())
+      setMessage(`${ability.name} — elige un aliado`)
+    }
+    // White Base Unity: aliado con ≤1 Upgrades + tipo de Upgrade
+    if (data?.type === 'upgrade_ally_choice') {
+      pickAlly(data.range ?? 3, u => u.upgrades.length <= (data.amount ?? 1), allyId =>
+        setChoice({ kind: 'single', title: `${ability.name}: Upgrade para ${gameState.units[allyId].name}`, options: UPGRADE_OPTIONS,
+          onPick: v => { setChoice(null); emitAbility({ targetId: allyId, choice: v }) } }))
+      return
+    }
+    // Material Transfer: aliado + reparto de Upgrades
+    if (data?.type === 'redistribute_upgrades') {
+      pickAlly(data.range ?? 3, () => true, allyId => {
+        const ally = gameState.units[allyId]
+        const all = [...unit.upgrades.map(u => ({ u, owner: 'self' })), ...ally.upgrades.map(u => ({ u, owner: 'ally' }))]
+        if (all.length === 0) { setMessage('Ninguna de las dos unidades tiene Upgrades'); return }
+        setChoice({ kind: 'rows', title: `${ability.name}: ¿quién se queda cada Upgrade?`,
+          rows: all.map((x, i) => ({ id: String(i), label: x.u.type })),
+          options: [{ value: 'self', label: unit.name }, { value: 'ally', label: ally.name }],
+          initial: all.map(x => x.owner),
+          onConfirm: vals => { setChoice(null); emitAbility({ targetId: allyId, choices: vals }) } })
+      })
+      return
+    }
+    // Zeon Zealotry: mover hasta 5 ignorando el terreno, acercándose a un enemigo dañado
+    if (data?.type === 'move_toward_damaged' && unit.position) {
+      const damaged = Object.values(gameState.units).filter(u => u.playerId !== myPlayerId && u.position && u.currentHp < u.maxHp)
+      const hexes = new Set([...reachableFor(gameState, selectedUnitId, { kind: 'move', base: data.amount ?? 5, ignoreTerrain: true }).keys()]
+        .filter(k => damaged.some(e => gridDistance(keyToHex(k), e.position!) < gridDistance(unit.position!, e.position!))))
+      if (hexes.size === 0) { setMessage(`${ability.name}: no hay destinos que acerquen a un enemigo dañado`); return }
+      setPendingAbilityIndex(abilityIndex)
+      setSelectionMode('ability_hex')
+      setReachableHexes(hexes)
+      setAttackableHexes(new Set())
+      setMessage(`${ability.name} — elige el hex de destino`)
+      return
+    }
     // Desplegar o recolocar una RWS: elegir un hex vacío a alcance
     if (data?.type === 'deploy_rws') {
       const hexes = new Set(rwsDeployHexes(gameState, selectedUnitId, data.range ?? 3))
@@ -523,7 +603,7 @@ export default function App() {
 
     socket.emit('GAME_ACTION', { action: { type: 'USE_ABILITY', unitId: selectedUnitId, abilityIndex } })
     setMessage(`${ability.name} usada`)
-  }, [gameState, selectedUnitId, myPlayerId, calcReachable])
+  }, [gameState, selectedUnitId, myPlayerId, calcReachable, clearSelection])
 
   const handlePlayCard = useCallback((cardId: string) => {
     if (!gameState || !myPlayerId) return
@@ -552,6 +632,40 @@ export default function App() {
       setAttackableHexes(mode === 'card_hex' ? new Set() : hexes)
       setReachableHexes(mode === 'card_hex' ? hexes : new Set())
       setMessage(`${card.name} — elige ${what}`)
+    }
+
+    const emitCard = (extra: object) => {
+      socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId, cardId, ...extra } })
+      clearSelection()
+    }
+    if (card.effectData?.type === 'gain_upgrade_choice') {
+      setChoice({ kind: 'single', title: `${card.name}: elige la Upgrade`, options: UPGRADE_OPTIONS,
+        onPick: v => { setChoice(null); emitCard({ choice: v }) } })
+      return
+    }
+    if (card.effectData?.type === 'special_ops') {
+      const lb = Object.values(gameState.units).filter(u => u.playerId === myPlayerId && u.position && u.traits.includes('Londo Bell'))
+      if (lb.length === 0) { setMessage('No tienes unidades Londo Bell en el tablero'); return }
+      setChoice({ kind: 'rows', title: `${card.name}: una Upgrade distinta para cada unidad`,
+        rows: lb.map(u => ({ id: u.id, label: u.name })),
+        options: [{ value: '', label: 'Nada' }, ...UPGRADE_OPTIONS],
+        initial: lb.map((_, i) => UPGRADE_OPTIONS[i]?.value ?? ''),
+        onConfirm: vals => { setChoice(null); emitCard({ choices: lb.map((u, i) => `${u.id}=${vals[i]}`).filter((_, i) => vals[i]) }) } })
+      return
+    }
+    if (card.effectData?.type === 'bit_assault') {
+      const onBoard = Object.values(gameState.rws).filter(r => r.position)
+      if (onBoard.length === 0) { setMessage('No hay RWS en el tablero'); return }
+      // Destinos: hexes vacíos contando como libres los que ocupan ahora las RWS
+      const empty = new Set(Object.keys(gameState.board).filter(k => isEmptyHex(gameState, k) || onBoard.some(r => hexKey(r.position!) === k)))
+      setSelectedUnitId(unitId)
+      setPendingCardId(cardId)
+      setBitAssault({ unitId, cardId, queue: onBoard.map(r => r.id), picks: [] })
+      setSelectionMode('bit_assault')
+      setReachableHexes(empty)
+      setAttackableHexes(new Set())
+      setMessage(`Bit Assault — elige un hex vacío para ${onBoard[0].name}`)
+      return
     }
 
     // Carta Attack: objetivos según el arma de la carta
@@ -597,7 +711,7 @@ export default function App() {
 
     socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId, cardId } })
     setMessage(`Carta jugada: ${card.name}`)
-  }, [gameState, selectedUnitId, myPlayerId, calcReachable])
+  }, [gameState, selectedUnitId, myPlayerId, calcReachable, clearSelection])
 
   const handlePassResponse = useCallback(() => {
     socket.emit('GAME_ACTION', { action: { type: 'PASS_RESPONSE' } })
@@ -787,6 +901,7 @@ export default function App() {
         />
 
         <ToastContainer toasts={toasts} />
+        {choice && <ChoiceModal request={choice} onCancel={() => { setChoice(null); clearSelection() }} />}
 
         <ObjectivesPanel objectiveHexes={objectiveHexes} players={gameState.players} />
 
@@ -837,6 +952,7 @@ export default function App() {
               }}
               onRescue={handleRescue}
               onEndTurn={handleEndTurn}
+              onToggleAutoResponses={enabled => socket.emit('GAME_ACTION', { action: { type: 'SET_AUTO_RESPONSES', unitId: panelUnit.id, enabled } })}
               onCancel={() => {
                 setSelectionMode('none')
                 setReachableHexes(new Set())
@@ -878,6 +994,11 @@ export default function App() {
               pendingResponseTrigger={gameState.pendingResponse?.forPlayerId === myPlayerId ? gameState.pendingResponse.trigger : null}
               canRespond={c => canPlayResponseCard(gameState, myPlayerId, c)}
               onPassResponse={handlePassResponse}
+              responseAbilities={responseAbilityOptions(gameState, myPlayerId).map(o => ({
+                key: `${o.unitId}:${o.abilityIndex}`,
+                label: `${gameState.units[o.unitId].abilities[o.abilityIndex].name} (${gameState.units[o.unitId].name})`,
+                onUse: () => socket.emit('GAME_ACTION', { action: { type: 'USE_RESPONSE_ABILITY', unitId: o.unitId, abilityIndex: o.abilityIndex } }),
+              }))}
               cardPlayed={gameState.activation?.cardPlayed ?? false}
             />
           </div>

@@ -370,6 +370,7 @@ export function canPlayResponseCard(state: GameState, player: PlayerId, card: Ta
   const e = card.effectData
   const t = trigger ?? state.pendingResponse?.trigger
   if (!e || card.type !== 'response' || !t || e.trigger !== t) return false
+  if (e.type === 'protective_shot') return protectiveShooters(state, player, card).length > 0
   const duringAttack = t === 'before_attack_roll' || t === 'after_attack_roll' || t === 'after_combat_damage'
   const pa = state.pendingAttack
   if (!duringAttack || (!pa && t === 'after_combat_damage')) return true
@@ -386,6 +387,7 @@ export function canPlayResponseCard(state: GameState, player: PlayerId, card: Ta
   if (e.requiresAllyWithin && attacker.position && !Object.values(state.units).some(u => u.id !== attacker.id &&
       u.playerId === attacker.playerId && u.position && gridDistance(u.position, attacker.position!) <= e.requiresAllyWithin!)) return false
   if (e.type === 'gain_energy' && !pa.damagedIds.some(id => state.units[id]?.playerId === player && state.units[id].position)) return false
+  if (e.type === 'grant_challenge' && challengeOptions(state, player, e.range2 ?? 2).length === 0) return false
   // Counter Attack: algún defensor superviviente debe poder alcanzar al atacante
   if (e.type === 'counter_attack') {
     if (!attacker.position) return false
@@ -393,4 +395,54 @@ export function canPlayResponseCard(state: GameState, player: PlayerId, card: Ta
     if (!actors.some(id => state.units[id].weapons.some(w => checkAttackTargetWith(state, id, w, key).ok))) return false
   }
   return true
+}
+
+// ─── CHALLENGE Y RESPONSE FUERA DE TURNO ──────────────────────────────────────
+
+// Challenge: una unidad propia que NO está defendiendo puede cambiarse por un
+// aliado defensor a `range` hexes o menos (Q&A 21, 76). Devuelve las parejas posibles.
+export function challengeOptions(state: GameState, player: PlayerId, range = 2): { challengerId: string; defenderId: string }[] {
+  const pa = state.pendingAttack
+  if (!pa || pa.stage !== 'before_roll' || responsesBlocked(state, player)) return []
+  if (state.units[pa.attackerId].playerId === player) return []
+  const defenders = attackDefenders(state, player)
+  const out: { challengerId: string; defenderId: string }[] = []
+  for (const u of Object.values(state.units)) {
+    if (u.playerId !== player || !u.position || defenders.includes(u.id)) continue
+    for (const d of defenders) {
+      if (gridDistance(u.position, state.units[d].position!) <= range) out.push({ challengerId: u.id, defenderId: d })
+    }
+  }
+  return out
+}
+
+// Habilidades Response de unidad que `player` puede usar en la ventana abierta.
+export function responseAbilityOptions(state: GameState, player: PlayerId): { unitId: string; abilityIndex: number }[] {
+  const pending = state.pendingResponse
+  if (!pending || pending.forPlayerId !== player || pending.trigger !== 'before_attack_roll') return []
+  const challengers = new Set(challengeOptions(state, player).map(o => o.challengerId))
+  const out: { unitId: string; abilityIndex: number }[] = []
+  for (const id of challengers) {
+    state.units[id].abilities.forEach((a, i) => {
+      if (a.type === 'RSP' && a.abilityData?.type === 'challenge' && state.units[id].energy >= (a.energyCost ?? 0)) out.push({ unitId: id, abilityIndex: i })
+    })
+  }
+  return out
+}
+
+// Protective Shot: unidades propias que pueden disparar a la unidad enemiga que acaba de moverse.
+export function protectiveShooters(state: GameState, player: PlayerId, card: TacticsCard): { unitId: string; weapon: Weapon }[] {
+  const movedId = state.pendingResponse?.movedUnitId
+  const moved = movedId ? state.units[movedId] : null
+  const e = card.effectData
+  if (!moved?.position || moved.playerId === player || !e) return []
+  const key = hexKey(moved.position)
+  const out: { unitId: string; weapon: Weapon }[] = []
+  for (const u of Object.values(state.units)) {
+    if (u.playerId !== player || !u.position || (card.signature && u.signature !== card.signature)) continue
+    if (gridDistance(u.position, moved.position) > (e.range ?? 3)) continue
+    const weapon = u.weapons.find(w => w.name === e.weapon)
+    if (weapon && checkAttackTargetWith(state, u.id, weapon, key).ok) out.push({ unitId: u.id, weapon })
+  }
+  return out
 }

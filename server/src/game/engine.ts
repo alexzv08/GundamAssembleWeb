@@ -20,7 +20,8 @@ export function processAction(state: GameState, action: GameAction, playerId: Pl
     if (state.phase === 'setup') return no('La partida aún está en fase de preparación')
     if (state.phase === 'finished') return no('La partida ha terminado')
 
-    const isResponse = action.type === 'PLAY_RESPONSE' || action.type === 'PASS_RESPONSE'
+    const isResponse = action.type === 'PLAY_RESPONSE' || action.type === 'PASS_RESPONSE' ||
+        action.type === 'USE_RESPONSE_ABILITY' || action.type === 'SET_AUTO_RESPONSES'
     if (!isResponse && state.activePlayerId !== playerId) return no('No es tu turno')
 
     const result = applyAction(state, action, playerId, rng)

@@ -20,7 +20,7 @@ import type { CardEffect } from '../types/tactics'
 import { hexKey, keyToHex, gridDistance, findPath } from './hexGrid'
 import {
     terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer,
-    attackDefenders, canPlayResponseCard, checkAttackTargetWith, rwsAdjacentTo, alliedRws, type TargetRef,
+    attackDefenders, canPlayResponseCard, checkAttackTargetWith, rwsAdjacentTo, alliedRws, challengeOptions, protectiveShooters, type TargetRef,
 } from './queries'
 import { damageUnit, destroyGarrison, destroyRws, damageAt, forceMove, pushLog } from './damage'
 import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, useResponseAbility, hasAbilityType } from './effects'
@@ -421,11 +421,12 @@ function stepToward(state: GameState, unitId: string, targetKey: string, steps: 
 
 // ─── VENTANAS DE RESPONSE ─────────────────────────────────────────────────────
 
-const ATTACK_RESPONSE_TYPES = new Set<CardEffect['type']>(['attack_bonus', 'reduce_damage', 'set_crit', 'reroll_misses', 'counter_attack', 'self_and_targets_damage', 'gain_energy'])
+const ATTACK_RESPONSE_TYPES = new Set<CardEffect['type']>(['attack_bonus', 'reduce_damage', 'set_crit', 'reroll_misses', 'counter_attack', 'self_and_targets_damage', 'gain_energy', 'grant_challenge', 'protective_shot'])
 
 // Se resuelve dentro del ataque en curso (si lo hay) o con el efecto clásico.
 export function isAttackResponse(effect: CardEffect, state?: GameState): boolean {
     if (effect.type === 'counter_attack') return !!state?.pendingAttack
+    if (effect.type === 'protective_shot') return true
     return ATTACK_RESPONSE_TYPES.has(effect.type)
 }
 
@@ -445,7 +446,8 @@ export function openAttackWindows(state: GameState, trigger: ResponseTrigger): b
     const queue: PendingResponse[] = []
     for (const player of [attackerPlayer, otherPlayer(attackerPlayer)] as PlayerId[]) {
         const hand = state.players[player].tactics.hand
-        if (!hand.some(c => canPlayAttackResponse(state, player, c, trigger))) continue
+        const canAbility = trigger === 'before_attack_roll' && challengeAbilityAvailable(state, player)
+        if (!canAbility && !hand.some(c => canPlayAttackResponse(state, player, c, trigger))) continue
         queue.push({
             trigger, forPlayerId: player, side: player === attackerPlayer ? 'attacker' : 'defender',
             attackerUnitId: pa.attackerId, defenderUnitId: defender?.id,
@@ -470,10 +472,18 @@ export function closeResponseWindow(state: GameState, rng: Rng): void {
 
 // Efecto de una carta Response jugada durante un ataque.
 export function applyAttackResponse(state: GameState, player: PlayerId, card: TacticsCard, rng: Rng): string | null {
-    const pa = state.pendingAttack
     const e = card.effectData!
+    if (e.type === 'protective_shot') return performProtectiveShot(state, player, card, rng)
+    const pa = state.pendingAttack
     if (!pa) return 'No hay ningún ataque en curso'
     switch (e.type) {
+        case 'grant_challenge': {
+            // Interception: un aliado gana Challenge este ataque
+            const opt = challengeOptions(state, player, e.range2 ?? 2)[0]
+            if (!opt) return 'Ningún aliado puede hacer Challenge'
+            performChallenge(state, opt.challengerId, opt.defenderId)
+            return null
+        }
         case 'attack_bonus':
             if (e.perRwsAdjacentToTarget) pa.bonusStrength += e.perRwsAdjacentToTarget * rwsAdjacentTo(state, pa.primaryKey, player).length
             pa.bonusStrength += e.strength ?? 0
@@ -545,4 +555,36 @@ export function applyAttackResponse(state: GameState, player: PlayerId, card: Ta
         default:
             return 'Efecto de respuesta no implementado'
     }
+}
+
+// La ventana se abre también si el jugador tiene una unidad con Challenge utilizable.
+function challengeAbilityAvailable(state: GameState, player: PlayerId): boolean {
+    const challengers = new Set(challengeOptions(state, player).map(o => o.challengerId))
+    return [...challengers].some(id => state.units[id].abilities.some(a => a.type === 'RSP' && a.abilityData?.type === 'challenge'))
+}
+
+// Challenge: intercambia posiciones con el aliado defensor; el que se mete pasa
+// a ser el defensor (los objetivos del ataque se resuelven por hex).
+export function performChallenge(state: GameState, challengerId: string, defenderId: string): void {
+    const c = state.units[challengerId]
+    const d = state.units[defenderId]
+    const cPos = c.position!
+    const dPos = d.position!
+    state.board[hexKey(cPos)].occupiedBy = defenderId
+    state.board[hexKey(dPos)].occupiedBy = challengerId
+    c.position = dPos
+    d.position = cPos
+    pushLog(state, c.playerId, `${c.name} hace Challenge y se cambia por ${d.name}`, 'ability', [hexKey(cPos), hexKey(dPos)])
+}
+
+// Protective Shot: la unidad dispara a la que acaba de moverse, a [Timeline 1].
+export function performProtectiveShot(state: GameState, player: PlayerId, card: TacticsCard, rng: Rng): string | null {
+    const shooter = protectiveShooters(state, player, card)[0]
+    const moved = state.pendingResponse?.movedUnitId ? state.units[state.pendingResponse.movedUnitId] : null
+    if (!shooter || !moved?.position) return 'Ninguna unidad puede disparar'
+    state.timeline = advanceToken(state.timeline, shooter.unitId, card.effectData?.amount ?? 1)
+    const outer = state.pendingAttack
+    startAttack(state, shooter.unitId, shooter.weapon, hexKey(moved.position), rng, { isRepeat: true })
+    state.pendingAttack = outer
+    return null
 }

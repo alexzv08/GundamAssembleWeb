@@ -577,7 +577,11 @@
         {
           "name": "Material Transfer",
           "effect": "Redistribute Upgrades among this unit and another allied unit within [Range 3].",
-          "type": "CMD"
+          "type": "CMD",
+          "abilityData": {
+            "type": "redistribute_upgrades",
+            "range": 3
+          }
         }
       ],
       "statsSource": "https://gundamassemble.wiki.gg/wiki/Torohachi_(Petite_Mobile_Suit)"
@@ -723,7 +727,11 @@
         {
           "name": "Challenge",
           "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
-          "type": "RSP"
+          "type": "RSP",
+          "abilityData": {
+            "type": "challenge",
+            "range": 2
+          }
         }
       ],
       "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_Aerial_(Protective_Heroine)"
@@ -937,7 +945,11 @@
         {
           "name": "Challenge",
           "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
-          "type": "RSP"
+          "type": "RSP",
+          "abilityData": {
+            "type": "challenge",
+            "range": 2
+          }
         }
       ],
       "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_(Elite_Mobile_Suit)"
@@ -1012,7 +1024,11 @@
         {
           "name": "Challenge",
           "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
-          "type": "RSP"
+          "type": "RSP",
+          "abilityData": {
+            "type": "challenge",
+            "range": 2
+          }
         }
       ],
       "statsSource": "https://gundamassemble.wiki.gg/wiki/Guncannon_(In_Position)"
@@ -1139,7 +1155,12 @@
           "name": "White Base Unity",
           "effect": "If another allied unit within [Range 3] has 1 or fewer Upgrades, it gains an Upgrade of your choice.",
           "type": "CMD",
-          "energyCost": 1
+          "energyCost": 1,
+          "abilityData": {
+            "type": "upgrade_ally_choice",
+            "range": 3,
+            "amount": 1
+          }
         },
         {
           "name": "Newtype Instincts",
@@ -1395,7 +1416,11 @@
           "name": "Zeon Zealotry",
           "effect": "Move 5 towards a damaged enemy unit, ignoring terrain penalties.",
           "type": "CMD",
-          "energyCost": 1
+          "energyCost": 1,
+          "abilityData": {
+            "type": "move_toward_damaged",
+            "amount": 5
+          }
         },
         {
           "name": "Rescue the Mechanics",

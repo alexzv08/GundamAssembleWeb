@@ -67,7 +67,9 @@
       "faction": "Londo Bell",
       "effect": "Your active unit gains 1 Upgrade of your choice.",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "gain_upgrade_choice"
+      }
     },
     {
       "cardId": "EX01-T06",
@@ -91,7 +93,9 @@
       "faction": "Londo Bell",
       "effect": "Up to three of your Londo Bell units on the battlefield gain 1 different Upgrade of your choice.",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "special_ops"
+      }
     },
     {
       "cardId": "EX01-T08",
@@ -133,7 +137,9 @@
       "effect": "Gundam Aerial repositions all ally and enemy Remote Weapon Systems onto any empty hexes on the battlefield. Each RWS deals [Damage 1] to an enemy unit adjacent to it.",
       "source": "oficial",
       "signature": "Protective Heroine",
-      "effectData": null
+      "effectData": {
+        "type": "bit_assault"
+      }
     },
     {
       "cardId": "EX02-T02",
@@ -245,7 +251,12 @@
       "faction": "",
       "effect": "[Before Attack Roll] An allied unit gains Challenge this attack. (If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.)",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "grant_challenge",
+        "range2": 2,
+        "side": "defender",
+        "trigger": "before_attack_roll"
+      }
     },
     {
       "cardId": "PA01-T01",
@@ -256,7 +267,13 @@
       "effect": "After an enemy ends its movement within [Range 3] of this unit: Gundam immediately makes a Beam Rifle attack at [Timeline 1] against it.",
       "source": "oficial",
       "signature": "Elite Mobile Suit",
-      "effectData": null
+      "effectData": {
+        "type": "protective_shot",
+        "weapon": "Beam Rifle",
+        "range": 3,
+        "amount": 1,
+        "trigger": "after_enemy_advance"
+      }
     },
     {
       "cardId": "PA01-T02",
@@ -432,7 +449,9 @@
       "effect": "When Gundam Barbatos Lupus Rex would be defeated: Set its HP to 1 instead. It Moves 2 and makes a Rex Claws attack at [Timeline 0].",
       "source": "oficial",
       "signature": "Final Stand",
-      "effectData": null
+      "effectData": {
+        "type": "prevent_defeat"
+      }
     },
     {
       "cardId": "ST01-T04",

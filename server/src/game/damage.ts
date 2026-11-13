@@ -82,11 +82,27 @@ export function damageUnit(state: GameState, unitId: string, amount: number, opt
     }
 
     unit.currentHp = Math.max(0, unit.currentHp - dealt)
+    if (unit.currentHp <= 0 && preventDefeat(state, unitId)) return { dealt, defeated: false }
     if (unit.currentHp <= 0) {
         defeatUnit(state, unitId)
         return { dealt, defeated: true }
     }
     return { dealt, defeated: false }
+}
+
+// Iron-Blooded Tenacity: "When Gundam Barbatos Lupus Rex would be defeated: Set
+// its HP to 1 instead." Se juega sola si está en la mano (no se pierde nada).
+// La parte "It Moves 2 and makes a Rex Claws attack" aún no se resuelve.
+function preventDefeat(state: GameState, unitId: string): boolean {
+    const unit = state.units[unitId]
+    const tactics = state.players[unit.playerId].tactics
+    const card = tactics.hand.find(c => c.effectData?.type === 'prevent_defeat' && (!c.signature || c.signature === unit.signature))
+    if (!card) return false
+    tactics.hand = tactics.hand.filter(c => c.id !== card.id)
+    tactics.discarded.push(card)
+    unit.currentHp = 1
+    pushLog(state, unit.playerId, `${unit.name} resiste con "${card.name}" (queda a 1 HP)`, 'card')
+    return true
 }
 
 // ─── DAÑO A GARRISONS ─────────────────────────────────────────────────────────

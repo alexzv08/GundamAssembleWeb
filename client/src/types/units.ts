@@ -98,6 +98,10 @@ export type AbilityEffectType =
     | 'self_damage_move'           // Alaya-Vijnana Exertion
     | 'rescue_at_range'            // Rescue Maneuver
     | 'grant_free_attack'          // Annihilate / Burst Attack: ataque adicional a TL 0
+    | 'upgrade_ally_choice'        // White Base Unity: un aliado con ≤1 Upgrades gana uno a elegir
+    | 'redistribute_upgrades'      // Material Transfer
+    | 'move_toward_damaged'        // Zeon Zealotry
+    | 'challenge'                  // Challenge: cambiarse por el aliado defensor
     | 'deploy_rws'                 // BIT Stave / Corax / Iśvara B Type Direct
     // ── Response automáticas de apoyo ──
     | 'slow_near_rws'              // Lockdown
@@ -184,6 +188,7 @@ export interface Unit {
     playerId: 'player1' | 'player2'
     activated: boolean
     provisionalStats?: boolean   // stats de armas aún sin confirmar con la carta física
+    autoResponses?: boolean      // false = no usar sus Response con coste de Energy (por defecto sí)
 }
 
 export interface StatusEffect {
