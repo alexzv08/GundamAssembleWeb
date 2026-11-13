@@ -20,7 +20,7 @@ import type { CardEffect } from '../types/tactics'
 import { hexKey, keyToHex, gridDistance, findPath } from './hexGrid'
 import {
     terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer,
-    attackDefenders, canPlayResponseCard, type TargetRef,
+    attackDefenders, canPlayResponseCard, checkAttackTargetWith, type TargetRef,
 } from './queries'
 import { damageUnit, destroyGarrison, forceMove, pushLog } from './damage'
 import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, useResponseAbility, hasAbilityType } from './effects'
@@ -88,7 +88,7 @@ export function startAttack(
         targetKeys: attackTargets(state, attackerId, weapon, key).map(t => t.key),
         stage: 'before_roll', isRepeat: !!opts.isRepeat,
         bonusStrength: 0, bonusAccuracy: 0, bonusDamage: 0, reductions: {}, destroyTargetUpgrades: false,
-        rolls: [], rerolled: [], disarmed: false, critThreshold: 9, queue: [],
+        rolls: [], rerolled: [], disarmed: false, critThreshold: 9, queue: [], targetIds: [], damagedIds: [],
     }
     if (!opts.isRepeat && openAttackWindows(state, 'before_attack_roll')) return
     continueAttack(state, rng)
@@ -98,6 +98,10 @@ export function startAttack(
 export function continueAttack(state: GameState, rng: Rng): void {
     const pa = state.pendingAttack
     if (!pa) return
+    if (pa.stage === 'after_damage') {   // ya se cerraron las ventanas tras el daño
+        state.pendingAttack = null
+        return
+    }
     if (pa.stage === 'before_roll') {
         rollDice(state, pa, rng)
         pa.stage = 'after_roll'
@@ -256,7 +260,15 @@ function finishAttack(state: GameState, rng: Rng): void {
     }
     state.lastAttack = report
 
-    if (!wasRepeat) openAfterDamageWindow(state, pa.attackerId, primaryId)
+    // 9b. Ventanas de Response tras el daño (atacante y luego defensor)
+    if (!wasRepeat) {
+        state.pendingAttack = {
+            ...pa, stage: 'after_damage', queue: [],
+            targetIds: report.targets.filter(t => t.kind === 'unit').map(t => t.id),
+            damagedIds: report.targets.filter(t => t.kind === 'unit' && t.damage > 0).map(t => t.id),
+        }
+        if (!openAttackWindows(state, 'after_combat_damage')) state.pendingAttack = null
+    }
 }
 
 function describe(state: GameState, t: TargetRef): string {
@@ -354,9 +366,11 @@ function stepToward(state: GameState, unitId: string, targetKey: string, steps: 
 
 // ─── VENTANAS DE RESPONSE ─────────────────────────────────────────────────────
 
-const ATTACK_RESPONSE_TYPES = new Set<CardEffect['type']>(['attack_bonus', 'reduce_damage', 'set_crit', 'reroll_misses'])
+const ATTACK_RESPONSE_TYPES = new Set<CardEffect['type']>(['attack_bonus', 'reduce_damage', 'set_crit', 'reroll_misses', 'counter_attack', 'self_and_targets_damage', 'gain_energy'])
 
-export function isAttackResponse(effect: CardEffect): boolean {
+// Se resuelve dentro del ataque en curso (si lo hay) o con el efecto clásico.
+export function isAttackResponse(effect: CardEffect, state?: GameState): boolean {
+    if (effect.type === 'counter_attack') return !!state?.pendingAttack
     return ATTACK_RESPONSE_TYPES.has(effect.type)
 }
 
@@ -441,19 +455,36 @@ export function applyAttackResponse(state: GameState, player: PlayerId, card: Ta
             if (e.drawIfAtLeast && n >= e.drawIfAtLeast) drawCards(state, player, 1)
             return null
         }
+        case 'counter_attack': {
+            // Counter Attack: el defensor superviviente ataca al atacante a [Timeline -1]
+            const defenderId = defendersOf(state, pa, player).find(id => state.units[id].position)
+            const attacker = state.units[pa.attackerId]
+            if (!defenderId || !attacker.position) return 'No hay defensor o atacante en el tablero'
+            const defender = state.units[defenderId]
+            const key = hexKey(attacker.position)
+            const options = defender.weapons.filter(w => checkAttackTargetWith(state, defenderId, w, key).ok)
+            if (options.length === 0) return 'El atacante está fuera del alcance de todas sus armas'
+            const weapon = options.reduce((a, b) => (b.strength > a.strength ? b : a))
+            state.timeline = advanceToken(state.timeline, defenderId, Math.max(0, weapon.tlCost - 1))
+            const outer = state.pendingAttack
+            startAttack(state, defenderId, weapon, key, rng, { isRepeat: true })
+            state.pendingAttack = outer
+            return null
+        }
+        case 'self_and_targets_damage': {
+            // Sacrificial Overload: 2 de daño a la propia unidad y a cada objetivo
+            for (const id of pa.targetIds) if (state.units[id]?.position) damageUnit(state, id, e.amount ?? 2)
+            damageUnit(state, pa.attackerId, e.amount ?? 2)
+            return null
+        }
+        case 'gain_energy': {
+            // Sayla's Encouragement: la unidad aliada dañada gana Energy
+            const id = pa.damagedIds.find(d => state.units[d]?.playerId === player && state.units[d].position)
+            if (!id) return 'Ninguna unidad aliada ha recibido daño'
+            state.units[id].energy += e.amount ?? 2
+            return null
+        }
         default:
             return 'Efecto de respuesta no implementado'
-    }
-}
-
-// Ventana tras el daño (cartas de la demo: reducir daño, devolver el golpe…)
-function openAfterDamageWindow(state: GameState, attackerId: string, defenderId: string | null): void {
-    if (!defenderId || !state.units[defenderId]?.position || !state.units[attackerId]?.position) return
-    const defender = state.units[defenderId].playerId
-    const blocked = hasAbilityType(state, attackerId, 'block_enemy_responses') !== null
-    const hasCard = state.players[defender].tactics.hand.some(c =>
-        c.type === 'response' && c.effectData?.trigger === 'after_combat_damage')
-    if (!blocked && hasCard) {
-        state.pendingResponse = { trigger: 'after_combat_damage', forPlayerId: defender, attackerUnitId: attackerId, defenderUnitId: defenderId }
     }
 }

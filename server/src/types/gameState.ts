@@ -78,6 +78,7 @@ export interface PlayerState {
   squadUnitIds: string[]
   deployHex: HexCoord | null
   garrisonsRescued: number
+  garrisonsDefeated?: number
 }
 
 export type GameAction =

@@ -96,6 +96,7 @@ export function destroyGarrison(state: GameState, key: string, byPlayer: PlayerI
     hex.garrisonToken = null
     if (garrison.owner !== byPlayer) {
         state.players[byPlayer].vp += 2
+        state.players[byPlayer].garrisonsDefeated = (state.players[byPlayer].garrisonsDefeated ?? 0) + 1
         pushLog(state, byPlayer, 'Garrison enemiga destruida (+2 VP)', 'objective', [key])
     }
     return true
@@ -130,7 +131,9 @@ export function forceMove(
         const srcHex = state.board[sourceKey]
         if (mode === 'pull' && curDist <= 1 && srcHex && srcHex.elevation === curHex.elevation) return
 
+        // Q&A 16: nadie sale del tablero, y chocar con el borde no hace daño
         const candidates = getNeighbors(unit.position).filter(n => {
+            if (!state.board[hexKey(n)]) return false
             const d = gridDistance(source, n)
             return mode === 'push' ? d > curDist : d < curDist && hexKey(n) !== sourceKey
         })

@@ -304,6 +304,9 @@ export function terrainAccuracy(board: BoardMap, from: HexCoord, to: HexCoord): 
 export function attackDefenders(state: GameState, player: PlayerId): string[] {
   const pa = state.pendingAttack
   if (!pa) return []
+  if (pa.stage === 'after_damage') {
+    return pa.targetIds.filter(id => state.units[id]?.playerId === player && state.units[id].position)
+  }
   const attacker = state.units[pa.attackerId]
   return pa.targetKeys
     .map(k => targetAt(state, k, attacker.playerId))
@@ -326,8 +329,9 @@ export function canPlayResponseCard(state: GameState, player: PlayerId, card: Ta
   const e = card.effectData
   const t = trigger ?? state.pendingResponse?.trigger
   if (!e || card.type !== 'response' || !t || e.trigger !== t) return false
-  if (t !== 'before_attack_roll' && t !== 'after_attack_roll') return true
+  const duringAttack = t === 'before_attack_roll' || t === 'after_attack_roll' || t === 'after_combat_damage'
   const pa = state.pendingAttack
+  if (!duringAttack || (!pa && t === 'after_combat_damage')) return true
   if (!pa || responsesBlocked(state, player)) return false
   if (player === state.activePlayerId && state.activation?.cardPlayed) return false
   const attacker = state.units[pa.attackerId]
@@ -338,5 +342,8 @@ export function canPlayResponseCard(state: GameState, player: PlayerId, card: Ta
   if (e.requiresActiveTrait && !actors.some(id => state.units[id].traits.includes(e.requiresActiveTrait!))) return false
   if (card.signature && !actors.some(id => state.units[id].signature === card.signature)) return false
   if (e.ifLowerVp && !actors.some(id => state.units[id].vp < attacker.vp)) return false
+  if (e.requiresAllyWithin && attacker.position && !Object.values(state.units).some(u => u.id !== attacker.id &&
+      u.playerId === attacker.playerId && u.position && gridDistance(u.position, attacker.position!) <= e.requiresAllyWithin!)) return false
+  if (e.type === 'gain_energy' && !pa.damagedIds.some(id => state.units[id]?.playerId === player && state.units[id].position)) return false
   return true
 }

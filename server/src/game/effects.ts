@@ -509,8 +509,48 @@ export function applyCardEffect(
             return ok
         }
 
-        case 'move':
-            return abilityMove(state, unitId, effect.amount ?? 2, targetHex)
+        case 'move': {
+            const res = abilityMove(state, unitId, effect.amount ?? 2, targetHex)
+            // Bulwark Siege: "Moves 2. Then, it applies [Fracture] to each enemy unit within [Range 2]."
+            const pos = state.units[unitId].position
+            if (res.success && effect.thenStatus && pos) {
+                for (const enemy of Object.values(state.units)) {
+                    if (enemy.playerId !== playerId && enemy.position && gridDistance(pos, enemy.position) <= (effect.thenRange ?? 2)) {
+                        addStatus(state, enemy.id, effect.thenStatus)
+                    }
+                }
+            }
+            return res
+        }
+
+        case 'destroy_upgrades': {
+            // Breaker Sweep: "destroys up to 2 Upgrades on an enemy unit within [Range 2]"
+            const t = targetId ? unitById(state, targetId) : null
+            if (!unit.position || !t?.position || t.playerId === playerId) return fail('Elige un enemigo')
+            if (gridDistance(unit.position, t.position) > (effect.range ?? 2)) return fail(`Fuera de alcance (${effect.range ?? 2})`)
+            destroyUpgrade(state, t.id, 'any', effect.amount ?? 2)
+            return ok
+        }
+
+        case 'strength_if_garrisons_defeated': {
+            // Systematic Elimination: +4 Strength si has derrotado 3 o más Garrisons
+            if ((state.players[playerId].garrisonsDefeated ?? 0) < (effect.threshold ?? 3)) {
+                return fail(`Necesitas haber derrotado ${effect.threshold ?? 3} Garrisons`)
+            }
+            if (state.activation) state.activation.strengthBonus += effect.strength ?? 4
+            return ok
+        }
+
+        case 'free_dash_and_attack': {
+            // Crimson Execution: Dash adicional a TL 0 y luego un ataque adicional a TL 0
+            const idx = unit.weapons.findIndex(w => w.name === effect.weapon)
+            if (idx === -1) return fail(`La unidad no tiene ${effect.weapon}`)
+            if (state.activation) {
+                state.activation.freeDashes += 1
+                state.activation.freeAttacks.push(idx)
+            }
+            return ok
+        }
 
         case 'move_and_rescue': {
             // "Moves 5. After it ends its movement, it Rescues each allied Garrison it moved adjacent to."

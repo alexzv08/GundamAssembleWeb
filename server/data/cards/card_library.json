@@ -1,7 +1,649 @@
 {
-  "version": 2,
-  "note": "Cartas de Tactics. source=demo: cartas de la demo previa. Las demás proceden de la wiki comunitaria (gundamassemble.wiki.gg) porque la web oficial no es accesible desde el entorno de desarrollo: revisarlas con las cartas físicas. effectData=null: carta mostrada pero aún no implementada.",
+  "version": 3,
+  "note": "Cartas de Tactics. source=oficial: lista oficial de Bandai (ID, set, firma, rasgos y texto); los números de las cartas Attack vienen de la wiki comunitaria. source=demo: cartas de la demo previa. effectData=null (y sin weapon): carta mostrada pero aún no implementada.",
   "cards": [
+    {
+      "cardId": "EX01-T01",
+      "set": "EX01",
+      "name": "Psycho-Frame Overload",
+      "type": "command",
+      "faction": "",
+      "effect": "Unicorn Gundam deals [Damage] equal to the number of Upgrades on it to an enemy within [Range 2].",
+      "source": "oficial",
+      "signature": "Laplace's Guardian",
+      "effectData": {
+        "type": "damage_per_own_upgrade",
+        "range": 2
+      }
+    },
+    {
+      "cardId": "EX01-T02",
+      "set": "EX01",
+      "name": "Critical Rescue",
+      "type": "command",
+      "faction": "",
+      "effect": "Torohachi Moves 5. After it ends its movement, it Rescues each allied Garrison it moved adjacent to.",
+      "source": "oficial",
+      "signature": "Petite Mobile Suit",
+      "effectData": {
+        "type": "move_and_rescue",
+        "amount": 5
+      }
+    },
+    {
+      "cardId": "EX01-T03",
+      "set": "EX01",
+      "name": "Swift Appropriation",
+      "type": "command",
+      "faction": "",
+      "effect": "Delta Plus takes [Energy 1] and 1 Upgrade from a unit within [Range 3].",
+      "source": "oficial",
+      "signature": "Rapid Response",
+      "effectData": {
+        "type": "steal_upgrade",
+        "range": 3
+      }
+    },
+    {
+      "cardId": "EX01-T04",
+      "set": "EX01",
+      "name": "Full System Burn",
+      "type": "command",
+      "faction": "Londo Bell",
+      "effect": "Your active Londo Bell unit gains [Speed +3] and Hover this activation.",
+      "source": "oficial",
+      "effectData": {
+        "type": "activation_move_buff",
+        "amount": 3,
+        "hover": true,
+        "requiresActiveTrait": "Londo Bell"
+      }
+    },
+    {
+      "cardId": "EX01-T05",
+      "set": "EX01",
+      "name": "On-Site Integration",
+      "type": "command",
+      "faction": "Londo Bell",
+      "effect": "Your active unit gains 1 Upgrade of your choice.",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "EX01-T06",
+      "set": "EX01",
+      "name": "Salvage Systems",
+      "type": "command",
+      "faction": "Londo Bell",
+      "effect": "Your active unit Repairs [Damage 3]. Then, if it has full HP, it gains [Energy 1].",
+      "source": "oficial",
+      "effectData": {
+        "type": "repair",
+        "amount": 3,
+        "energyIfFull": 1
+      }
+    },
+    {
+      "cardId": "EX01-T07",
+      "set": "EX01",
+      "name": "Special OPs",
+      "type": "command",
+      "faction": "Londo Bell",
+      "effect": "Up to three of your Londo Bell units on the battlefield gain 1 different Upgrade of your choice.",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "EX01-T08",
+      "set": "EX01",
+      "name": "Target Reacquisition",
+      "type": "response",
+      "faction": "Londo Bell",
+      "effect": "[After Attack Roll] Reroll any number of misses. If you reroll 3 or more misses, draw 1 card.",
+      "source": "oficial",
+      "effectData": {
+        "type": "reroll_misses",
+        "drawIfAtLeast": 3,
+        "side": "attacker",
+        "trigger": "after_attack_roll"
+      }
+    },
+    {
+      "cardId": "EX01-T09",
+      "set": "EX01",
+      "name": "Grunt's Guard",
+      "type": "response",
+      "faction": "",
+      "effect": "[After Attack Roll] A defender is dealt [Damage -4] this attack if it is worth less VP than the attacker.",
+      "source": "oficial",
+      "effectData": {
+        "type": "reduce_damage",
+        "amount": 4,
+        "ifLowerVp": true,
+        "side": "defender",
+        "trigger": "after_attack_roll"
+      }
+    },
+    {
+      "cardId": "EX02-T01",
+      "set": "EX02",
+      "name": "Bit Assault",
+      "type": "command",
+      "faction": "",
+      "effect": "Gundam Aerial repositions all ally and enemy Remote Weapon Systems onto any empty hexes on the battlefield. Each RWS deals [Damage 1] to an enemy unit adjacent to it.",
+      "source": "oficial",
+      "signature": "Protective Heroine",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T02",
+      "set": "EX02",
+      "name": "Cold Silence",
+      "type": "command",
+      "faction": "",
+      "effect": "All enemy units adjacent to Gundam Pharact's Corax move up 1 [Timeline].",
+      "source": "oficial",
+      "signature": "Silent Hunter",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T03",
+      "set": "EX02",
+      "name": "Iśvara Assault",
+      "type": "command",
+      "faction": "",
+      "effect": "Reposition Darilbalde to a hex adjacent to its Iśvara B Type. Darilbalde's attacks deal [Damage +2] this activation.",
+      "source": "oficial",
+      "signature": "Frontline Duelist",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T04",
+      "set": "EX02",
+      "name": "Dismantle",
+      "type": "command",
+      "faction": "Asticassia",
+      "effect": "Your active unit destroys all Upgrades on an enemy unit adjacent to an allied RWS.",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T05",
+      "set": "EX02",
+      "name": "Drone Assault",
+      "type": "command",
+      "faction": "Asticassia",
+      "effect": "Each allied RWS deals [Damage 1] to an adjacent enemy.",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T06",
+      "set": "EX02",
+      "name": "Interference Pattern",
+      "type": "command",
+      "faction": "Asticassia",
+      "effect": "Your active Asticassia unit applies [Disarm] to each enemy unit within [Range 3].",
+      "source": "oficial",
+      "effectData": {
+        "type": "aoe_status",
+        "status": "disarm",
+        "range": 3,
+        "requiresActiveTrait": "Asticassia"
+      }
+    },
+    {
+      "cardId": "EX02-T07",
+      "set": "EX02",
+      "name": "BIT Shield",
+      "type": "response",
+      "faction": "Asticassia",
+      "effect": "[After Attack Roll] A defender is dealt [Damage -3] this attack and an additional [Damage -1] for each allied RWS within [Range 2].",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T08",
+      "set": "EX02",
+      "name": "Linked Strike",
+      "type": "response",
+      "faction": "Asticassia",
+      "effect": "[Before Attack Roll] The attacker gains [Strength +3] this attack and an additional [Strength +1] for each allied RWS adjacent to the target.",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "EX02-T09",
+      "set": "EX02",
+      "name": "Interception",
+      "type": "response",
+      "faction": "",
+      "effect": "[Before Attack Roll] An allied unit gains Challenge this attack. (If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.)",
+      "source": "oficial",
+      "effectData": null
+    },
+    {
+      "cardId": "PA01-T01",
+      "set": "PA01",
+      "name": "Protective Shot",
+      "type": "response",
+      "faction": "",
+      "effect": "After an enemy ends its movement within [Range 3] of this unit: Gundam immediately makes a Beam Rifle attack at [Timeline 1] against it.",
+      "source": "oficial",
+      "signature": "Elite Mobile Suit",
+      "effectData": null
+    },
+    {
+      "cardId": "PA01-T02",
+      "set": "PA01",
+      "name": "All In",
+      "type": "command",
+      "faction": "",
+      "effect": "Guncannon makes an additional 240mm Low-Recoil Cannon attack at [Timeline 0].",
+      "source": "oficial",
+      "signature": "In Position",
+      "effectData": {
+        "type": "free_attack",
+        "weapon": "240mm Low-Recoil Cannon"
+      }
+    },
+    {
+      "cardId": "PA01-T03",
+      "set": "PA01",
+      "name": "Bulwark Siege",
+      "type": "command",
+      "faction": "",
+      "effect": "Guntank Moves 2. Then, it applies [Fracture] to each enemy unit within [Range 2].",
+      "source": "oficial",
+      "signature": "Battlefield Bombarder",
+      "effectData": {
+        "type": "move",
+        "amount": 2,
+        "thenStatus": "fracture",
+        "thenRange": 2
+      }
+    },
+    {
+      "cardId": "PA01-T04",
+      "set": "PA01",
+      "name": "Formative Strength",
+      "type": "response",
+      "faction": "Earth Federation",
+      "effect": "[Before Attack Roll] The attacker gains [Accuracy +2] and [Strength +2] this attack if it is within [Range 3] of another allied unit.",
+      "source": "oficial",
+      "effectData": {
+        "type": "attack_bonus",
+        "strength": 2,
+        "accuracy": 2,
+        "requiresAllyWithin": 3,
+        "side": "attacker",
+        "trigger": "before_attack_roll"
+      }
+    },
+    {
+      "cardId": "PA01-T05",
+      "set": "PA01",
+      "name": "Sayla's Encouragement",
+      "type": "response",
+      "faction": "Earth Federation",
+      "effect": "After an allied unit is dealt [Damage]: It gains [Energy 2].",
+      "source": "oficial",
+      "effectData": {
+        "type": "gain_energy",
+        "amount": 2,
+        "side": "defender",
+        "trigger": "after_combat_damage"
+      }
+    },
+    {
+      "cardId": "PA01-T06",
+      "set": "PA01",
+      "name": "Breaker Sweep",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit destroys up to 2 Upgrades on an enemy unit within [Range 2].",
+      "source": "oficial",
+      "effectData": {
+        "type": "destroy_upgrades",
+        "amount": 2,
+        "range": 2
+      }
+    },
+    {
+      "cardId": "PA01-T07",
+      "set": "PA01",
+      "name": "Systematic Elimination",
+      "type": "command",
+      "faction": "",
+      "effect": "[Before Attack Roll] If you've defeated 3 or more Garrisons, the attacker gains [Strength +4] this attack.",
+      "source": "oficial",
+      "effectData": {
+        "type": "strength_if_garrisons_defeated",
+        "strength": 4,
+        "threshold": 3
+      }
+    },
+    {
+      "cardId": "PA01-T08",
+      "set": "PA01",
+      "name": "Counter Attack",
+      "type": "response",
+      "faction": "",
+      "effect": "[After Combat Damage] If the allied defender survives, it makes an attack against the attacking enemy unit at [Timeline -1].",
+      "source": "oficial",
+      "effectData": {
+        "type": "counter_attack",
+        "side": "defender",
+        "trigger": "after_combat_damage"
+      }
+    },
+    {
+      "cardId": "PA01-T09",
+      "set": "PA01",
+      "name": "Interference",
+      "type": "response",
+      "faction": "",
+      "effect": "[Before Attack Roll] The attacker gets [Accuracy -2] this attack.",
+      "source": "oficial",
+      "effectData": {
+        "type": "attack_bonus",
+        "accuracy": -2,
+        "side": "defender",
+        "trigger": "before_attack_roll"
+      }
+    },
+    {
+      "cardId": "ST01-T01",
+      "set": "ST01",
+      "name": "Epic Shot",
+      "type": "attack",
+      "faction": "",
+      "effect": "[Strength +2] for each other allied unit within [Range 3]. [Critical] [Damage +2].",
+      "source": "oficial",
+      "signature": "Legendary Hero",
+      "weapon": {
+        "name": "Epic Shot (Beam Rifle)",
+        "tlCost": 3,
+        "range": 5,
+        "strength": 7,
+        "effect": "[Strength +2] for each other allied unit within [Range 3].",
+        "critEffect": "[Damage +2].",
+        "effectData": {
+          "trigger": "always",
+          "type": "strength_per_ally",
+          "amount": 2,
+          "max": 3
+        },
+        "critData": {
+          "trigger": "after_attack_roll",
+          "type": "bonus_damage",
+          "amount": 2
+        }
+      },
+      "effectData": null
+    },
+    {
+      "cardId": "ST01-T02",
+      "set": "ST01",
+      "name": "Sacrificial Overload",
+      "type": "response",
+      "faction": "",
+      "effect": "[After Combat Damage] If Wing Gundam Zero attacked, deal [Damage 2] to it and to each target.",
+      "source": "oficial",
+      "signature": "Wing of Destruction",
+      "effectData": {
+        "type": "self_and_targets_damage",
+        "amount": 2,
+        "side": "attacker",
+        "trigger": "after_combat_damage"
+      }
+    },
+    {
+      "cardId": "ST01-T03",
+      "set": "ST01",
+      "name": "Iron-Blooded Tenacity",
+      "type": "response",
+      "faction": "",
+      "effect": "When Gundam Barbatos Lupus Rex would be defeated: Set its HP to 1 instead. It Moves 2 and makes a Rex Claws attack at [Timeline 0].",
+      "source": "oficial",
+      "signature": "Final Stand",
+      "effectData": null
+    },
+    {
+      "cardId": "ST01-T04",
+      "set": "ST01",
+      "name": "Armor Shatter",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit [Fractures] an adjacent enemy unit.",
+      "source": "oficial",
+      "effectData": {
+        "type": "status_adjacent",
+        "status": "fracture"
+      }
+    },
+    {
+      "cardId": "ST01-T05",
+      "set": "ST01",
+      "name": "Field Engineers",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit Repairs [Damage 4].",
+      "source": "oficial",
+      "effectData": {
+        "type": "repair",
+        "amount": 4
+      }
+    },
+    {
+      "cardId": "ST01-T06",
+      "set": "ST01",
+      "name": "Hero's Might",
+      "type": "command",
+      "faction": "",
+      "effect": "If you've Rescued 3 or more Garrisons, your active unit gains [Energy 2].",
+      "source": "oficial",
+      "effectData": {
+        "type": "energy_if_rescued",
+        "amount": 2,
+        "threshold": 3
+      }
+    },
+    {
+      "cardId": "ST01-T07",
+      "set": "ST01",
+      "name": "Thrust Boosters",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit gains 1 [Speed] Upgrade.",
+      "source": "oficial",
+      "effectData": {
+        "type": "gain_upgrade",
+        "upgradeType": "movement"
+      }
+    },
+    {
+      "cardId": "ST01-T08",
+      "set": "ST01",
+      "name": "Breaking Blow",
+      "type": "response",
+      "faction": "",
+      "effect": "[Before Attack Roll] The attacker gains [Strength +2] this attack. Destroy 1 Upgrade on each of the targets.",
+      "source": "oficial",
+      "effectData": {
+        "type": "attack_bonus",
+        "strength": 2,
+        "destroyTargetUpgrades": true,
+        "side": "attacker",
+        "trigger": "before_attack_roll"
+      }
+    },
+    {
+      "cardId": "ST01-T09",
+      "set": "ST01",
+      "name": "Quick Block",
+      "type": "response",
+      "faction": "",
+      "effect": "[After Attack Roll] A defender is dealt [Damage -3] this attack.",
+      "source": "oficial",
+      "effectData": {
+        "type": "reduce_damage",
+        "amount": 3,
+        "side": "defender",
+        "trigger": "after_attack_roll"
+      }
+    },
+    {
+      "cardId": "ST01-T10",
+      "set": "ST01",
+      "name": "Crimson Execution",
+      "type": "command",
+      "faction": "",
+      "effect": "Char's Zaku II makes an additional Dash at [Timeline 0]. Then, it makes an additional Heat Hawk attack at [Timeline 0].",
+      "source": "oficial",
+      "signature": "Fast Encounter",
+      "effectData": {
+        "type": "free_dash_and_attack",
+        "weapon": "Heat Hawk"
+      }
+    },
+    {
+      "cardId": "ST01-T11",
+      "set": "ST01",
+      "name": "War Edge",
+      "type": "attack",
+      "faction": "",
+      "effect": "Área de efecto [Critical] [Damage +1].",
+      "source": "oficial",
+      "signature": "Crimson Cataclysm",
+      "weapon": {
+        "name": "War Edge (Beam Sword)",
+        "tlCost": 3,
+        "range": 2,
+        "strength": 8,
+        "effect": "",
+        "critEffect": "[Damage +1].",
+        "area": "cone",
+        "critData": {
+          "trigger": "after_attack_roll",
+          "type": "bonus_damage",
+          "amount": 1
+        }
+      },
+      "effectData": null
+    },
+    {
+      "cardId": "ST01-T12",
+      "set": "ST01",
+      "name": "Claiming Vengeance",
+      "type": "attack",
+      "faction": "",
+      "effect": "[After Attack Roll] Capture an Objective the target is on or adjacent to. [Critical] [Disarm] the target.",
+      "source": "oficial",
+      "signature": "Cold Justice",
+      "weapon": {
+        "name": "Claiming Vengeance (110mm Rifle)",
+        "tlCost": 2,
+        "range": 3,
+        "strength": 4,
+        "effect": "[After Attack Roll] Capture an Objective the target is on or adjacent to.",
+        "critEffect": "[Disarm] the target.",
+        "effectData": {
+          "trigger": "after_attack_roll",
+          "type": "capture_objective_near_target"
+        },
+        "critData": {
+          "trigger": "after_attack_roll",
+          "type": "disarm"
+        }
+      },
+      "effectData": null
+    },
+    {
+      "cardId": "ST01-T13",
+      "set": "ST01",
+      "name": "Armor Upgrade",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit gains 1 [Shield] Upgrade.",
+      "source": "oficial",
+      "effectData": {
+        "type": "gain_upgrade",
+        "upgradeType": "shield"
+      }
+    },
+    {
+      "cardId": "ST01-T14",
+      "set": "ST01",
+      "name": "Ghost Step",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit Moves 2.",
+      "source": "oficial",
+      "effectData": {
+        "type": "move",
+        "amount": 2
+      }
+    },
+    {
+      "cardId": "ST01-T15",
+      "set": "ST01",
+      "name": "Renewed Power",
+      "type": "command",
+      "faction": "",
+      "effect": "Your active unit gains 1 [Strength] Upgrade.",
+      "source": "oficial",
+      "effectData": {
+        "type": "gain_upgrade",
+        "upgradeType": "attack"
+      }
+    },
+    {
+      "cardId": "ST01-T16",
+      "set": "ST01",
+      "name": "Limiter Release",
+      "type": "response",
+      "faction": "",
+      "effect": "[Before Attack Roll] The attacker gains [Strength +3] this attack.",
+      "source": "oficial",
+      "effectData": {
+        "type": "attack_bonus",
+        "strength": 3,
+        "side": "attacker",
+        "trigger": "before_attack_roll"
+      }
+    },
+    {
+      "cardId": "ST01-T17",
+      "set": "ST01",
+      "name": "Neutralize",
+      "type": "response",
+      "faction": "",
+      "effect": "[Before Attack Roll] A defender is dealt [Damage -2] this attack and destroys 1 Upgrade on the attacker.",
+      "source": "oficial",
+      "effectData": {
+        "type": "reduce_damage",
+        "amount": 2,
+        "destroyAttackerUpgrade": true,
+        "side": "defender",
+        "trigger": "before_attack_roll"
+      }
+    },
+    {
+      "cardId": "ST01-T18",
+      "set": "ST01",
+      "name": "Strikethrough",
+      "type": "response",
+      "faction": "",
+      "effect": "[After Attack Roll] This attack deals [Damage +1].",
+      "source": "oficial",
+      "effectData": {
+        "type": "attack_bonus",
+        "damage": 1,
+        "side": "attacker",
+        "trigger": "after_attack_roll"
+      }
+    },
     {
       "uid": 1771805650409,
       "name": "Last Shot Counts",
@@ -40,7 +682,8 @@
       "effectData": {
         "type": "reduce_incoming_damage",
         "amount": 2,
-        "trigger": "after_combat_damage"
+        "trigger": "after_combat_damage",
+        "side": "defender"
       },
       "art": null,
       "artX": 0,
@@ -71,7 +714,8 @@
       "effect": "[After Combat Damage] The defending allied unit makes an attack at [TL-1]",
       "effectData": {
         "type": "counter_attack",
-        "trigger": "after_combat_damage"
+        "trigger": "after_combat_damage",
+        "side": "defender"
       },
       "art": null,
       "artX": 0,
@@ -140,20 +784,6 @@
         "type": "destroy_upgrade_and_slow",
         "range": 3
       },
-      "art": null,
-      "artX": 0,
-      "artY": 0,
-      "artZoom": 100,
-      "source": "demo"
-    },
-    {
-      "uid": 1771805650418,
-      "name": "Crimson Execution",
-      "type": "command",
-      "faction": "Zeon",
-      "cardId": "T-10",
-      "effect": "Char's Zaku II makes an additional Dash at [TL 0]. Then, it makes an additional Heat Hawk attack at [TL 0].",
-      "effectData": null,
       "art": null,
       "artX": 0,
       "artY": 0,
@@ -287,593 +917,14 @@
       "effectData": {
         "type": "retaliate_damage",
         "amount": 2,
-        "trigger": "after_combat_damage"
+        "trigger": "after_combat_damage",
+        "side": "defender"
       },
       "art": null,
       "artX": 0,
       "artY": 0,
       "artZoom": 100,
       "source": "demo"
-    },
-    {
-      "cardId": "W-iron-blooded-tenacity",
-      "name": "Iron-Blooded Tenacity",
-      "type": "response",
-      "faction": "",
-      "effect": "When Gundam Barbatos Lupus Rex would be defeated: Set its HP to 1 instead. It Moves 2 and makes a Rex Claws attack at [TL0]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Iron-Blooded_Tenacity",
-      "signature": "Final Stand",
-      "effectData": null
-    },
-    {
-      "cardId": "W-epic-shot",
-      "name": "Epic Shot",
-      "type": "attack",
-      "faction": "",
-      "effect": "+2 [Strength] for each other allied unit within [Range 3] [Critical] [Damage +2]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Epic_Shot",
-      "signature": "Legendary Hero",
-      "weapon": {
-        "range": 5,
-        "strength": 7,
-        "tlCost": 3,
-        "effect": "+2 [Strength] for each other allied unit within [Range 3] [Critical] [Damage +2]",
-        "name": "Epic Shot (Beam Rifle)",
-        "effectData": {
-          "trigger": "always",
-          "type": "strength_per_ally",
-          "amount": 2,
-          "max": 3
-        },
-        "critData": {
-          "trigger": "after_attack_roll",
-          "type": "bonus_damage",
-          "amount": 2
-        }
-      },
-      "effectData": null
-    },
-    {
-      "cardId": "W-war-edge",
-      "name": "War Edge",
-      "type": "attack",
-      "faction": "",
-      "effect": "Cone Shaped Attack [Critical] +1 [Damage]",
-      "source": "https://gundamassemble.wiki.gg/wiki/War_Edge",
-      "signature": "Crimson Cataclysm",
-      "weapon": {
-        "range": 3,
-        "strength": 8,
-        "tlCost": 3,
-        "effect": "Cone Shaped Attack [Critical] +1 [Damage]",
-        "name": "War Edge",
-        "area": "cone",
-        "critData": {
-          "trigger": "after_attack_roll",
-          "type": "bonus_damage",
-          "amount": 1
-        }
-      },
-      "effectData": null
-    },
-    {
-      "cardId": "W-federation-shield",
-      "name": "Federation Shield",
-      "type": "response",
-      "faction": "Earth Federation",
-      "effect": "[After Attack Roll] An allied Earth Federation defender is dealt -2 Damage this attack and gains 1 Shield Upgrade",
-      "source": "https://gundamassemble.wiki.gg/wiki/Federation_Shield",
-      "effectData": {
-        "type": "reduce_damage",
-        "amount": 2,
-        "gainShield": true,
-        "side": "defender",
-        "requiresActiveTrait": "Earth Federation",
-        "trigger": "after_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-strikethrough",
-      "name": "Strikethrough",
-      "type": "response",
-      "faction": "",
-      "effect": "[After Attack Roll] This attack deals +1 [Damage]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Strikethrough",
-      "effectData": {
-        "type": "attack_bonus",
-        "damage": 1,
-        "side": "attacker",
-        "trigger": "after_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-ghost-step",
-      "name": "Ghost Step",
-      "type": "command",
-      "faction": "",
-      "effect": "Your active unit moves 2 hexes",
-      "source": "https://gundamassemble.wiki.gg/wiki/Ghost_Step",
-      "effectData": {
-        "type": "move",
-        "amount": 2
-      }
-    },
-    {
-      "cardId": "W-limiter-release",
-      "name": "Limiter Release",
-      "type": "response",
-      "faction": "",
-      "effect": "[Before attack roll] this attack gains +3 strength",
-      "source": "https://gundamassemble.wiki.gg/wiki/Limiter_Release",
-      "effectData": {
-        "type": "attack_bonus",
-        "strength": 3,
-        "side": "attacker",
-        "trigger": "before_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-thrust-boosters",
-      "name": "Thrust Boosters",
-      "type": "command",
-      "faction": "",
-      "effect": "Your Active units gains 1 speed upgrade",
-      "source": "https://gundamassemble.wiki.gg/wiki/Thrust_Boosters",
-      "effectData": {
-        "type": "gain_upgrade",
-        "upgradeType": "movement"
-      }
-    },
-    {
-      "cardId": "W-renewed-power",
-      "name": "Renewed Power",
-      "type": "command",
-      "faction": "",
-      "effect": "Your active unit gains 1 Strength upgrade",
-      "source": "https://gundamassemble.wiki.gg/wiki/Renewed_Power",
-      "effectData": {
-        "type": "gain_upgrade",
-        "upgradeType": "attack"
-      }
-    },
-    {
-      "cardId": "W-armor-upgrade",
-      "name": "Armor Upgrade",
-      "type": "command",
-      "faction": "",
-      "effect": "Your active unit gains 1 Shield upgrade",
-      "source": "https://gundamassemble.wiki.gg/wiki/Armor_Upgrade",
-      "effectData": {
-        "type": "gain_upgrade",
-        "upgradeType": "shield"
-      }
-    },
-    {
-      "cardId": "W-neutralize",
-      "name": "Neutralize",
-      "type": "response",
-      "faction": "",
-      "effect": "[Before attack roll] A defender is dealt -2 [Damage] this attack and destroys 1 Upgrade on the attacker",
-      "source": "https://gundamassemble.wiki.gg/wiki/Neutralize",
-      "effectData": {
-        "type": "reduce_damage",
-        "amount": 2,
-        "destroyAttackerUpgrade": true,
-        "side": "defender",
-        "trigger": "before_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-breaking-blow",
-      "name": "Breaking Blow",
-      "type": "response",
-      "faction": "",
-      "effect": "[Before attack roll] The attacker gains [+2 Strength] for this attack. Destroy 1 [upgrade] on each target",
-      "source": "https://gundamassemble.wiki.gg/wiki/Breaking_Blow",
-      "effectData": {
-        "type": "attack_bonus",
-        "strength": 2,
-        "destroyTargetUpgrades": true,
-        "side": "attacker",
-        "trigger": "before_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-quick-block",
-      "name": "Quick Block",
-      "type": "response",
-      "faction": "",
-      "effect": "[After Attack Roll] A defender is dealt -3 [Damage] this attack",
-      "source": "https://gundamassemble.wiki.gg/wiki/Quick_Block",
-      "effectData": {
-        "type": "reduce_damage",
-        "amount": 3,
-        "side": "defender",
-        "trigger": "after_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-armor-shatter",
-      "name": "Armor Shatter",
-      "type": "command",
-      "faction": "",
-      "effect": "[Fracture] an adjacent enemy unit",
-      "source": "https://gundamassemble.wiki.gg/wiki/Armor_Shatter",
-      "effectData": {
-        "type": "status_adjacent",
-        "status": "fracture"
-      }
-    },
-    {
-      "cardId": "W-field-engineers",
-      "name": "Field Engineers",
-      "type": "command",
-      "faction": "",
-      "effect": "Your active unit repairs 4 [Damage]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Field_Engineers",
-      "effectData": {
-        "type": "repair",
-        "amount": 4
-      }
-    },
-    {
-      "cardId": "W-three-man-team",
-      "name": "Three Man Team",
-      "type": "command",
-      "faction": "Earth Federation",
-      "effect": "Your allied (RX-78-2) Gundam, (RX77) Guncannon and (RX75) Guntank may each make an additional [Timeline 2] attack at [Timeline 1]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Three_Man_Team",
-      "effectData": null
-    },
-    {
-      "cardId": "W-hero-s-might",
-      "name": "Hero's Might",
-      "type": "command",
-      "faction": "",
-      "effect": "If you Rescued 3 or more Garrisons, your active unit gains Energy 2",
-      "source": "https://gundamassemble.wiki.gg/wiki/Hero's_Might",
-      "effectData": {
-        "type": "energy_if_rescued",
-        "amount": 2,
-        "threshold": 3
-      }
-    },
-    {
-      "cardId": "W-focus",
-      "name": "Focus",
-      "type": "command",
-      "faction": "",
-      "effect": "Your active unit gains [Energy 1]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Focus",
-      "effectData": {
-        "type": "gain_upgrade",
-        "upgradeType": "energy"
-      }
-    },
-    {
-      "cardId": "W-zaku-ambush-tactics",
-      "name": "Zaku Ambush Tactics",
-      "type": "response",
-      "faction": "Zeon",
-      "effect": "After an enemy ends its movement within [Range 3] of an allied Zeon unit: That allied unit makes an attack against that enemy.",
-      "source": "https://gundamassemble.wiki.gg/wiki/Zaku_Ambush_Tactics",
-      "effectData": null
-    },
-    {
-      "cardId": "W-shoulder-bash",
-      "name": "Shoulder Bash",
-      "type": "command",
-      "faction": "",
-      "effect": "Your active unit Pushes 2 an adjacent enemy.",
-      "source": "https://gundamassemble.wiki.gg/wiki/Shoulder_Bash",
-      "effectData": {
-        "type": "push_adjacent",
-        "amount": 2
-      }
-    },
-    {
-      "cardId": "W-n-field-defense",
-      "name": "N Field Defense",
-      "type": "response",
-      "faction": "Zeon",
-      "effect": "When an allied unit redeploys: It redeploys on or adjacent to the Vantage Point",
-      "source": "https://gundamassemble.wiki.gg/wiki/N_Field_Defense",
-      "effectData": null
-    },
-    {
-      "cardId": "W-turn-of-fortune",
-      "name": "Turn of Fortune",
-      "type": "response",
-      "faction": "",
-      "effect": "[After Attack Roll] Set one of those dice to a [Critical]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Turn_of_Fortune",
-      "effectData": {
-        "type": "set_crit",
-        "side": "attacker",
-        "trigger": "after_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-locked-on",
-      "name": "Locked On",
-      "type": "response",
-      "faction": "",
-      "effect": "[Before Attack Roll] The attacker gains [Accuracy +2] this attack",
-      "source": "https://gundamassemble.wiki.gg/wiki/Locked_On",
-      "effectData": {
-        "type": "attack_bonus",
-        "accuracy": 2,
-        "side": "attacker",
-        "trigger": "before_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-claiming-vengeance",
-      "name": "Claiming Vengeance",
-      "type": "attack",
-      "faction": "",
-      "effect": "[After Attack Roll] Capture an Objective the target is on or adjacent to. [Critical] [Disarm] the target.",
-      "source": "https://gundamassemble.wiki.gg/wiki/Claiming_Vengeance",
-      "signature": "Cold Justice",
-      "weapon": {
-        "range": 3,
-        "strength": 4,
-        "tlCost": 2,
-        "effect": "[After Attack Roll] Capture an Objective the target is on or adjacent to. [Critical] [Disarm] the target.",
-        "name": "Claiming Vengeance",
-        "effectData": {
-          "trigger": "after_attack_roll",
-          "type": "capture_objective_near_target"
-        },
-        "critData": {
-          "trigger": "after_attack_roll",
-          "type": "disarm"
-        }
-      },
-      "effectData": null
-    },
-    {
-      "cardId": "W-ball-reinforcements",
-      "name": "Ball Reinforcements",
-      "type": "command",
-      "faction": "",
-      "effect": "Add an Ball Reinforcement to your Reserve and place its Timeline token at the end of the next round. After it is defeated, remove both the unit and its Timeline token from the game.",
-      "source": "https://gundamassemble.wiki.gg/wiki/Ball_Reinforcements",
-      "effectData": null
-    },
-    {
-      "cardId": "W-n-field-assault",
-      "name": "N Field Assault",
-      "type": "command",
-      "faction": "Earth Federation",
-      "effect": "Your active unit gains 1 [Upgrade] of your choice. If you control the Vantage Point, it gains 1 [Upgrade] of each type instead",
-      "source": "https://gundamassemble.wiki.gg/wiki/N_Field_Assault",
-      "effectData": null
-    },
-    {
-      "cardId": "W-special-ops",
-      "name": "Special OPs",
-      "type": "command",
-      "faction": "Londo Bell",
-      "effect": "Up to three of your Londo Bell units on the battlefield gain 1 different Upgrade of your choice",
-      "source": "https://gundamassemble.wiki.gg/wiki/Special_OPs",
-      "effectData": null
-    },
-    {
-      "cardId": "W-target-reacquisition",
-      "name": "Target Reacquisition",
-      "type": "response",
-      "faction": "Londo Bell",
-      "effect": "[After Attack Roll] Reroll any number of misses. If you reroll 3 or more of your misses, draw 1 card",
-      "source": "https://gundamassemble.wiki.gg/wiki/Target_Reacquisition",
-      "effectData": {
-        "type": "reroll_misses",
-        "drawIfAtLeast": 3,
-        "side": "attacker",
-        "trigger": "after_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-psycho-frame-overload",
-      "name": "Psycho-Frame Overload",
-      "type": "command",
-      "faction": "",
-      "effect": "Unicorn Gundam deals [Damage] equal to that number of Upgrades on it to an enemy within [Range 2]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Psycho-Frame_Overload",
-      "signature": "Laplace's Guardian",
-      "effectData": {
-        "type": "damage_per_own_upgrade",
-        "range": 2
-      }
-    },
-    {
-      "cardId": "W-salvage-systems",
-      "name": "Salvage Systems",
-      "type": "command",
-      "faction": "Londo Bell",
-      "effect": "Your active unit Repairs [Damage 3]. Then, if it has full HP, gain [Energy 1]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Salvage_Systems",
-      "effectData": {
-        "type": "repair",
-        "amount": 3,
-        "energyIfFull": 1
-      }
-    },
-    {
-      "cardId": "W-full-system-burn",
-      "name": "Full System Burn",
-      "type": "command",
-      "faction": "Londo Bell",
-      "effect": "Your active Londo Bell gains [Speed +3] and Hover this activation",
-      "source": "https://gundamassemble.wiki.gg/wiki/Full_System_Burn",
-      "effectData": {
-        "type": "activation_move_buff",
-        "amount": 3,
-        "hover": true,
-        "requiresActiveTrait": "Londo Bell"
-      }
-    },
-    {
-      "cardId": "W-swift-appropriation",
-      "name": "Swift Appropriation",
-      "type": "command",
-      "faction": "",
-      "effect": "Delta Plus takes an [Energy] and 1 Upgrade from a unit within [Range 3]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Swift_Appropriation",
-      "signature": "Rapid Response",
-      "effectData": {
-        "type": "steal_upgrade",
-        "range": 3
-      }
-    },
-    {
-      "cardId": "W-grunt-s-guard",
-      "name": "Grunt's Guard",
-      "type": "response",
-      "faction": "",
-      "effect": "[After Attack Roll] A defender is dealt [Damage -4] this attack if it is worth less VP than the attacker",
-      "source": "https://gundamassemble.wiki.gg/wiki/Grunt's_Guard",
-      "effectData": {
-        "type": "reduce_damage",
-        "amount": 4,
-        "ifLowerVp": true,
-        "side": "defender",
-        "trigger": "after_attack_roll"
-      }
-    },
-    {
-      "cardId": "W-on-site-integration",
-      "name": "On-Site Integration",
-      "type": "command",
-      "faction": "Londo Bell",
-      "effect": "Your active unit gains 1 Upgrade of your choice",
-      "source": "https://gundamassemble.wiki.gg/wiki/On-Site_Integration",
-      "effectData": null
-    },
-    {
-      "cardId": "W-critical-rescue",
-      "name": "Critical Rescue",
-      "type": "command",
-      "faction": "",
-      "effect": "Torohachi Moves 5. After it ends its movement, it Rescues each Allied Garrison it moved adjacent to",
-      "source": "https://gundamassemble.wiki.gg/wiki/Critical_Rescue",
-      "signature": "Petite Mobile Suit",
-      "effectData": {
-        "type": "move_and_rescue",
-        "amount": 5
-      }
-    },
-    {
-      "cardId": "W-bit-assault",
-      "name": "Bit Assault",
-      "type": "command",
-      "faction": "",
-      "effect": "Gundam repositions all ally and enemy Remote Weapon Systems onto any empty hexes on the battlefield. Each RWS deals [Damage 1] to an enemy unit adjacent to it.",
-      "source": "https://gundamassemble.wiki.gg/wiki/Bit_Assault",
-      "signature": "Protective Heroine",
-      "effectData": null
-    },
-    {
-      "cardId": "W-i-vara-assault",
-      "name": "Iśvara Assault",
-      "type": "command",
-      "faction": "",
-      "effect": "Reposition Darilbalde to a hex adjacent to its Iśvara B Type. Darilbalde's attacks deal [Damage +2] this activation",
-      "source": "https://gundamassemble.wiki.gg/wiki/Iśvara_Assault",
-      "signature": "Frontline Duelist",
-      "effectData": null
-    },
-    {
-      "cardId": "W-cold-silence",
-      "name": "Cold Silence",
-      "type": "command",
-      "faction": "",
-      "effect": "All enemy units adjacent to Gundam Pharact's Corax move up 1 [Timeline]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Cold_Silence",
-      "signature": "Silent Hunter",
-      "effectData": null
-    },
-    {
-      "cardId": "W-drone-assault",
-      "name": "Drone Assault",
-      "type": "command",
-      "faction": "Asticassia",
-      "effect": "Each allied RWS deals [Damage 1] to an adjacent enemy",
-      "source": "https://gundamassemble.wiki.gg/wiki/Drone_Assault",
-      "effectData": null
-    },
-    {
-      "cardId": "W-interference-pattern",
-      "name": "Interference Pattern",
-      "type": "command",
-      "faction": "Asticassia",
-      "effect": "Your active Asticassia unit applies [Disarm] to each enemy unit within [Range 3]",
-      "source": "https://gundamassemble.wiki.gg/wiki/Interference_Pattern",
-      "effectData": {
-        "type": "aoe_status",
-        "status": "disarm",
-        "range": 3,
-        "requiresActiveTrait": "Asticassia"
-      }
-    },
-    {
-      "cardId": "W-bit-shield",
-      "name": "BIT Shield",
-      "type": "response",
-      "faction": "Asticassia",
-      "effect": "[After Attack Roll] A defender is dealt [Damage -3] this attack and an additional [Damage -1] for each allied RWS within [Range 2]",
-      "source": "https://gundamassemble.wiki.gg/wiki/BIT_Shield",
-      "effectData": null
-    },
-    {
-      "cardId": "W-linked-strike",
-      "name": "Linked Strike",
-      "type": "response",
-      "faction": "Asticassia",
-      "effect": "[Before Attack Roll] The attacker gains [Strength +3] this attack and an additional [Strength +1] for each allied RWS adjacent to the target",
-      "source": "https://gundamassemble.wiki.gg/wiki/Linked_Strike",
-      "effectData": null
-    },
-    {
-      "cardId": "W-interception",
-      "name": "Interception",
-      "type": "response",
-      "faction": "",
-      "effect": "[Before Attack Roll] An allied unit gains Challenge this attack. (If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender)",
-      "source": "https://gundamassemble.wiki.gg/wiki/Interception",
-      "effectData": null
-    },
-    {
-      "cardId": "W-dismantle",
-      "name": "Dismantle",
-      "type": "command",
-      "faction": "Asticassia",
-      "effect": "Your active unit destroys all Upgrades on an enemy unit adjacent to an allied RWS",
-      "source": "https://gundamassemble.wiki.gg/wiki/Dismantle",
-      "effectData": null
-    },
-    {
-      "cardId": "W-protective-shot",
-      "name": "Protective Shot",
-      "type": "response",
-      "faction": "",
-      "effect": "After an enemy ends its movement within [Range 3] of this unit: Gundam immediately makes a Beam Rifle attack at [Timeline 1] against it",
-      "source": "https://gundamassemble.wiki.gg/wiki/Protective_Shot",
-      "signature": "Elite Mobile Suit",
-      "effectData": null
-    },
-    {
-      "cardId": "W-all-in",
-      "name": "All In",
-      "type": "command",
-      "faction": "",
-      "effect": "Guncannon makes an additional 240mm Low-Recoil Cannon attack at [Timeline 0]",
-      "source": "https://gundamassemble.wiki.gg/wiki/All_In",
-      "signature": "In Position",
-      "effectData": {
-        "type": "free_attack",
-        "weapon": "240mm Low-Recoil Cannon"
-      }
     }
   ]
 }

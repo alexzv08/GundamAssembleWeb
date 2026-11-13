@@ -17,7 +17,11 @@ export interface CardEffect {
           'free_attack' | 'damage_per_own_upgrade' | 'aoe_status' | 'activation_move_buff' |
           'move' | 'move_and_rescue' | 'steal_upgrade' |
           // ── Response durante un ataque ──
-          'attack_bonus' | 'reduce_damage' | 'set_crit' | 'reroll_misses'
+          'attack_bonus' | 'reduce_damage' | 'set_crit' | 'reroll_misses' |
+          // ── Response tras el daño ──
+          'self_and_targets_damage' | 'gain_energy' |
+          // ── Command (lista oficial) ──
+          'destroy_upgrades' | 'strength_if_garrisons_defeated' | 'free_dash_and_attack'
     range?: number
     amount?: number
     upgradeType?: string
@@ -37,6 +41,9 @@ export interface CardEffect {
     hover?: boolean
     energyIfFull?: number
     drawIfAtLeast?: number
+    requiresAllyWithin?: number         // el atacante necesita otro aliado a esta distancia
+    thenStatus?: 'slow' | 'fracture' | 'disarm'   // tras moverse, estado a enemigos a `thenRange`
+    thenRange?: number
 }
 
 // ─── TACTICS CARD ─────────────────────────────────────────────────────────────
@@ -87,7 +94,7 @@ export interface PendingAttack {
     weapon: Weapon
     primaryKey: string
     targetKeys: string[]
-    stage: 'before_roll' | 'after_roll'
+    stage: 'before_roll' | 'after_roll' | 'after_damage'
     isRepeat: boolean
     bonusStrength: number
     bonusAccuracy: number
@@ -99,4 +106,6 @@ export interface PendingAttack {
     disarmed: boolean
     critThreshold: number
     queue: PendingResponse[]             // ventanas que faltan por abrir
+    targetIds: string[]                  // unidades atacadas (para efectos tras el daño)
+    damagedIds: string[]                 // unidades que recibieron daño
 }

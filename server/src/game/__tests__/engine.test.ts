@@ -587,11 +587,37 @@ describe('Ventanas de Response durante el ataque', () => {
     g.units.a.abilities = [{ name: 'Newtype Destroyer', type: 'ONG', description: '', abilityData: { type: 'block_enemy_responses' } }]
     expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).toBeNull()
   })
-  it('Federation Shield exige un defensor Earth Federation', () => {
-    const g = duel([], ['Federation Shield'])
+  it('Formative Strength exige otro aliado a 3 hexes del atacante', () => {
+    const g = duel(['Formative Strength'], [])
     expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).toBeNull()
-    g.units.e.traits = ['Earth Federation']
-    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).not.toBeNull()
+    g.units.ally = makeUnit('ally', 'player1', { q: 2, r: 3 })
+    g.board['2,3'].occupiedBy = 'ally'
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).toMatchObject({ forPlayerId: 'player1', trigger: 'before_attack_roll' })
+  })
+  it('tras el daño responde primero el atacante (Sacrificial Overload) y luego el defensor (Counter Attack)', () => {
+    const g = duel(['Sacrificial Overload'], ['Counter Attack'])
+    g.units.a.signature = 'Wing of Destruction'
+    g.units.e.weapons = [weapon({ range: 4, strength: 2, tlCost: 3 })]
+    g.units.e.startingTl = 6
+    g.timeline = placeInitialToken(createEmptyTimeline(), { unitId: 'a', playerId: 'player1' }, 1)
+    g.timeline = placeInitialToken(g.timeline, { unitId: 'e', playerId: 'player2' }, 6)
+    const s1 = applyAttack(g, 'a', 0, 'e', 'player1', dice(5, 1, 1)).newState!
+    expect(s1.pendingResponse).toMatchObject({ forPlayerId: 'player1', trigger: 'after_combat_damage' })
+    const so = s1.players.player1.tactics.hand[0].id
+    const s2 = processAction(s1, { type: 'PLAY_RESPONSE', cardId: so }, 'player1', dice()).state!
+    expect(s2.units.a.currentHp).toBe(8)          // 2 a sí mismo
+    expect(s2.units.e.currentHp).toBe(7)          // 1 impacto + 2
+    expect(s2.pendingResponse).toMatchObject({ forPlayerId: 'player2' })
+    const ca = s2.players.player2.tactics.hand[0].id
+    const s3 = processAction(s2, { type: 'PLAY_RESPONSE', cardId: ca }, 'player2', dice(5, 5)).state!
+    expect(s3.units.a.currentHp).toBe(6)          // contraataque de 2 impactos
+    expect(getUnitRound(s3.timeline, 'e')).toBe(8) // TL 3 − 1
+    expect(s3.pendingAttack).toBeNull()
+  })
+  it('Q&A 43: Newtype Destroyer también bloquea las Response tras el daño', () => {
+    const g = duel([], ['Counter Attack'])
+    g.units.a.abilities = [{ name: 'Newtype Destroyer', type: 'ONG', description: '', abilityData: { type: 'block_enemy_responses' } }]
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).toBeNull()
   })
 })
 
@@ -630,6 +656,56 @@ describe('Cartas oficiales', () => {
     g.units.a.traits = ['Londo Bell']
     const s = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id }, 'player1').state!
     expect(reachableFor(s, 'a', { kind: 'advance' }).has('6,2')).toBe(true)
+  })
+})
+
+describe('Cartas Command de la lista oficial', () => {
+  const tactics = loadTacticsCatalog()
+  const card = (name: string) => structuredClone(tactics.find(c => c.name === name)!)
+  const play = (g: GameState, extra: object = {}) =>
+    processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: g.players.player1.tactics.hand[0].id, ...extra } as never, 'player1')
+
+  it('la lista oficial tiene 45 cartas con su código', () => {
+    const off = tactics.filter(c => c.source === 'oficial')
+    expect(off).toHaveLength(45)
+    expect(off.find(c => c.id === 'ST01-T10')?.name).toBe('Crimson Execution')
+  })
+  it('Crimson Execution: Dash y Heat Hawk adicionales a TL 0', () => {
+    const g = makeGame([makeUnit('a', 'player1', A, { signature: 'Fast Encounter', weapons: [weapon({ name: 'Heat Hawk', range: 1 })] })])
+    g.players.player1.tactics.hand = [card('Crimson Execution')]
+    const s = play(g).state!
+    expect(s.activation!.freeDashes).toBe(1)
+    expect(s.activation!.freeAttacks).toEqual([0])
+  })
+  it('Breaker Sweep destruye hasta 2 Upgrades de un enemigo a 2 hexes', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 4, r: 2 }, {
+      upgrades: [{ type: 'attack', value: 1 }, { type: 'movement', value: 1 }, { type: 'attack', value: 1 }] })])
+    g.players.player1.tactics.hand = [card('Breaker Sweep')]
+    expect(play(g, { targetId: 'e' }).state!.units.e.upgrades).toHaveLength(1)
+  })
+  it('Systematic Elimination exige haber derrotado 3 Garrisons', () => {
+    const g = makeGame([makeUnit('a', 'player1', A)])
+    g.players.player1.tactics.hand = [card('Systematic Elimination')]
+    expect(play(g).success).toBe(false)
+    g.players.player1.garrisonsDefeated = 3
+    expect(play(g).state!.activation!.strengthBonus).toBe(4)
+  })
+  it('Bulwark Siege: mueve 2 y aplica Fracture a los enemigos a 2 hexes', () => {
+    const g = makeGame([makeUnit('a', 'player1', { q: 1, r: 2 }, { signature: 'Battlefield Bombarder' }), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    g.players.player1.tactics.hand = [card('Bulwark Siege')]
+    const s = play(g, { targetHex: { q: 3, r: 2 } }).state!
+    expect(s.units.a.position).toEqual({ q: 3, r: 2 })
+    expect(s.units.e.statusEffects).toEqual([{ type: 'fracture' }])
+  })
+})
+
+describe('Q&A', () => {
+  it('Q16: empujar contra el borde del tablero no hace daño', () => {
+    const g = makeGame([makeUnit('a', 'player1', { q: 1, r: 0 }), makeUnit('e', 'player2', { q: 0, r: 0 })], makeBoard(3, 1))
+    const s = structuredClone(g)
+    forceMove(s, '1,0', 'e', 2, 'push', 'player1')
+    expect(s.units.e.position).toEqual({ q: 0, r: 0 })
+    expect(s.units.e.currentHp).toBe(10)
   })
 })
 

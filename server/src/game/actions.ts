@@ -332,7 +332,7 @@ export function applyPlayResponse(state: GameState, cardId: string, playerId: Pl
     if (!card.effectData || card.effectData.trigger !== pending.trigger) return fail('Esta carta no responde a lo que acaba de pasar')
 
     const s = cloneState(state)
-    if (isAttackResponse(card.effectData)) {
+    if (isAttackResponse(card.effectData, s)) {
         if (!canPlayAttackResponse(s, playerId, card, pending.trigger)) return fail('No cumples las condiciones de esta carta')
         const err = applyAttackResponse(s, playerId, card, rng)
         if (err) return fail(err)
