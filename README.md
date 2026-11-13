@@ -7,13 +7,15 @@ Proyecto personal de Alejandro de la Torre Ruiz. Fan project sin ánimo de lucro
 ## Funcionalidades
 
 - **Multijugador en tiempo real** con Socket.IO: salas privadas con código y emparejamiento aleatorio.
+- **Partida contra la máquina**: el servidor juega por el rival con una IA sencilla.
+- **Mapas y escuadras de 3 o 5 unidades** a elegir al crear la sala.
 - **Tablero hexagonal en 3D** con Three.js y React Three Fiber, con elevación, agua y modelos STL de las unidades.
 - **Motor de reglas autoritativo en el servidor**: el cliente solo calcula ayudas visuales; el servidor valida cada acción y tira los dados (anti-trampas).
 - **Acciones de juego**: avanzar (pathfinding A*), atacar con línea de visión y modificadores, dash, energize, rescate de guarniciones, habilidades y cartas de táctica.
 - **Línea temporal** de activaciones en dos fases, con desempates por iniciativa.
 - **Selección de escuadra y mazo** antes de cada partida, validada con las reglas oficiales de construcción.
 - **Reconexión**: la sala se mantiene 5 minutos si un jugador se desconecta.
-- **Registro de acciones** en pantalla.
+- **Registro de acciones**, chat de partida, animación de movimiento y sonidos (con botón de silencio).
 - **Login con Google y Discord** mediante Supabase.
 
 ## Tecnologías
@@ -86,7 +88,7 @@ cd server
 npm test              # tests unitarios del motor (reglas del Core Rulebook v1.2)
 npm run typecheck     # tipos de servidor, tests y scripts
 npm run selfplay      # 100 partidas bot contra bot de principio a fin
-npm run smoke         # prueba de humo de la capa Socket.IO (sin Supabase)
+npm run smoke         # prueba de humo de la capa Socket.IO (sin Supabase), incluida una partida contra el bot
 ```
 
 ## Código compartido

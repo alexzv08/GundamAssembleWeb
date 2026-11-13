@@ -19,12 +19,12 @@ Fuentes oficiales:
 - ✅ **Escuadra libre**: cualquier combinación de unidades, sin bandos fijos
 - ✅ **Sin copias** del mismo número de carta salvo rasgo *Mass Produced* (ids únicos por copia)
 - ✅ **Mazo de 9 cartas** sin repetir; cartas con rasgo exigen una unidad con ese rasgo; cartas de firma exigen la unidad con ese título
-- ⚠️ **Tamaño del mazo**: el catálogo actual solo tiene 18 cartas (todas con rasgo Earth Federation o Zeon). Si la escuadra tiene menos de 9 elegibles, se exigen todas
+- ✅ **Tamaño del mazo**: 9 cartas de las 45 oficiales; si la escuadra tiene menos de 9 elegibles (rasgos o firmas), se exigen todas
 - ✅ **Validación en el servidor** (`deckRules.ts`, compartido con la pantalla de selección)
 - ✅ **Robo inicial** 3 cartas; +3 al acabar la Fase 1
 - ✅ **Orden propio en el Timeline**: cada jugador reordena sus fichas apiladas (pantalla de setup)
 - ✅ **Iniciativa**: empieza quien tenga el TL inicial más bajo; si empatan, tirada de dado
-- ❌ **Tamaño de escuadra por escenario** (3 o 5): fijo en 3
+- ✅ **Tamaño de escuadra por escenario** (3 o 5): se elige al crear la sala junto con el mapa
 - ❌ **Habilidades de Setup** (tipo `SETUP` existe, sin efectos)
 - ❌ **Carriers**
 
@@ -83,8 +83,8 @@ Fuentes oficiales:
 - ✅ Ongoing: Zero System, Firing Line, Exploit Weakness, Fight to the End, Three-Times Faster, Hover, Jet Through, Newtype Destroyer…
 - ✅ Command: Full Power, Checkmate, No Escape, Sundering Strike, Hunter's Edge, Frenzied Charge, Alaya-Vijnana, Annihilate, Rescue Maneuver, BIT Stave / Corax / Iśvara B Type Direct…
 - ✅ Response automáticas: Char Kick, Blitzing Slash, Escape from Side 7, Supply, Toss Away, Stunning Shot, Crowd Control, Coordinated Payload, Lockdown, Permet Burst, Psycho-Frame Synchrony, Inspiring Presence
-- ⚠️ Las Response de unidad con coste de Energy se usan solas cuando hay Energy; no se puede elegir guardarla
-- ❌ **Challenge** y **Material Transfer** (necesitan que el jugador elija)
+- ✅ Las Response automáticas de unidad se pueden desactivar por unidad (interruptor en el panel) para guardar la Energy
+- ✅ **Challenge** (botón durante el ataque enemigo) y **Material Transfer** (el jugador reparte los Upgrades)
 
 ### Remote Weapon Systems (Q&A 110)
 - ✅ BIT Stave, Corax e Iśvara B Type: empiezan en la reserva de su unidad; se despliegan o recolocan en un hex vacío a alcance con su habilidad "Direct"
@@ -93,8 +93,8 @@ Fuentes oficiales:
 - ❌ Empujar o atraer RWS (ningún efecto actual lo hace)
 
 ### Cartas de Tactics (lista oficial: 45)
-- ✅ **39 jugables**: 3 Attack (Epic Shot, War Edge, Claiming Vengeance), 22 Command y 14 Response (antes de tirar, después de tirar y tras el daño)
-- ❌ 6 sin implementar (se pueden llevar en el mazo pero no jugar): On-Site Integration y Special OPs (elegir Upgrade), Bit Assault (recolocar varias RWS), Interception (Challenge), Protective Shot (ataque fuera de turno), Iron-Blooded Tenacity (evitar la derrota)
+- ✅ **Las 45 jugables**: 3 Attack, 25 Command y 17 Response (antes de tirar, después de tirar y tras el daño), incluidas On-Site Integration y Special OPs (elegir Upgrade), Bit Assault (recolocar varias RWS), Interception (Challenge) y Protective Shot (ataque fuera de turno)
+- ⚠️ Iron-Blooded Tenacity: evita la derrota (queda a 1 HP), pero no aplica el movimiento ni el ataque posteriores del texto
 - Se conservan 17 cartas de la demo (marcadas como `demo`)
 
 ## 6b. Q&A oficial (130 preguntas revisadas)
@@ -116,16 +116,19 @@ Fuentes oficiales:
 
 - ✅ Las 15 unidades oficiales (ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos, firma y textos oficiales
 - ✅ **Coste de TL, alcance, Strength, tipo de habilidad y coste de Energy** de las 15 unidades tomados de la wiki comunitaria (la web oficial solo los muestra en la imagen de la carta). ⚠️ La wiki tiene erratas en nombres de armas del PA01 y le falta Challenge del Guncannon; conviene revisarlos con las cartas físicas
-- ⚠️ Habilidades Response con coste de Energy (Toss Away, Blitzing Slash, Coordinated Payload, Stunning Shot…) se usan automáticamente si hay Energy; el jugador no puede elegir no usarlas
+- ✅ Habilidades Response con coste de Energy (Toss Away, Blitzing Slash, Coordinated Payload, Stunning Shot…): se usan solas si hay Energy, salvo que el jugador desactive las Response automáticas de esa unidad
 - ✅ Se conservan las 6 unidades de la demo (DM01)
 
 ## 9. Multijugador / Red
 
 - ✅ Salas privadas y emparejamiento; reconexión 5 min **solo para el mismo usuario autenticado**
+- ✅ **Partida contra la máquina**: el servidor juega por el rival con la misma IA del self-play (`bot.ts`)
+- ✅ Chat de partida (200 caracteres, 1 mensaje por segundo)
+- ✅ Rutas de mapas protegidas: ids sin rutas (`/^[A-Za-z0-9_-]+$/`) y subida de mapas con sesión y límite de 200 KB
 - ✅ El servidor valida escuadra, mazo, turno y reglas, y tira todos los dados
 
 ## 10. Pendiente (UI / 3D)
 
-- ❌ Animaciones de movimiento, sonidos, chat, selector de mapa
+- ✅ Animación de movimiento, sonidos (con botón de silencio), chat, selector de mapa
 - ❌ Elegir manualmente el hex en Push/Pull y la plantilla de AoE
 - ❌ Modelos STL ligeros (GLB + Draco) en lugar de 143 MB de STL

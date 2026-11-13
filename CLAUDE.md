@@ -88,6 +88,8 @@ server/src/
     victory.ts            — disputa de Objetivos, puntuación por fase, ganador
     catalog.ts            — carga unit_library.json / card_library.json y construye las unidades
     createServerGame.ts   — GameState inicial (tablero, unidades en Reserva, Timeline, iniciativa, mazos)
+    bot.ts                — IA del rival automático (salas contra la máquina y self-play)
+    maps.ts               — lista de mapas y validación de ids (sin rutas)
     __tests__/            — tests del motor
   rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId)
   socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION llama a processAction
@@ -105,7 +107,8 @@ client/src/
   App.tsx                 — pantallas + socket + handlers de UI
   game/                   — copias compartidas + loaders/useGameData (datos de la API)
   screens/                — lobby, espera, selección de escuadra (usa deckRules), setup
-  components/ui/          — UnitPanel, TacticsHand, TimelineBar, ActionLog…
+  components/ui/          — UnitPanel, TacticsHand, TimelineBar, ActionLog, ChoiceModal (elecciones), ChatPanel…
+  game/sound.ts           — efectos de sonido sintetizados (Web Audio) y silencio
   three/                  — escena 3D; models.ts asocia cardId → modelo STL; RwsMesh.tsx dibuja las RWS
 tools/map-editor.html     — editor de mapas
 ```
@@ -332,3 +335,11 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **Tests**: 90; self-play 200/200 desplegando y atacando RWS, ahora determinista (`createServerGame` acepta `random` para barajar) y cortando solo ante 50 rechazos seguidos. `npm run smoke` construye mazos legales con `eligibleCards` (estaba roto desde el cambio de cartas: usaba la carta demo `T-10`, ya retirada) y tiene un timeout de 60 s.
 - Archivos: `server/data/{units,cards}/*.json`, `server/src/types/*`, `server/src/game/{combat,actions,effects,queries,damage,createServerGame}.ts`, `server/src/socket/gameEvents.ts`, tests, `server/scripts/self-play.ts`, `client/src/App.tsx`, `client/src/three/{GameScene,RwsMesh}.tsx`, copias compartidas, `GAMEPLAN.md`, `README.md`.
 
+### 2026-11-13 — Elecciones del jugador, las 45 cartas jugables, bot, mapas, chat y sonidos
+- **Elecciones**: `PLAY_CARD` / `USE_ABILITY` aceptan `choice` / `choices`; `ChoiceModal` en el cliente. On-Site Integration y Special OPs (Upgrade a elegir), Material Transfer (reparto de Upgrades) y Bit Assault (recolocar varias RWS).
+- **Response**: Challenge e Interception (`USE_RESPONSE_ABILITY`), Protective Shot (ataque fuera de turno), Iron-Blooded Tenacity (`preventDefeat`, queda a 1 HP; sin el movimiento ni el ataque posteriores); `SET_AUTO_RESPONSES` permite desactivar las Response automáticas de una unidad. Las 45 cartas oficiales son jugables.
+- **Salas**: selector de mapa y escuadras de 3 o 5; partida contra la máquina (`PLAY_BOT`, `bot.ts`, `driveBot` en `gameEvents.ts`, `BOT_DELAY_MS`). El self-play usa la misma IA.
+- **Seguridad**: GET `/api/maps/:id` solo acepta ids simples (antes permitía rutas); la subida de mapas exige sesión de Supabase y como mucho 200 KB.
+- **UI**: animación de movimiento (`MovingGroup` en `UnitMesh.tsx`), chat de partida (evento `CHAT`, 200 caracteres, 1 mensaje/s) y sonidos con botón de silencio, arriba a la izquierda.
+- **Tests**: 101; self-play 200/200; `npm run smoke` incluye una partida contra el bot.
+- Archivos: `server/src/game/{bot,maps,effects,combat,queries,actions,damage}.ts`, `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `server/src/routes/maps.ts`, `server/src/types/*`, `server/scripts/{self-play,socket-smoke}.ts`, tests, `client/src/App.tsx`, `client/src/screens/{LobbyScreen,SquadSelectionScreen}.tsx`, `client/src/components/ui/{ChoiceModal,ChatPanel,TacticsHand,UnitPanel}.tsx`, `client/src/components/ui/choiceOptions.ts`, `client/src/game/sound.ts`, `client/src/three/UnitMesh.tsx`, copias compartidas, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.
