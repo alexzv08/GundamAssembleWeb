@@ -27,6 +27,7 @@ const MOCK_STATE: GameState = {
     roundNumber: 4,
     hasUsedPrimaryAction: false,
     activation: null,
+    pendingAttack: null,
     lastAttack: null,
     winner: null,
     pendingResponse: null,

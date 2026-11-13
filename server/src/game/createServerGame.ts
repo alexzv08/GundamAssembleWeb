@@ -194,5 +194,6 @@ export function createServerGame(
         lastAttack: null,
         winner: null,
         pendingResponse: null,
+        pendingAttack: null,
     }
 }

@@ -13,6 +13,7 @@ export function newActivation(unitId: string): ActivationState {
         unitId, advanced: false, moved: false, usedCommands: [], cardPlayed: false,
         freeDashes: 0, freeAttacks: [], attacksMade: [], strengthBonus: 0, accuracyBonus: 0,
         weaponStrengthBonus: {}, destroyUpgradeOnHit: false, deployed: false,
+        speedBonus: 0, hover: false, damageBonus: 0,
     }
 }
 

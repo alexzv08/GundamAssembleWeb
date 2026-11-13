@@ -1,6 +1,14 @@
 import type { TacticsCard } from '../../types/tactics'
 import type { ResponseTrigger } from '../../types/tactics'
 
+const TRIGGER_LABEL: Partial<Record<ResponseTrigger, string>> = {
+    before_attack_roll: 'Antes de tirar los dados',
+    after_attack_roll: 'Dados tirados, antes del daño',
+    after_combat_damage: 'Tras el daño',
+    after_rescue: 'Tras un rescate',
+    after_enemy_advance: 'Un enemigo se movió',
+}
+
 interface TacticsHandProps {
     hand: TacticsCard[]
     isMyTurn: boolean
@@ -10,12 +18,13 @@ interface TacticsHandProps {
     pendingResponseTrigger?: ResponseTrigger | null
     onPassResponse?: () => void
     cardPlayed?: boolean
+    canRespond?: (card: TacticsCard) => boolean
 }
 
 const cardTypeColor = (type: 'command' | 'response' | 'attack', active: boolean) =>
     !active ? '#333' : type === 'command' ? '#e65100' : type === 'attack' ? '#b71c1c' : '#6a1b9a'
 
-export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayCard, pendingResponseTrigger, onPassResponse, cardPlayed = false }: TacticsHandProps) {
+export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayCard, pendingResponseTrigger, onPassResponse, cardPlayed = false, canRespond }: TacticsHandProps) {
     const isRspWindow = !!pendingResponseTrigger
 
     return (
@@ -49,7 +58,7 @@ export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayC
                         textAlign: 'center',
                     }}>
                         ¡Ventana RSP!<br />
-                        <span style={{ fontWeight: 'normal', fontSize: 10 }}>Juega o pasa</span>
+                        <span style={{ fontWeight: 'normal', fontSize: 10 }}>{TRIGGER_LABEL[pendingResponseTrigger!] ?? ''}<br />Juega o pasa</span>
                     </div>
                 ) : (
                     <div style={{ color: '#666', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center' }}>
@@ -66,7 +75,7 @@ export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayC
 
             {/* Cartas */}
             {hand.map(card => {
-                const rspMatch = card.type === 'response' && card.effectData?.trigger === pendingResponseTrigger
+                const rspMatch = canRespond ? canRespond(card) : card.type === 'response' && card.effectData?.trigger === pendingResponseTrigger
                 const canPlay = isRspWindow ? rspMatch : isMyTurn && card.type !== 'response' && !cardPlayed
                 const isSelected = selectedCardId === card.id
                 return (

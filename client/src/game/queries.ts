@@ -2,7 +2,7 @@
 // Consultas puras sobre el GameState que comparten servidor (validación) y
 // cliente (resaltado de hexes). Así lo que la UI ofrece coincide siempre con lo
 // que el servidor acepta.
-import type { GameState, PlayerId, Unit, HexCoord, BoardMap } from '../types'
+import type { GameState, PlayerId, Unit, HexCoord, BoardMap, Weapon, TacticsCard, ResponseTrigger } from '../types'
 import {
   hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, getReachableHexes,
   type MoveOptions,
@@ -91,8 +91,9 @@ export function isEngaged(state: GameState, unitId: string): boolean {
 
 // ─── HABILIDADES PASIVAS QUE AFECTAN AL MOVIMIENTO ───────────────────────────
 
-export function hasHover(unit: Unit): boolean {
+export function hasHover(unit: Unit, state?: GameState): boolean {
   if (unit.traits.includes('Hover')) return true
+  if (state?.activation?.unitId === unit.id && state.activation.hover) return true
   return unit.abilities.some(a => {
     const d = a.abilityData
     if (a.type !== 'ONG' || d?.type !== 'hover') return false
@@ -124,12 +125,12 @@ export function movementBudget(state: GameState, unitId: string, req: MoveReques
   const unit = state.units[unitId]
   if (!unit?.position) return 0
   let budget =
-    req.kind === 'advance' ? 3 + upgradeCount(unit, 'movement')
+    req.kind === 'advance' ? 3 + upgradeCount(unit, 'movement') + (state.activation?.unitId === unitId ? state.activation.speedBonus : 0)
       : req.kind === 'dash' ? 2 + dashBonus(unit)
         : (req.base ?? 0)
   if (!req.ignoreEngagement && isEngaged(state, unitId)) budget -= 1
   const terrain = state.board[hexKey(unit.position)]?.terrain
-  if ((terrain === 'water' || terrain === 'debris') && !hasHover(unit) && !req.ignoreTerrain) budget -= 1
+  if ((terrain === 'water' || terrain === 'debris') && !hasHover(unit, state) && !req.ignoreTerrain) budget -= 1
   return Math.max(0, budget)
 }
 
@@ -139,7 +140,7 @@ export function moveOptionsFor(state: GameState, unitId: string, req: MoveReques
     budget: movementBudget(state, unitId, req),
     enemyHexes: enemyHexes(state, unit.playerId),
     occupiedHexes: occupiedHexes(state, unitId),
-    hover: hasHover(unit),
+    hover: hasHover(unit, state),
     ignoreTerrain: req.ignoreTerrain,
   }
 }
@@ -180,12 +181,63 @@ export function enemiesAdjacentTo(state: GameState, key: string, attackerPlayer:
 
 export interface TargetCheck { ok: boolean; reason?: string }
 
-// ¿Puede `unitId` atacar el hex `targetKey` con el arma `weaponIndex`?
-// Comprueba alcance, línea de visión y la restricción de Engagement.
-export function checkAttackTarget(state: GameState, unitId: string, weaponIndex: number, targetKey: string): TargetCheck {
+// Posición en el plano (pointy-top, odd-r) para calcular ángulos del cono.
+function planePos(c: HexCoord): [number, number] {
+  return [c.q + (c.r & 1) * 0.5, c.r * Math.sqrt(3) / 2]
+}
+
+// Hexes de una plantilla de área apuntada a `targetKey`.
+//  flower: el hex elegido y sus 6 vecinos.
+//  cone:   hexes a distancia ≤ alcance dentro de un ángulo de 60° hacia el objetivo.
+// Aproximación: la forma exacta sale del diagrama impreso en la carta.
+export function areaHexes(state: GameState, from: HexCoord, weapon: Weapon, targetKey: string): string[] {
+  const center = keyToHex(targetKey)
+  if (weapon.area === 'flower') return [targetKey, ...getNeighbors(center).map(hexKey)].filter(k => state.board[k])
+  if (weapon.area === 'cone') {
+    const [ox, oy] = planePos(from)
+    const [tx, ty] = planePos(center)
+    const dir = Math.atan2(ty - oy, tx - ox)
+    return Object.keys(state.board).filter(k => {
+      const h = keyToHex(k)
+      const d = gridDistance(from, h)
+      if (d === 0 || d > weapon.range) return false
+      const [hx, hy] = planePos(h)
+      let diff = Math.abs(Math.atan2(hy - oy, hx - ox) - dir)
+      if (diff > Math.PI) diff = 2 * Math.PI - diff
+      return diff <= Math.PI / 6 + 1e-6
+    })
+  }
+  return [targetKey]
+}
+
+// Objetivos reales de un ataque apuntado a `targetKey`: el principal más los
+// adicionales de la plantilla o del efecto "also targets each enemy adjacent".
+export function attackTargets(state: GameState, unitId: string, weapon: Weapon, targetKey: string): TargetRef[] {
   const unit = state.units[unitId]
-  const weapon = unit?.weapons[weaponIndex]
-  if (!unit?.position || !weapon) return { ok: false, reason: 'Arma o unidad no válida' }
+  if (!unit?.position) return []
+  const primary = targetAt(state, targetKey, unit.playerId)
+  const keys = weapon.area ? areaHexes(state, unit.position, weapon, targetKey) : [targetKey]
+  const result: TargetRef[] = []
+  for (const k of keys) {
+    const t = targetAt(state, k, unit.playerId)
+    if (!t) continue
+    // Las áreas de efecto ignoran unidades y Garrisons para la línea de visión
+    if (weapon.area && k !== targetKey && weapon.effectData?.type !== 'ignore_los' &&
+        !checkLineOfSight(unit.position, keyToHex(k), state.board).clear) continue
+    result.push(t)
+  }
+  if (primary && !result.some(t => t.key === targetKey)) result.unshift(primary)
+  if (weapon.effectData?.type === 'also_target_adjacent' && primary) {
+    for (const t of enemiesAdjacentTo(state, targetKey, unit.playerId)) if (!result.some(r => r.key === t.key)) result.push(t)
+  }
+  return result
+}
+
+// ¿Puede `unitId` atacar el hex `targetKey` con `weapon`?
+// Comprueba alcance, línea de visión y la restricción de Engagement.
+export function checkAttackTargetWith(state: GameState, unitId: string, weapon: Weapon, targetKey: string): TargetCheck {
+  const unit = state.units[unitId]
+  if (!unit?.position) return { ok: false, reason: 'Unidad no válida' }
   const target = targetAt(state, targetKey, unit.playerId)
   if (!target) return { ok: false, reason: 'No hay un enemigo en ese hex' }
 
@@ -193,9 +245,9 @@ export function checkAttackTarget(state: GameState, unitId: string, weaponIndex:
   const to = keyToHex(targetKey)
   if (gridDistance(from, to) > weapon.range) return { ok: false, reason: 'Objetivo fuera de alcance' }
 
-  const ignoresLos = weapon.effectData?.type === 'ignore_los'
-  if (!ignoresLos) {
-    const blockers = enemyHexes(state, unit.playerId)
+  if (weapon.effectData?.type !== 'ignore_los') {
+    // Las áreas de efecto ignoran unidades y Garrisons para la línea de visión
+    const blockers = weapon.area ? new Set<string>() : enemyHexes(state, unit.playerId)
     blockers.delete(targetKey)
     const los = checkLineOfSight(from, to, state.board, blockers)
     if (!los.clear) return { ok: false, reason: `Sin línea de visión: ${los.reason}` }
@@ -203,10 +255,7 @@ export function checkAttackTarget(state: GameState, unitId: string, weaponIndex:
 
   const engaged = engagedEnemyKeys(state, unitId)
   if (engaged.length > 0) {
-    const included = new Set([targetKey])
-    if (weapon.effectData?.type === 'also_target_adjacent') {
-      for (const t of enemiesAdjacentTo(state, targetKey, unit.playerId)) included.add(t.key)
-    }
+    const included = new Set(attackTargets(state, unitId, weapon, targetKey).map(t => t.key))
     if (!engaged.some(k => included.has(k))) {
       return { ok: false, reason: 'Engaged: debes atacar a un enemigo con el que estás trabado' }
     }
@@ -214,14 +263,20 @@ export function checkAttackTarget(state: GameState, unitId: string, weaponIndex:
   return { ok: true }
 }
 
+export function checkAttackTarget(state: GameState, unitId: string, weaponIndex: number, targetKey: string): TargetCheck {
+  const weapon = state.units[unitId]?.weapons[weaponIndex]
+  if (!weapon) return { ok: false, reason: 'Arma no válida' }
+  return checkAttackTargetWith(state, unitId, weapon, targetKey)
+}
+
+export function attackableHexesWith(state: GameState, unitId: string, weapon: Weapon): string[] {
+  if (!state.units[unitId]?.position) return []
+  return Object.keys(state.board).filter(key => checkAttackTargetWith(state, unitId, weapon, key).ok)
+}
+
 export function attackableHexes(state: GameState, unitId: string, weaponIndex: number): string[] {
-  const unit = state.units[unitId]
-  if (!unit?.position) return []
-  const result: string[] = []
-  for (const key of Object.keys(state.board)) {
-    if (checkAttackTarget(state, unitId, weaponIndex, key).ok) result.push(key)
-  }
-  return result
+  const weapon = state.units[unitId]?.weapons[weaponIndex]
+  return weapon ? attackableHexesWith(state, unitId, weapon) : []
 }
 
 // ─── ACCURACY POR TERRENO Y ELEVACIÓN ────────────────────────────────────────
@@ -241,4 +296,47 @@ export function terrainAccuracy(board: BoardMap, from: HexCoord, to: HexCoord): 
   }
   if (gridDistance(from, to) > 1 && (a.terrain === 'minovsky' || t.terrain === 'minovsky')) acc -= 2
   return acc
+}
+
+// ─── RESPONSE DURANTE UN ATAQUE ───────────────────────────────────────────────
+
+// Unidades atacadas de `player` en el ataque en curso.
+export function attackDefenders(state: GameState, player: PlayerId): string[] {
+  const pa = state.pendingAttack
+  if (!pa) return []
+  const attacker = state.units[pa.attackerId]
+  return pa.targetKeys
+    .map(k => targetAt(state, k, attacker.playerId))
+    .filter((t): t is TargetRef => t !== null && t.kind === 'unit' && state.units[t.id].playerId === player)
+    .map(t => t.id)
+}
+
+// Newtype Destroyer: los enemigos no pueden usar Response mientras esa unidad ataca o es atacada.
+function responsesBlocked(state: GameState, player: PlayerId): boolean {
+  const pa = state.pendingAttack
+  if (!pa) return false
+  const attacker = state.units[pa.attackerId]
+  const involved = [pa.attackerId, ...attackDefenders(state, otherPlayer(attacker.playerId))]
+  return involved.some(id => state.units[id].playerId !== player &&
+    state.units[id].abilities.some(a => a.abilityData?.type === 'block_enemy_responses'))
+}
+
+// ¿Puede `player` jugar `card` en la ventana de Response abierta (o en `trigger`)?
+export function canPlayResponseCard(state: GameState, player: PlayerId, card: TacticsCard, trigger?: ResponseTrigger): boolean {
+  const e = card.effectData
+  const t = trigger ?? state.pendingResponse?.trigger
+  if (!e || card.type !== 'response' || !t || e.trigger !== t) return false
+  if (t !== 'before_attack_roll' && t !== 'after_attack_roll') return true
+  const pa = state.pendingAttack
+  if (!pa || responsesBlocked(state, player)) return false
+  if (player === state.activePlayerId && state.activation?.cardPlayed) return false
+  const attacker = state.units[pa.attackerId]
+  const side = attacker.playerId === player ? 'attacker' : 'defender'
+  if (e.side && e.side !== side) return false
+  const actors = side === 'attacker' ? [attacker.id] : attackDefenders(state, player)
+  if (actors.length === 0) return false
+  if (e.requiresActiveTrait && !actors.some(id => state.units[id].traits.includes(e.requiresActiveTrait!))) return false
+  if (card.signature && !actors.some(id => state.units[id].signature === card.signature)) return false
+  if (e.ifLowerVp && !actors.some(id => state.units[id].vp < attacker.vp)) return false
+  return true
 }

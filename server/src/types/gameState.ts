@@ -1,7 +1,7 @@
 import type { Unit, HexCoord } from './units'
 import type { BoardMap } from './board'
 import type { Timeline } from './timeline'
-import type { TacticsState, PendingResponse } from './tactics'
+import type { TacticsState, PendingResponse, PendingAttack } from './tactics'
 
 export type PlayerId = 'player1' | 'player2'
 export type GamePhase = 'setup' | 'phase1' | 'phase2' | 'finished'
@@ -30,6 +30,9 @@ export interface ActivationState {
   weaponStrengthBonus: Record<string, number>  // bono por nombre de arma (Frenzied Charge)
   accuracyBonus: number
   destroyUpgradeOnHit: boolean
+  speedBonus: number         // Full System Burn
+  hover: boolean             // Hover solo esta activación
+  damageBonus: number        // daño extra en los ataques de esta activación
   deployed: boolean          // la unidad se desplegó al empezar esta activación
 }
 
@@ -64,6 +67,7 @@ export interface GameState {
   winner: PlayerId | null
   winReason?: string
   pendingResponse: PendingResponse | null
+  pendingAttack: PendingAttack | null
 }
 
 export interface PlayerState {

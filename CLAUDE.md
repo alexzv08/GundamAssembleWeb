@@ -94,7 +94,7 @@ server/src/
   routes/                 — /api/maps, /api/units, /api/cards, /api/auth
 server/data/
   units/unit_library.json — 15 unidades oficiales + 6 de la demo (formato v2)
-  cards/card_library.json — 18 cartas de Tactics (demo)
+  cards/card_library.json — 46 cartas de Tactics oficiales (wiki) + 18 de la demo
   maps/                   — mapas
 server/scripts/
   self-play.ts            — partidas bot contra bot (npm run selfplay)
@@ -143,7 +143,15 @@ io.emit GAME_STATE_UPDATE | PHASE_TRANSITION | GAME_OVER  (con lastAttack.rolls 
 Cada carta: `cardId, set, name, model, signature, traits[], hp, vp, tl, provisionalStats, weapons[{name, effect, crit, tlCost, range, strength, effectData, critData}], abilities[{name, effect, type: CMD|ONG|RSP|SETUP, energyCost, abilityData}]`.
 
 - Los textos son los oficiales. `effectData` / `critData` / `abilityData` son la versión ejecutable (ver tipos en `types/units.ts`). Si `abilityData` falta, la habilidad se muestra pero no está implementada.
-- **Los valores numéricos de las armas y los costes de Energy son provisionales**: la web oficial no los publica en texto.
+- Los valores numéricos de las armas, el tipo de cada habilidad y los costes de Energy vienen de la wiki comunitaria (`statsSource`), porque la web oficial solo los muestra en la imagen de la carta.
+- `area: 'cone' | 'flower'` marca las armas con plantilla de área ("Range: SP"); la forma es una aproximación.
+
+## Cartas de Tactics (`server/data/cards/card_library.json`, v2)
+
+`cardId, name, type: command|attack|response, faction (rasgo requerido), signature (título de firma), effect, effectData, weapon (cartas Attack), source`.
+
+- `source: 'demo'` = cartas de la demo previa; el resto vienen de la wiki comunitaria.
+- Las Response con `trigger: before_attack_roll | after_attack_roll` y `side: attacker | defender` se juegan durante un ataque: `combat.ts` pausa el ataque (`GameState.pendingAttack`) y abre una ventana por jugador (atacante primero). `canPlayResponseCard` (queries.ts, compartido) decide si una carta es jugable.
 
 ---
 
@@ -300,4 +308,13 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - Revisada la página 1 del Q&A oficial y la guía de juego organizado (formato 3 unidades + 9 cartas confirmado); estado en `GAMEPLAN.md`.
 - CLAUDE.md: eliminada la documentación antigua que se había quedado duplicada tras la reescritura.
 - Archivos: `server/src/game/hexGrid.ts`, `client/src/game/hexGrid.ts` (copia), `server/src/game/__tests__/engine.test.ts`, `GAMEPLAN.md`, `CLAUDE.md`.
+
+### 2026-11-13 — Datos de armas reales, cartas de Tactics oficiales y Response durante el ataque
+- **Datos**: coste de TL, alcance y Strength de las armas, tipo de habilidad y coste de Energy de las 15 unidades oficiales tomados de la wiki comunitaria (gundamassemble.wiki.gg) — ya no son provisionales. Armas con alcance "SP" modeladas como plantilla de cono o de flor.
+- **Cartas**: `card_library.json` v2 con 46 cartas oficiales (29 jugables: 3 Attack, 16 Command y 10 Response) + las 18 de la demo.
+- **Motor**: ataque pausable con ventanas de Response antes y después de la tirada (`startAttack` / `continueAttack` / `closeResponseWindow`, `GameState.pendingAttack`); cartas Attack con su propia arma; Response con coste de Energy (pagan si pueden); Hover y Speed temporales de la activación.
+- **Compartido**: `canPlayResponseCard`, `attackTargets`, `checkAttackTargetWith` y `attackableHexesWith` en `queries.ts`.
+- **Cliente**: cartas que piden un enemigo o un hex de destino, Attack con resaltado según su arma, la mano resalta solo las Response jugables, aviso cuando el rival está respondiendo, plantilla de área en el panel de unidad y etiquetas demo / sin implementar en la selección de mazo.
+- **Tests**: 72 (13 nuevos); self-play 200/200 con el bot jugando cartas.
+- Archivos: `server/data/units/unit_library.json`, `server/data/cards/card_library.json`, `server/src/types/{units,tactics,gameState}.ts`, `server/src/game/{combat,actions,effects,queries,catalog,activation,createServerGame}.ts`, `server/src/game/__tests__/engine.test.ts`, `server/scripts/self-play.ts`, `client/src/App.tsx`, `client/src/components/ui/{TacticsHand,UnitPanel}.tsx`, `client/src/screens/SquadSelectionScreen.tsx`, `client/src/api/gameData.ts`, copias compartidas del cliente, `GAMEPLAN.md`, `README.md`.
 

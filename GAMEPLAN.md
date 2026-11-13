@@ -7,7 +7,7 @@ Fuentes oficiales:
 - Reglamento: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/rules/
 - Q&A: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/qa/
 - Unidades: https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/
-- Cartas de Tactics: https://global.bandai-hobby.net/en-us/site/gundam-assemble/tacticscard/ (pendiente de volcar)
+- Cartas de Tactics: https://global.bandai-hobby.net/en-us/site/gundam-assemble/tacticscard/ (bloqueada desde el entorno de desarrollo; datos tomados de la wiki comunitaria https://gundamassemble.wiki.gg — revisar con las cartas físicas)
 - Otras cartas: https://global.bandai-hobby.net/en-us/site/gundam-assemble/othercard/ (pendiente de volcar)
 - Escenarios y material extra: https://global.bandai-hobby.net/en-us/site/gundam-assemble/data/enrich-gameplay/ (pendiente de volcar)
 - Guía de juego organizado (06/11/2026): escuadra de exactamente 3 Mobile Suits + 9 cartas de Tactics en las partidas normales ✅
@@ -73,7 +73,8 @@ Fuentes oficiales:
 - ✅ Push / Pull con colisiones (2 de daño)
 - ✅ Ataques que también alcanzan a los adyacentes al objetivo (una sola tirada)
 - ✅ Derrota: VP al rival, Reserva, +2 TL, HP al máximo, sin estados, conserva Energy y Upgrades
-- ⚠️ **Áreas de efecto con plantilla** (patrón "SP" del Guntank): aproximadas como "objetivo + adyacentes"
+- ✅ **Ventanas de Response durante el ataque**: antes y después de la tirada (primero el atacante, luego el defensor); el ataque se pausa solo si alguien tiene una carta jugable
+- ⚠️ **Plantillas de área "SP"** (Twin Buster Rifle, Quadruple Bop Missile, 240mm Cannon, War Edge): cono = 60° hasta 3 hexes; flor = hex elegido + 6 vecinos. La forma exacta está en el diagrama de la carta
 - ⚠️ **Elección del jugador** en Push/Pull: se toma automáticamente el primer hex válido y siempre la distancia máxima (el Q&A 7 permite elegir mover menos, incluso 0)
 - ✅ Push/Pull hacia un hex más bajo: la unidad cae sin daño (Q&A 10)
 
@@ -85,7 +86,13 @@ Fuentes oficiales:
 - ✅ Cartas Response en el turno del rival (ventana tras daño / rescate / movimiento enemigo)
 - ❌ **RWS** (BIT Stave, Corax, Iśvara) y habilidades que dependen de ellos
 - ❌ **Challenge**, Psycho-Frame Synchrony, Permet Burst, Inspiring Presence, Material Transfer
-- ❌ Cartas de Tactics oficiales (el catálogo actual es el de la demo previa; la página oficial de cartas aún no está volcada)
+- ✅ **46 cartas de Tactics oficiales** (wiki) utilizables con las 15 unidades; **29 jugables**:
+  - Attack: Epic Shot, War Edge, Claiming Vengeance
+  - Command: Ghost Step, Thrust Boosters, Renewed Power, Armor Upgrade, Focus, Armor Shatter, Field Engineers, Salvage Systems, Hero's Might, Shoulder Bash, All In, Psycho-Frame Overload, Interference Pattern, Full System Burn, Critical Rescue, Swift Appropriation
+  - Response en el ataque: Federation Shield, Quick Block, Grunt's Guard, Neutralize, Strikethrough, Limiter Release, Locked On, Breaking Blow, Turn of Fortune, Target Reacquisition
+- ❌ 17 cartas oficiales sin implementar (se pueden llevar en el mazo pero no jugar): las de RWS (BIT, Corax, Iśvara), Challenge/Interception, elección de Upgrade, Vantage Point, Ball Reinforcements, Zaku Ambush Tactics, Protective Shot, Iron-Blooded Tenacity, Three Man Team
+- ❌ 11 cartas omitidas por pertenecer a unidades que aún no están en la lista oficial (GM, Zeong, Rick Dom…)
+- Se conservan las 18 cartas de la demo (marcadas como `demo`)
 
 ## 6b. Q&A oficial revisado (página 1 de 9)
 
@@ -106,7 +113,8 @@ Fuentes oficiales:
 ## 8. Datos
 
 - ✅ Las 15 unidades oficiales (ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos, firma y textos oficiales
-- ⚠️ **Coste de TL, alcance y Strength de las armas, y costes de Energy: PROVISIONALES**. La web oficial solo los muestra en la imagen de la carta. Hay que revisarlos en `server/data/units/unit_library.json` (`provisionalStats: true`)
+- ✅ **Coste de TL, alcance, Strength, tipo de habilidad y coste de Energy** de las 15 unidades tomados de la wiki comunitaria (la web oficial solo los muestra en la imagen de la carta). ⚠️ La wiki tiene erratas en nombres de armas del PA01 y le falta Challenge del Guncannon; conviene revisarlos con las cartas físicas
+- ⚠️ Habilidades Response con coste de Energy (Toss Away, Blitzing Slash, Coordinated Payload, Stunning Shot…) se usan automáticamente si hay Energy; el jugador no puede elegir no usarlas
 - ✅ Se conservan las 6 unidades de la demo (DM01)
 
 ## 9. Multijugador / Red

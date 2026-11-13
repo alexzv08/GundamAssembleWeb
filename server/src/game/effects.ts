@@ -1,6 +1,6 @@
 // Habilidades de unidad (Ongoing / Command / Response automáticas) y cartas de
 // Tactics. Las funciones que reciben `state` lo MUTAN (el llamador clona).
-import type { GameState, PlayerId, HexCoord } from '../types'
+import type { GameState, PlayerId, HexCoord, AbilityEffect } from '../types'
 import type { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
 import { upgradeCount, enemyHexes, moveOptionsFor } from './queries'
@@ -109,17 +109,31 @@ export function triggerAfterDash(state: GameState, unitId: string): void {
 // each enemy it moved adjacent to." `before` = hexes enemigos adyacentes al empezar.
 export function triggerAfterMove(state: GameState, unitId: string, before: Set<string>): void {
     const unit = state.units[unitId]
-    for (const a of unit.abilities) {
-        if (a.abilityData?.type !== 'damage_after_move' || !unit.position) continue
-        for (const n of getNeighbors(unit.position)) {
-            const key = hexKey(n)
-            if (before.has(key)) continue
-            const hex = state.board[key]
-            const isEnemyUnit = hex?.occupiedBy && state.units[hex.occupiedBy]?.playerId !== unit.playerId
-            const isEnemyGarrison = hex?.garrisonToken && hex.garrisonToken.owner !== unit.playerId
-            if (isEnemyUnit || isEnemyGarrison) damageAt(state, key, a.abilityData.amount ?? 1, unit.playerId)
-        }
-    }
+    if (!unit.position || !unit.abilities.some(a => a.abilityData?.type === 'damage_after_move')) return
+    const newly = getNeighbors(unit.position).map(hexKey).filter(key => {
+        if (before.has(key)) return false
+        const hex = state.board[key]
+        const isEnemyUnit = hex?.occupiedBy && state.units[hex.occupiedBy]?.playerId !== unit.playerId
+        const isEnemyGarrison = hex?.garrisonToken && hex.garrisonToken.owner !== unit.playerId
+        return isEnemyUnit || isEnemyGarrison
+    })
+    if (newly.length === 0) return
+    const data = useResponseAbility(state, unitId, 'damage_after_move')
+    if (!data) return
+    for (const key of newly) damageAt(state, key, data.amount ?? 1, unit.playerId)
+}
+
+// Habilidades Response automáticas: se usan cuando se cumple su condición. Si
+// tienen coste de Energy, solo si la unidad puede pagarlo (y lo paga).
+export function useResponseAbility(state: GameState, unitId: string, type: string): AbilityEffect | null {
+    const unit = state.units[unitId]
+    const ability = unit?.abilities.find(a => (a.type === 'RSP' || a.type === 'ONG') && a.abilityData?.type === type)
+    if (!ability?.abilityData) return null
+    const cost = ability.energyCost ?? 0
+    if (unit.energy < cost) return null
+    unit.energy -= cost
+    pushLog(state, unit.playerId, `${unit.name} usa "${ability.name}"${cost ? ` (−${cost} Energy)` : ''}`, 'ability')
+    return ability.abilityData
 }
 
 export function adjacentEnemyKeys(state: GameState, unitId: string): Set<string> {
@@ -421,9 +435,115 @@ export function applyCardEffect(
             return ok
         }
 
+        // ── Cartas Command oficiales ──
+        case 'gain_upgrade':
+            gainUpgrade(state, unitId, effect.upgradeType ?? 'attack', effect.amount ?? 1)
+            return ok
+
+        case 'repair': {
+            unit.currentHp = Math.min(unit.maxHp, unit.currentHp + (effect.amount ?? 0))
+            if (effect.energyIfFull && unit.currentHp === unit.maxHp) unit.energy += effect.energyIfFull
+            return ok
+        }
+
+        case 'energy_if_rescued':
+            if (state.players[playerId].garrisonsRescued < (effect.threshold ?? 3)) {
+                return fail(`Necesitas haber rescatado ${effect.threshold ?? 3} Garrisons`)
+            }
+            unit.energy += effect.amount ?? 2
+            return ok
+
+        case 'status_adjacent':
+        case 'push_adjacent': {
+            if (!unit.position) return fail('La unidad no está en el tablero')
+            const t = targetId ? unitById(state, targetId) : null
+            if (!t?.position || t.playerId === playerId || gridDistance(unit.position, t.position) !== 1) {
+                return fail('Elige un enemigo adyacente')
+            }
+            if (effect.type === 'status_adjacent') addStatus(state, t.id, effect.status ?? 'fracture')
+            else forceMove(state, hexKey(unit.position), t.id, effect.amount ?? 2, 'push', playerId)
+            return ok
+        }
+
+        case 'free_attack': {
+            const idx = unit.weapons.findIndex(w => w.name === effect.weapon)
+            if (idx === -1) return fail(`La unidad no tiene ${effect.weapon}`)
+            state.activation?.freeAttacks.push(idx)
+            return ok
+        }
+
+        case 'damage_per_own_upgrade': {
+            const t = targetId ? unitById(state, targetId) : null
+            if (!unit.position || !t?.position || t.playerId === playerId) return fail('Elige un enemigo')
+            if (gridDistance(unit.position, t.position) > (effect.range ?? 2)) return fail(`Fuera de alcance (${effect.range ?? 2})`)
+            const blockers = enemyHexes(state, playerId)
+            blockers.delete(hexKey(t.position))
+            if (gridDistance(unit.position, t.position) > 1 && !checkLineOfSight(unit.position, t.position, state.board, blockers).clear) {
+                return fail('Sin línea de visión')
+            }
+            damageUnit(state, t.id, unit.upgrades.length)
+            return ok
+        }
+
+        case 'aoe_status': {
+            if (!unit.position) return fail('La unidad no está en el tablero')
+            if (effect.requiresActiveTrait && !unit.traits.includes(effect.requiresActiveTrait)) {
+                return fail(`La unidad activa debe tener el rasgo ${effect.requiresActiveTrait}`)
+            }
+            for (const enemy of Object.values(state.units)) {
+                if (enemy.playerId !== playerId && enemy.position && gridDistance(unit.position, enemy.position) <= (effect.range ?? 3)) {
+                    addStatus(state, enemy.id, effect.status ?? 'disarm')
+                }
+            }
+            return ok
+        }
+
+        case 'activation_move_buff': {
+            if (effect.requiresActiveTrait && !unit.traits.includes(effect.requiresActiveTrait)) {
+                return fail(`La unidad activa debe tener el rasgo ${effect.requiresActiveTrait}`)
+            }
+            if (state.activation) {
+                state.activation.speedBonus += effect.amount ?? 0
+                if (effect.hover) state.activation.hover = true
+            }
+            return ok
+        }
+
+        case 'move':
+            return abilityMove(state, unitId, effect.amount ?? 2, targetHex)
+
+        case 'move_and_rescue': {
+            // "Moves 5. After it ends its movement, it Rescues each allied Garrison it moved adjacent to."
+            const before = new Set(Object.entries(state.board)
+                .filter(([, h]) => h.garrisonToken?.owner === playerId && unit.position && gridDistance(h.coord, unit.position) <= 1)
+                .map(([k]) => k))
+            const res = abilityMove(state, unitId, effect.amount ?? 5, targetHex)
+            if (!res.success) return res
+            const pos = state.units[unitId].position!
+            for (const [k, h] of Object.entries(state.board)) {
+                if (h.garrisonToken?.owner === playerId && gridDistance(h.coord, pos) <= 1 && !before.has(k)) rescueGarrison(state, unitId, k)
+            }
+            return ok
+        }
+
+        case 'steal_upgrade': {
+            // "takes an [Energy] and 1 Upgrade from a unit within [Range 3]"
+            const t = targetId ? unitById(state, targetId) : null
+            if (!unit.position || !t?.position || t.id === unitId) return fail('Elige otra unidad')
+            if (gridDistance(unit.position, t.position) > (effect.range ?? 3)) return fail(`Fuera de alcance (${effect.range ?? 3})`)
+            if (t.energy > 0) { t.energy -= 1; unit.energy += 1 }
+            const up = t.upgrades.shift()
+            if (up) unit.upgrades.push(up.type === 'shield' ? { ...up, active: true } : up)
+            return ok
+        }
+
         default:
             return fail('Efecto de carta no implementado')
     }
+}
+
+function unitById(state: GameState, id: string) {
+    return state.units[id] ?? null
 }
 
 // ─── CARTAS RESPONSE ──────────────────────────────────────────────────────────

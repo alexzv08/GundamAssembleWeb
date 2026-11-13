@@ -6,13 +6,15 @@ import type { GameState, GameAction, PlayerId, HexCoord } from '../types'
 import { hexKey, findPath, gridDistance, getNeighbors } from './hexGrid'
 import { advanceToken } from './timeline'
 import {
-    moveOptionsFor, checkAttackTarget, targetAt, baseOwnerAt, reachableFor,
+    moveOptionsFor, checkAttackTarget, checkAttackTargetWith, targetAt, baseOwnerAt, reachableFor,
 } from './queries'
 import { cloneState, pushLog } from './damage'
-import { resolveAttack, rollD10, type Rng } from './combat'
+import {
+    startAttack, rollD10, closeResponseWindow, isAttackResponse, canPlayAttackResponse, applyAttackResponse, type Rng,
+} from './combat'
 import {
     applyCommandAbility, applyCardEffect, applyResponseCardEffect, collectTokens,
-    triggerAfterDash, triggerAfterMove, adjacentEnemyKeys, rescueGarrison, hasAbilityType,
+    triggerAfterDash, triggerAfterMove, adjacentEnemyKeys, rescueGarrison,
 } from './effects'
 import { contestObjectives } from './victory'
 import { endActivation } from './activation'
@@ -181,8 +183,7 @@ function attackAt(
     const s = cloneState(state)
     const act = s.activation!
     const freeIdx = act.freeAttacks.indexOf(weaponIndex)
-    const free = freeIdx !== -1
-    if (free) act.freeAttacks.splice(freeIdx, 1)
+    if (freeIdx !== -1) act.freeAttacks.splice(freeIdx, 1)
     else {
         const e = takePrimary(s)
         if (e) return fail(e)
@@ -191,30 +192,11 @@ function attackAt(
     if (weapon.energyCost) s.units[unitId].energy -= weapon.energyCost
 
     const target = targetAt(s, targetKey, playerId)!
-    const targetName = target.kind === 'unit' ? s.units[target.id].name : 'una Garrison'
-    const report = resolveAttack(s, unitId, weapon, targetKey, rng)
     act.attacksMade.push(weaponIndex)
-
-    const main = report.targets[0]
-    pushLog(s, playerId,
-        `${unit.name} atacó a ${targetName} con ${weapon.name} [${report.rolls.join(', ')}]` +
-        (main ? ` — ${main.hits} impactos, ${main.damage} de daño` : ''),
-        'attack', [hexKey(unit.position!), targetKey])
     s.actionLog.push(target.kind === 'unit'
         ? { type: 'ATTACK', unitId, weaponIndex, targetId: target.id }
         : { type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId: target.id })
-
-    // Ventana Response del defensor tras el daño (si su unidad sigue en el tablero)
-    // Newtype Destroyer: los enemigos no pueden usar Response mientras esta unidad ataca.
-    const blocked = hasAbilityType(s, unitId, 'block_enemy_responses') !== null
-    if (!blocked && target.kind === 'unit' && s.units[target.id].position && s.units[unitId].position) {
-        const defender = s.units[target.id].playerId
-        const hasCard = s.players[defender].tactics.hand.some(c =>
-            c.type === 'response' && c.effectData?.trigger === 'after_combat_damage')
-        if (hasCard) {
-            s.pendingResponse = { trigger: 'after_combat_damage', forPlayerId: defender, attackerUnitId: unitId, defenderUnitId: target.id }
-        }
-    }
+    startAttack(s, unitId, weapon, targetKey, rng)
     return { success: true, newState: s }
 }
 
@@ -272,7 +254,7 @@ export function applyUseAbility(
 
 export function applyPlayCard(
     state: GameState, unitId: string, cardId: string, playerId: PlayerId,
-    targetId?: string, targetHex?: HexCoord,
+    targetId?: string, targetHex?: HexCoord, rng: Rng = rollD10,
 ): ActionResult {
     const err = validateTurn(state, unitId, playerId)
     if (err) return fail(err)
@@ -284,15 +266,28 @@ export function applyPlayCard(
     if (card.signature && card.signature !== state.units[unitId].signature) {
         return fail(`Solo la unidad "${card.signature}" puede jugar esta carta`)
     }
-    if (!card.effectData) return fail(`"${card.name}" aún no está implementada`)
+    if (!card.effectData && card.type !== 'attack') return fail(`"${card.name}" aún no está implementada`)
 
     const s = cloneState(state)
+    let attackKey: string | null = null
     if (card.type === 'attack') {
+        // Carta Attack: sustituye al ataque primario y ataca con el arma de la carta.
+        if (!card.weapon) return fail(`"${card.name}" no tiene arma definida`)
         const e = takePrimary(s)
         if (e) return fail(e)
+        const unitPos = s.units[unitId].position
+        if (!unitPos) return fail('La unidad está en la Reserva')
+        const target = targetId ? s.units[targetId] : null
+        attackKey = target?.position ? hexKey(target.position)
+            : Object.entries(s.board).find(([, h]) => h.garrisonToken?.id === targetId)?.[0] ?? null
+        if (!attackKey) return fail('Elige un objetivo para el ataque')
+        const check = checkAttackTargetWith(s, unitId, card.weapon, attackKey)
+        if (!check.ok) return fail(check.reason!)
+        s.timeline = advanceToken(s.timeline, unitId, card.weapon.tlCost)
+    } else {
+        const res = applyCardEffect(s, playerId, unitId, card.effectData!, targetId, targetHex)
+        if (!res.success) return fail(res.error!)
     }
-    const res = applyCardEffect(s, playerId, unitId, card.effectData, targetId, targetHex)
-    if (!res.success) return fail(res.error!)
     if (card.tlCost) s.timeline = advanceToken(s.timeline, unitId, card.tlCost)
     const tactics = s.players[playerId].tactics
     tactics.hand = tactics.hand.filter(c => c.id !== cardId)
@@ -300,6 +295,7 @@ export function applyPlayCard(
     s.activation!.cardPlayed = true
     s.actionLog.push({ type: 'PLAY_CARD', unitId, cardId, targetId, targetHex })
     pushLog(s, playerId, `${s.players[playerId].name} jugó "${card.name}"`, 'card')
+    if (attackKey && card.weapon) startAttack(s, unitId, card.weapon, attackKey, rng)
     return { success: true, newState: s }
 }
 
@@ -333,25 +329,32 @@ export function applyPlayResponse(state: GameState, cardId: string, playerId: Pl
     const card = state.players[playerId].tactics.hand.find(c => c.id === cardId)
     if (!card) return fail('La carta no está en tu mano')
     if (card.type !== 'response') return fail('Solo puedes usar cartas Response')
-    if (card.effectData?.trigger !== pending.trigger) return fail('Esta carta no responde a lo que acaba de pasar')
+    if (!card.effectData || card.effectData.trigger !== pending.trigger) return fail('Esta carta no responde a lo que acaba de pasar')
 
     const s = cloneState(state)
-    const res = applyResponseCardEffect(s, playerId, card.effectData, pending, rng)
-    if (!res.success) return fail(res.error!)
+    if (isAttackResponse(card.effectData)) {
+        if (!canPlayAttackResponse(s, playerId, card, pending.trigger)) return fail('No cumples las condiciones de esta carta')
+        const err = applyAttackResponse(s, playerId, card, rng)
+        if (err) return fail(err)
+    } else {
+        const res = applyResponseCardEffect(s, playerId, card.effectData, pending, rng)
+        if (!res.success) return fail(res.error!)
+    }
     const tactics = s.players[playerId].tactics
     tactics.hand = tactics.hand.filter(c => c.id !== cardId)
     tactics.discarded.push(card)
-    s.pendingResponse = null
+    if (playerId === s.activePlayerId && s.activation) s.activation.cardPlayed = true
     s.actionLog.push({ type: 'PLAY_RESPONSE', cardId })
     pushLog(s, playerId, `${s.players[playerId].name} respondió con "${card.name}"`, 'card')
+    closeResponseWindow(s, rng)
     return { success: true, newState: s }
 }
 
-export function applyPassResponse(state: GameState, playerId: PlayerId): ActionResult {
+export function applyPassResponse(state: GameState, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
     if (!state.pendingResponse || state.pendingResponse.forPlayerId !== playerId) return fail('No hay ventana de respuesta para ti')
     const s = cloneState(state)
-    s.pendingResponse = null
     pushLog(s, playerId, `${s.players[playerId].name} no responde`, 'card')
+    closeResponseWindow(s, rng)
     return { success: true, newState: s }
 }
 
@@ -366,10 +369,10 @@ export function applyAction(state: GameState, action: GameAction, playerId: Play
         case 'ENERGIZE': return applyEnergize(state, action.unitId, playerId)
         case 'RESCUE': return applyRescue(state, action.unitId, action.garrisonId, playerId)
         case 'USE_ABILITY': return applyUseAbility(state, action.unitId, action.abilityIndex, playerId, action.targetId, action.targetHex, rng)
-        case 'PLAY_CARD': return applyPlayCard(state, action.unitId, action.cardId, playerId, action.targetId, action.targetHex)
+        case 'PLAY_CARD': return applyPlayCard(state, action.unitId, action.cardId, playerId, action.targetId, action.targetHex, rng)
         case 'END_ACTIVATION': return applyEndActivation(state, action.unitId, playerId)
         case 'PLAY_RESPONSE': return applyPlayResponse(state, action.cardId, playerId, rng)
-        case 'PASS_RESPONSE': return applyPassResponse(state, playerId)
+        case 'PASS_RESPONSE': return applyPassResponse(state, playerId, rng)
         default: return fail('Acción desconocida')
     }
 }

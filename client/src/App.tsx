@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
 import { hexKey, gridDistance } from './game/hexGrid'
-import { reachableFor, attackableHexes as calcAttackableHexes } from './game/queries'
+import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard } from './game/queries'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
 import { UnitPanel } from './components/ui/UnitPanel'
@@ -38,7 +38,7 @@ const socket: Socket = io(import.meta.env.VITE_SERVER_URL as string, {
   },
 })
 
-type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'ability_hex' | 'playing_card'
+type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'ability_hex' | 'playing_card' | 'card_hex'
 type AppScreen = 'auth' | 'lobby' | 'waiting' | 'squad_selection' | 'setup' | 'playing'
 
 export default function App() {
@@ -413,8 +413,23 @@ export default function App() {
       }
     }
 
+    if (selectionMode === 'playing_card' && pendingCardId && attackableHexes.has(key)) {
+      const hex = gameState.board[key]
+      if (hex?.garrisonToken && hex.garrisonToken.owner !== myPlayerId) {
+        socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId: selectedUnitId, cardId: pendingCardId, targetId: hex.garrisonToken.id } })
+        clearSelection()
+        return
+      }
+    }
+
     if (!reachableHexes.has(key)) return
     const [q, r] = key.split(',').map(Number)
+
+    if (selectionMode === 'card_hex' && pendingCardId) {
+      socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId: selectedUnitId, cardId: pendingCardId, targetHex: { q, r } } })
+      clearSelection()
+      return
+    }
 
     if (selectionMode === 'ability_hex' && pendingAbilityIndex !== null) {
       socket.emit('GAME_ACTION', { action: { type: 'USE_ABILITY', unitId: selectedUnitId, abilityIndex: pendingAbilityIndex, targetHex: { q, r } } })
@@ -431,7 +446,7 @@ export default function App() {
       setReachableHexes(new Set())
       setSelectionMode('none')
     }
-  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, clearSelection])
+  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, clearSelection])
 
   const handleAttackMode = useCallback((weaponIndex: number) => {
     if (!gameState || !selectedUnitId) return
@@ -502,32 +517,50 @@ export default function App() {
 
     const card = gameState.players[myPlayerId].tactics.hand.find(c => c.id === cardId)
     if (!card) return
-    if (!card.effectData) { setMessage(`"${card.name}" no está implementada aún`); return }
-
-    const needsTarget = card.effectData.type === 'destroy_upgrade_and_slow' ||
-                        card.effectData.type === 'destroy_upgrade_and_fracture' ||
-                        card.effectData.type === 'move_and_push'
     if (gameState.activation?.cardPlayed) { setMessage('Ya jugaste una carta en esta activación'); return }
+    if (card.signature && card.signature !== unit.signature) { setMessage(`Solo "${card.signature}" puede jugar esta carta`); return }
 
-    if (needsTarget) {
-      const enemyHexes = new Set(
-        Object.values(gameState.units)
-          .filter(u => u.playerId !== myPlayerId && u.currentHp > 0 && u.position)
-          .map(u => hexKey(u.position!))
-      )
-      if (enemyHexes.size === 0) { setMessage('No hay enemigos en el tablero'); return }
+    const startTargeting = (hexes: Set<string>, mode: SelectionMode, what: string) => {
+      if (hexes.size === 0) { setMessage(`${card.name}: no hay ${what} válidos`); return }
       setSelectedUnitId(unitId)
       setPendingCardId(cardId)
-      setSelectionMode('playing_card')
-      setAttackableHexes(enemyHexes)
-      setReachableHexes(new Set())
-      setMessage(`${card.name} — Selecciona un objetivo enemigo`)
+      setSelectionMode(mode)
+      setAttackableHexes(mode === 'card_hex' ? new Set() : hexes)
+      setReachableHexes(mode === 'card_hex' ? hexes : new Set())
+      setMessage(`${card.name} — elige ${what}`)
+    }
+
+    // Carta Attack: objetivos según el arma de la carta
+    if (card.type === 'attack') {
+      if (!card.weapon) { setMessage(`"${card.name}" no está implementada aún`); return }
+      if (gameState.hasUsedPrimaryAction) { setMessage('Las cartas Attack sustituyen al ataque primario, que ya usaste'); return }
+      startTargeting(new Set(attackableHexesWith(gameState, unitId, card.weapon)), 'playing_card', 'un objetivo')
+      return
+    }
+    const e = card.effectData
+    if (!e) { setMessage(`"${card.name}" no está implementada aún`); return }
+
+    // Cartas que necesitan un enemigo
+    const enemyTarget: Record<string, number> = {
+      destroy_upgrade_and_slow: e.range ?? 3, destroy_upgrade_and_fracture: e.range ?? 3, move_and_push: 3,
+      status_adjacent: 1, push_adjacent: 1, damage_per_own_upgrade: e.range ?? 2, steal_upgrade: e.range ?? 3,
+    }
+    if (e.type in enemyTarget && unit.position) {
+      const range = enemyTarget[e.type]
+      startTargeting(new Set(Object.values(gameState.units)
+        .filter(u => u.playerId !== myPlayerId && u.position && gridDistance(unit.position!, u.position) <= range)
+        .map(u => hexKey(u.position!))), 'playing_card', 'un enemigo')
+      return
+    }
+    // Cartas de movimiento: elegir el hex de destino
+    if (e.type === 'move' || e.type === 'move_and_rescue') {
+      startTargeting(calcReachable(unitId, gameState, 'move', e.amount ?? 2), 'card_hex', 'el hex de destino')
       return
     }
 
     socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId, cardId } })
     setMessage(`Carta jugada: ${card.name}`)
-  }, [gameState, selectedUnitId, myPlayerId])
+  }, [gameState, selectedUnitId, myPlayerId, calcReachable])
 
   const handlePassResponse = useCallback(() => {
     socket.emit('GAME_ACTION', { action: { type: 'PASS_RESPONSE' } })
@@ -699,7 +732,7 @@ export default function App() {
         gameState={gameState}
         myPlayerId={myPlayerId}
         isMyTurn={isMyTurn}
-        message={message}
+        message={gameState.pendingResponse && gameState.pendingResponse.forPlayerId !== myPlayerId ? 'Esperando la respuesta del rival…' : message}
         diceResult={diceResult}
       />
 
@@ -806,6 +839,7 @@ export default function App() {
               deckCount={gameState.players[myPlayerId].tactics.deck.length}
               onPlayCard={handlePlayCard}
               pendingResponseTrigger={gameState.pendingResponse?.forPlayerId === myPlayerId ? gameState.pendingResponse.trigger : null}
+              canRespond={c => canPlayResponseCard(gameState, myPlayerId, c)}
               onPassResponse={handlePassResponse}
               cardPlayed={gameState.activation?.cardPlayed ?? false}
             />

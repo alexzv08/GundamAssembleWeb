@@ -21,7 +21,7 @@ export interface UnitCardJSON {
 
 interface TacticsCardJSON {
     cardId: string; name: string; type: string; faction: string; signature?: string; tlCost?: number
-    effect: string; effectData?: TacticsCard['effectData']
+    effect: string; effectData?: TacticsCard['effectData']; weapon?: Weapon; source?: string
 }
 
 const DATA_DIR = path.join(__dirname, '../../data')
@@ -41,6 +41,8 @@ export function loadTacticsCatalog(): TacticsCard[] {
         tlCost: c.tlCost,
         effect: c.effect,
         effectData: c.effectData ?? null,
+        weapon: c.weapon,
+        source: c.source,
     }))
 }
 

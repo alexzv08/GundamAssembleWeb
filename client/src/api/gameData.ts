@@ -51,6 +51,9 @@ export interface TacticsCardData {
     faction: string
     signature?: string
     effect: string
+    effectData?: unknown
+    weapon?: { tlCost: number; range: number; strength: number }
+    source?: string
 }
 
 // ─── FETCHERS ─────────────────────────────────────────────────────────────────

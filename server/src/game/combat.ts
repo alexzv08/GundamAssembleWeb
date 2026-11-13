@@ -1,21 +1,31 @@
 // Resolución de un ataque según "Attack Timing and Responses" (Core Rulebook v1.2):
 //  1-3. Declarar, comprobar alcance/LoS (lo hace el llamador) y pagar TL.
-//  4.   Efectos "Before Attack Roll" (p.ej. Pull).
+//  4.   Efectos "Before Attack Roll" (p.ej. Pull) y ventana de Response.
 //  5.   Tirar tantos d10 como Strength (arma + modificadores).
-//  6.   Efectos "After Attack Roll" (desactivar Shields, destruir Upgrade…);
-//       Disarm: se repiten todos los dados que son impacto y no hay efectos de crit.
+//  6.   Ventana de Response "After Attack Roll"; Disarm: se repiten los impactos
+//       y no hay efectos de crit.
 //  7.   Efectos de crítico (una sola vez por ataque).
-//  8.   Daño = impactos (+ Damage+X) − Shields; Fracture; derrota si HP 0.
-//  9.   Efectos "After Combat Damage".
+//  8.   Daño = impactos (+ Damage+X − reducciones) − Shields; Fracture; derrota.
+//  9.   Efectos "After Combat Damage" y su ventana de Response.
+// En cada ventana responde primero el atacante y después el defensor. El
+// ataque queda guardado en `state.pendingAttack` mientras una ventana está
+// abierta y se reanuda con `closeResponseWindow`.
 // Precisión: cada punto de Accuracy suma/resta al valor del dado, salvo 1 (fallo
 // siempre) y 9-10 (crit siempre). Impacta con 4 o más.
 // MUTA `state` (el llamador clona).
-import type { GameState, AttackReport, Weapon, WeaponEffect } from '../types'
+import type {
+    GameState, AttackReport, Weapon, WeaponEffect, PlayerId, PendingAttack, PendingResponse, TacticsCard, ResponseTrigger,
+} from '../types'
+import type { CardEffect } from '../types/tactics'
 import { hexKey, keyToHex, gridDistance, findPath } from './hexGrid'
-import { terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, type TargetRef } from './queries'
+import {
+    terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer,
+    attackDefenders, canPlayResponseCard, type TargetRef,
+} from './queries'
 import { damageUnit, destroyGarrison, forceMove, pushLog } from './damage'
-import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, hasAbilityType } from './effects'
+import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, useResponseAbility, hasAbilityType } from './effects'
 import { advanceToken } from './timeline'
+import { captureObjective } from './victory'
 
 export type Rng = () => number   // devuelve un d10 (1–10)
 
@@ -35,157 +45,237 @@ function isCritEffect(e: WeaponEffect | null | undefined, timing: 'roll' | 'dama
     return timing === 'damage' ? afterDamage : !afterDamage
 }
 
-export function resolveAttack(
-    state: GameState,
-    attackerId: string,
-    weapon: Weapon,
-    primaryKey: string,
-    rng: Rng,
+function refs(state: GameState, pa: PendingAttack): TargetRef[] {
+    const player = state.units[pa.attackerId].playerId
+    return pa.targetKeys.map(k => targetAt(state, k, player)).filter((t): t is TargetRef => t !== null)
+}
+
+function accuracyFor(state: GameState, pa: PendingAttack, key: string): number {
+    const attacker = state.units[pa.attackerId]
+    const primary = targetAt(state, pa.primaryKey, attacker.playerId)
+    const mods = getAttackModifiers(state, pa.attackerId, pa.weapon.name, primary?.kind === 'unit' ? primary.id : null)
+    const terrain = attacker.position ? terrainAccuracy(state.board, attacker.position, keyToHex(key)) : 0
+    return mods.accuracyBonus + pa.bonusAccuracy + terrain
+}
+
+export function primaryAccuracy(state: GameState): number {
+    const pa = state.pendingAttack!
+    return accuracyFor(state, pa, pa.primaryKey)
+}
+
+// ─── INICIO ───────────────────────────────────────────────────────────────────
+
+export function startAttack(
+    state: GameState, attackerId: string, weapon: Weapon, primaryKey: string, rng: Rng,
     opts: { isRepeat?: boolean } = {},
-): AttackReport {
+): void {
     const attacker = state.units[attackerId]
     const player = attacker.playerId
     const effect = weapon.effectData
-    const crit = weapon.critData
+    let key = primaryKey
 
-    // ── Objetivos ──
-    const primary = targetAt(state, primaryKey, player)!
-    let targets: TargetRef[] = [primary]
-    if (effect?.type === 'also_target_adjacent') {
-        targets = [primary, ...enemiesAdjacentTo(state, primaryKey, player)]
-    }
-
-    // ── 4. Before Attack Roll ──
-    if (effect?.trigger === 'before_attack_roll' && primary.kind === 'unit' && attacker.position) {
-        if (effect.type === 'pull' || effect.type === 'push') {
-            forceMove(state, hexKey(attacker.position), primary.id, effect.amount ?? 1, effect.type, player)
-        }
-        // refrescar la clave del objetivo si se ha movido
+    // 4. Before Attack Roll del arma (Pull / Push al objetivo principal)
+    const primary = targetAt(state, key, player)
+    if (effect?.trigger === 'before_attack_roll' && primary?.kind === 'unit' && attacker.position &&
+        (effect.type === 'pull' || effect.type === 'push')) {
+        forceMove(state, hexKey(attacker.position), primary.id, effect.amount ?? 1, effect.type, player)
         const moved = state.units[primary.id]
-        if (moved?.position) primary.key = hexKey(moved.position)
-        targets = targets.filter(t => t.kind !== 'unit' || state.units[t.id]?.position)
+        if (moved?.position) key = hexKey(moved.position)
     }
 
-    // ── 5. Tirada ──
-    const mods = getAttackModifiers(state, attackerId, weapon.name, primary.kind === 'unit' ? primary.id : null)
-    let strength = weapon.strength + mods.strengthBonus
+    state.pendingAttack = {
+        attackerId, weapon, primaryKey: key,
+        targetKeys: attackTargets(state, attackerId, weapon, key).map(t => t.key),
+        stage: 'before_roll', isRepeat: !!opts.isRepeat,
+        bonusStrength: 0, bonusAccuracy: 0, bonusDamage: 0, reductions: {}, destroyTargetUpgrades: false,
+        rolls: [], rerolled: [], disarmed: false, critThreshold: 9, queue: [],
+    }
+    if (!opts.isRepeat && openAttackWindows(state, 'before_attack_roll')) return
+    continueAttack(state, rng)
+}
+
+// Avanza el ataque pendiente hasta la siguiente ventana de Response o hasta el final.
+export function continueAttack(state: GameState, rng: Rng): void {
+    const pa = state.pendingAttack
+    if (!pa) return
+    if (pa.stage === 'before_roll') {
+        rollDice(state, pa, rng)
+        pa.stage = 'after_roll'
+        if (!pa.isRepeat && openAttackWindows(state, 'after_attack_roll')) return
+    }
+    finishAttack(state, rng)
+}
+
+// ─── 5-6. TIRADA ──────────────────────────────────────────────────────────────
+
+function rollDice(state: GameState, pa: PendingAttack, rng: Rng): void {
+    const attacker = state.units[pa.attackerId]
+    const weapon = pa.weapon
+    const effect = weapon.effectData
+    const primary = targetAt(state, pa.primaryKey, attacker.playerId)
+    const mods = getAttackModifiers(state, pa.attackerId, weapon.name, primary?.kind === 'unit' ? primary.id : null)
+
+    let strength = weapon.strength + mods.strengthBonus + pa.bonusStrength
     if (effect?.type === 'strength_per_upgrade') strength += upgradeCount(attacker, (effect.upgradeType ?? 'any') as 'attack' | 'movement' | 'shield' | 'any')
-    const rolls: number[] = Array.from({ length: Math.max(0, strength) }, rng)
-    const rerolled: number[] = []
+    const nearbyAllies = (range: number) => attacker.position
+        ? Object.values(state.units).filter(u => u.id !== attacker.id && u.playerId === attacker.playerId && u.position &&
+            gridDistance(attacker.position!, u.position) <= range).length
+        : 0
+    if (effect?.type === 'strength_per_ally') strength += (effect.amount ?? 2) * nearbyAllies(effect.max ?? 3)
+    // Coordinated Payload (Response con coste de Energy): se usa si hay Energy
+    const payload = useResponseAbility(state, pa.attackerId, 'strength_per_ally_nearby')
+    if (payload) strength += (payload.amount ?? 2) * nearbyAllies(payload.range ?? 3)
 
-    const accFor = (t: TargetRef) => {
-        const to = keyToHex(t.key)
-        return mods.accuracyBonus + (attacker.position ? terrainAccuracy(state.board, attacker.position, to) : 0)
-    }
-    const primaryAcc = accFor(primary)
+    pa.rolls = Array.from({ length: Math.max(0, strength) }, rng)
+    pa.critThreshold = mods.critThreshold
+    const acc = accuracyFor(state, pa, pa.primaryKey)
 
-    // Reroll de fallos (habilidades Ongoing)
     if (mods.rerollMisses > 0) {
         let left = mods.rerollMisses
-        for (let i = 0; i < rolls.length && left > 0; i++) {
-            if (!isHit(rolls[i], primaryAcc, mods.critThreshold)) { rolls[i] = rng(); rerolled.push(i); left-- }
+        for (let i = 0; i < pa.rolls.length && left > 0; i++) {
+            if (!isHit(pa.rolls[i], acc, pa.critThreshold)) { pa.rolls[i] = rng(); pa.rerolled.push(i); left-- }
         }
     }
 
-    // ── 6. Disarm: repetir todos los impactos, sin efectos de crit ──
-    const disarmed = attacker.statusEffects.some(e => e.type === 'disarm')
-    if (disarmed) {
-        for (let i = 0; i < rolls.length; i++) {
-            if (isHit(rolls[i], primaryAcc, mods.critThreshold)) { rolls[i] = rng(); rerolled.push(i) }
+    pa.disarmed = attacker.statusEffects.some(e => e.type === 'disarm')
+    if (pa.disarmed) {
+        for (let i = 0; i < pa.rolls.length; i++) {
+            if (isHit(pa.rolls[i], acc, pa.critThreshold)) { pa.rolls[i] = rng(); pa.rerolled.push(i) }
         }
         attacker.statusEffects = attacker.statusEffects.filter(e => e.type !== 'disarm')
-        pushLog(state, player, `${attacker.name} está Disarmed: repite sus impactos y no puede hacer críticos`, 'attack')
+        pushLog(state, attacker.playerId, `${attacker.name} está Disarmed: repite sus impactos y no puede hacer críticos`, 'attack')
     }
 
-    const critCount = rolls.filter(r => r >= mods.critThreshold).length
-    const critTriggered = critCount > 0 && !disarmed
-
-    // Crit "Roll N additional dice"
-    if (critTriggered && crit?.type === 'extra_dice') {
-        for (let i = 0; i < (crit.amount ?? 2); i++) rolls.push(rng())
+    // Crit "Roll N additional dice" (los dados extra no vuelven a activar el crit, Q&A 13)
+    const crit = weapon.critData
+    if (!pa.disarmed && crit?.type === 'extra_dice' && pa.rolls.some(r => r >= pa.critThreshold)) {
+        for (let i = 0; i < (crit.amount ?? 2); i++) pa.rolls.push(rng())
     }
+}
 
-    // ── 6b. After Attack Roll (efecto del arma y bonos de la activación) ──
-    const primaryUnit = primary.kind === 'unit' ? state.units[primary.id] : null
+// ─── 6b-9. EFECTOS, DAÑO Y FINAL ─────────────────────────────────────────────
+
+function finishAttack(state: GameState, rng: Rng): void {
+    const pa = state.pendingAttack!
+    const attacker = state.units[pa.attackerId]
+    const player = attacker.playerId
+    const weapon = pa.weapon
+    const effect = weapon.effectData
+    const crit = weapon.critData
+    const critTriggered = !pa.disarmed && pa.rolls.some(r => r >= pa.critThreshold)
+    let primary = targetAt(state, pa.primaryKey, player)
+    const primaryUnit = primary?.kind === 'unit' ? state.units[primary.id] : null
+
+    // 6b. After Attack Roll del arma y de la activación
     if (primaryUnit) {
-        if (effect?.trigger === 'after_attack_roll') applyOnTarget(state, attackerId, primary.id, effect)
-        if (state.activation?.unitId === attackerId && state.activation.destroyUpgradeOnHit) {
-            destroyUpgrade(state, primary.id, 'any', 1)
+        if (effect?.trigger === 'after_attack_roll') applyOnTarget(state, pa.attackerId, primaryUnit.id, effect)
+        if (state.activation?.unitId === pa.attackerId && state.activation.destroyUpgradeOnHit) destroyUpgrade(state, primaryUnit.id, 'any', 1)
+    }
+    if (pa.destroyTargetUpgrades) for (const t of refs(state, pa)) if (t.kind === 'unit') destroyUpgrade(state, t.id, 'any', 1)
+    if (effect?.type === 'capture_objective_near_target') {
+        const center = keyToHex(pa.primaryKey)
+        for (const [k, h] of Object.entries(state.board)) {
+            if (h.objectiveToken && gridDistance(h.coord, center) <= 1) captureObjective(state, k, player)
         }
     }
     // Toss Away: "[After Attack Roll] If this unit is attacking, it Pushes 2 the target."
-    const toss = hasAbilityType(state, attackerId, 'push_on_attack')
-    if (toss !== null && primaryUnit?.position && attacker.position) {
-        forceMove(state, hexKey(attacker.position), primary.id, toss, 'push', player)
-        if (state.units[primary.id].position) primary.key = hexKey(state.units[primary.id].position!)
+    const toss = primaryUnit?.position && attacker.position ? useResponseAbility(state, pa.attackerId, 'push_on_attack') : null
+    if (toss && primaryUnit && attacker.position) {
+        forceMove(state, hexKey(attacker.position), primaryUnit.id, toss.amount ?? 2, 'push', player)
+        if (state.units[primaryUnit.id].position) pa.primaryKey = hexKey(state.units[primaryUnit.id].position!)
     }
-    if (effect?.type === 'move_toward_target' && attacker.position) {
-        stepToward(state, attackerId, primary.key, effect.amount ?? 1)
-    }
+    if (effect?.type === 'move_toward_target' && attacker.position) stepToward(state, pa.attackerId, pa.primaryKey, effect.amount ?? 1)
 
-    // ── 7. Efectos de crítico previos al daño ──
-    if (critTriggered && crit && isCritEffect(crit, 'roll') && primaryUnit) {
-        applyOnTarget(state, attackerId, primary.id, crit)
-    }
+    // 7. Crit previo al daño
+    primary = targetAt(state, pa.primaryKey, player)
+    if (critTriggered && crit && isCritEffect(crit, 'roll') && primary?.kind === 'unit') applyOnTarget(state, pa.attackerId, primary.id, crit)
 
-    // ── 8. Daño ──
-    const report: AttackReport = { attackerId, weaponName: weapon.name, rolls: [...rolls], rerolled, targets: [] }
+    // 8. Daño
+    const report: AttackReport = { attackerId: pa.attackerId, weaponName: weapon.name, rolls: [...pa.rolls], rerolled: pa.rerolled, targets: [] }
+    const actBonus = state.activation?.unitId === pa.attackerId ? state.activation.damageBonus : 0
+    // los objetivos empujados se siguen por id
+    const targets = pa.targetKeys.map(k => targetAt(state, k, player)).filter((t): t is TargetRef => t !== null)
+    if (primary && !targets.some(t => t.id === primary!.id)) targets.unshift(primary)
     for (const t of targets) {
-        const acc = t === primary ? primaryAcc : accFor(t)
-        const hits = rolls.filter(r => isHit(r, acc, mods.critThreshold)).length
-        const crits = rolls.filter(r => r >= mods.critThreshold).length
+        const acc = accuracyFor(state, pa, t.key)
+        const hits = pa.rolls.filter(r => isHit(r, acc, pa.critThreshold)).length
+        const crits = pa.rolls.filter(r => r >= pa.critThreshold).length
         if (t.kind === 'garrison') {
             const destroyed = hits > 0 && destroyGarrison(state, t.key, player)
             report.targets.push({ id: t.id, kind: 'garrison', hits, crits, damage: hits > 0 ? 1 : 0, defeated: destroyed })
             continue
         }
         let damage = hits
-        if (hits > 0 || critTriggered) damage += bonusDamage(state, attackerId, weapon, critTriggered, crits, t)
+        if (hits > 0 || critTriggered) damage += bonusDamage(state, pa.attackerId, weapon, critTriggered, crits, t) + pa.bonusDamage + actBonus
+        // Las reducciones de daño se aplican antes que los Shields
+        damage = Math.max(0, damage - (pa.reductions[t.id] ?? 0))
         const { dealt, defeated } = damageUnit(state, t.id, damage, { combat: true })
         report.targets.push({ id: t.id, kind: 'unit', hits, crits, damage: dealt, defeated })
     }
 
-    // ── 9. After Combat Damage ──
+    // 9. After Combat Damage
+    const primaryId = primary?.kind === 'unit' ? primary.id : null
     for (const t of report.targets) {
         if (t.kind !== 'unit') continue
         const alive = !!state.units[t.id]?.position
-        if (effect?.trigger === 'after_combat_damage' && t.damage > 0 && alive) applyOnTarget(state, attackerId, t.id, effect)
-        if (critTriggered && crit && isCritEffect(crit, 'damage') && (t.id === primary.id || isStatusEffect(crit))) {
+        if (effect?.trigger === 'after_combat_damage' && t.damage > 0 && alive) applyOnTarget(state, pa.attackerId, t.id, effect)
+        if (critTriggered && crit && isCritEffect(crit, 'damage') && (t.id === primaryId || isStatusEffect(crit))) {
             // Los efectos de crit se aplican aunque los Shields eviten todo el daño.
             if (crit.type === 'repeat_attack') continue
             if (alive || crit.target === 'self' || crit.type === 'gain_upgrade' || crit.type === 'free_dash') {
-                applyOnTarget(state, attackerId, t.id, crit)
+                applyOnTarget(state, pa.attackerId, t.id, crit)
             }
         }
     }
-
     // Stunning Shot: cada objetivo dañado avanza en el Timeline.
-    const stun = hasAbilityType(state, attackerId, 'stun_on_damage')
-    if (stun !== null) {
-        for (const t of report.targets) {
-            if (t.kind === 'unit' && t.damage > 0 && state.units[t.id]?.position) state.timeline = advanceToken(state.timeline, t.id, stun)
+    if (report.targets.some(t => t.kind === 'unit' && t.damage > 0)) {
+        const stun = useResponseAbility(state, pa.attackerId, 'stun_on_damage')
+        if (stun) for (const t of report.targets) {
+            if (t.kind === 'unit' && t.damage > 0 && state.units[t.id]?.position) state.timeline = advanceToken(state.timeline, t.id, stun.amount ?? 1)
         }
     }
     // Crowd Control: si dañó a 2 o más enemigos, roba 1 carta.
-    const crowd = hasAbilityType(state, attackerId, 'draw_on_multi_damage')
-    if (crowd !== null && report.targets.filter(t => t.damage > 0).length >= 2) {
-        const tactics = state.players[player].tactics
-        tactics.hand.push(...tactics.deck.splice(0, crowd))
+    if (report.targets.filter(t => t.damage > 0).length >= 2) {
+        const crowd = useResponseAbility(state, pa.attackerId, 'draw_on_multi_damage')
+        if (crowd) drawCards(state, player, crowd.amount ?? 1)
     }
 
-    // Repetir el ataque a TL 0 (Beam Sabers de Aerial, Handguns de Vidar)
-    if (critTriggered && crit?.type === 'repeat_attack' && !opts.isRepeat) {
-        const target = targetAt(state, primary.key, player)
-        if (target && attacker.position) {
+    const wasRepeat = pa.isRepeat
+    state.pendingAttack = null
+    logAttack(state, report, attacker.name, primary ? describe(state, primary) : 'el objetivo')
+
+    // Repetir el ataque a TL 0 (Beam Sabers de Aerial, Handguns de Vidar), sin el efecto
+    if (critTriggered && crit?.type === 'repeat_attack' && !wasRepeat) {
+        const again = primary ? targetAt(state, pa.primaryKey, player) : null
+        if (again && attacker.position) {
             pushLog(state, player, `${attacker.name} repite el ataque (${weapon.name}) a TL 0`, 'attack')
-            const again = resolveAttack(state, attackerId, { ...weapon, critData: null }, primary.key, rng, { isRepeat: true })
-            report.rolls.push(...again.rolls)
-            for (const t of again.targets) report.targets.push(t)
+            startAttack(state, pa.attackerId, { ...weapon, critData: null }, pa.primaryKey, rng, { isRepeat: true })
+            const second = state.lastAttack
+            if (second) { report.rolls.push(...second.rolls); report.targets.push(...second.targets) }
         }
     }
-
     state.lastAttack = report
-    return report
+
+    if (!wasRepeat) openAfterDamageWindow(state, pa.attackerId, primaryId)
+}
+
+function describe(state: GameState, t: TargetRef): string {
+    return t.kind === 'unit' ? state.units[t.id].name : 'una Garrison'
+}
+
+function logAttack(state: GameState, report: AttackReport, attackerName: string, targetName: string): void {
+    const main = report.targets[0]
+    const attacker = state.units[report.attackerId]
+    pushLog(state, attacker.playerId,
+        `${attackerName} atacó a ${targetName} con ${report.weaponName} [${report.rolls.join(', ')}]` +
+        (main ? ` — ${main.hits} impactos, ${main.damage} de daño` : '') +
+        (report.targets.length > 1 ? ` (+${report.targets.length - 1} objetivos)` : ''),
+        'attack', attacker.position ? [hexKey(attacker.position)] : [])
+}
+
+function drawCards(state: GameState, player: PlayerId, n: number): void {
+    const t = state.players[player].tactics
+    t.hand.push(...t.deck.splice(0, n))
 }
 
 function isStatusEffect(e: WeaponEffect): boolean {
@@ -262,3 +352,108 @@ function stepToward(state: GameState, unitId: string, targetKey: string, steps: 
     unit.position = dest
 }
 
+// ─── VENTANAS DE RESPONSE ─────────────────────────────────────────────────────
+
+const ATTACK_RESPONSE_TYPES = new Set<CardEffect['type']>(['attack_bonus', 'reduce_damage', 'set_crit', 'reroll_misses'])
+
+export function isAttackResponse(effect: CardEffect): boolean {
+    return ATTACK_RESPONSE_TYPES.has(effect.type)
+}
+
+function defendersOf(state: GameState, _pa: PendingAttack, player: PlayerId): string[] {
+    return attackDefenders(state, player)
+}
+
+export function canPlayAttackResponse(state: GameState, player: PlayerId, card: TacticsCard, trigger: ResponseTrigger): boolean {
+    return canPlayResponseCard(state, player, card, trigger)
+}
+
+// Abre las ventanas de una fase del ataque: primero el atacante, luego el defensor.
+export function openAttackWindows(state: GameState, trigger: ResponseTrigger): boolean {
+    const pa = state.pendingAttack!
+    const attackerPlayer = state.units[pa.attackerId].playerId
+    const defender = refs(state, pa).find(t => t.kind === 'unit')
+    const queue: PendingResponse[] = []
+    for (const player of [attackerPlayer, otherPlayer(attackerPlayer)] as PlayerId[]) {
+        const hand = state.players[player].tactics.hand
+        if (!hand.some(c => canPlayAttackResponse(state, player, c, trigger))) continue
+        queue.push({
+            trigger, forPlayerId: player, side: player === attackerPlayer ? 'attacker' : 'defender',
+            attackerUnitId: pa.attackerId, defenderUnitId: defender?.id,
+        })
+    }
+    if (queue.length === 0) return false
+    state.pendingResponse = queue.shift()!
+    pa.queue = queue
+    return true
+}
+
+// Cierra la ventana actual (se jugó o se pasó) y sigue con la siguiente o con el ataque.
+export function closeResponseWindow(state: GameState, rng: Rng): void {
+    const pa = state.pendingAttack
+    if (pa && pa.queue.length > 0) {
+        state.pendingResponse = pa.queue.shift()!
+        return
+    }
+    state.pendingResponse = null
+    if (pa) continueAttack(state, rng)
+}
+
+// Efecto de una carta Response jugada durante un ataque.
+export function applyAttackResponse(state: GameState, player: PlayerId, card: TacticsCard, rng: Rng): string | null {
+    const pa = state.pendingAttack
+    const e = card.effectData!
+    if (!pa) return 'No hay ningún ataque en curso'
+    switch (e.type) {
+        case 'attack_bonus':
+            pa.bonusStrength += e.strength ?? 0
+            pa.bonusAccuracy += e.accuracy ?? 0
+            pa.bonusDamage += e.damage ?? 0
+            if (e.destroyTargetUpgrades) pa.destroyTargetUpgrades = true
+            return null
+        case 'reduce_damage': {
+            const ids = defendersOf(state, pa, player).filter(id =>
+                (!e.requiresActiveTrait || state.units[id].traits.includes(e.requiresActiveTrait)) &&
+                (!e.ifLowerVp || state.units[id].vp < state.units[pa.attackerId].vp))
+            const id = ids[0]
+            if (!id) return 'No tienes un defensor válido en este ataque'
+            pa.reductions[id] = (pa.reductions[id] ?? 0) + (e.amount ?? 0)
+            if (e.gainShield) gainUpgrade(state, id, 'shield')
+            if (e.destroyAttackerUpgrade) destroyUpgrade(state, pa.attackerId, 'any', 1)
+            return null
+        }
+        case 'set_crit': {
+            // Se convierte en crítico el dado más bajo
+            if (pa.rolls.length === 0) return 'No hay dados que cambiar'
+            let idx = 0
+            pa.rolls.forEach((r, i) => { if (r < pa.rolls[idx]) idx = i })
+            pa.rolls[idx] = 10
+            return null
+        }
+        case 'reroll_misses': {
+            const acc = accuracyFor(state, pa, pa.primaryKey)
+            let n = 0
+            pa.rolls = pa.rolls.map((r, i) => {
+                if (isHit(r, acc, pa.critThreshold)) return r
+                n++; pa.rerolled.push(i)
+                return rng()
+            })
+            if (e.drawIfAtLeast && n >= e.drawIfAtLeast) drawCards(state, player, 1)
+            return null
+        }
+        default:
+            return 'Efecto de respuesta no implementado'
+    }
+}
+
+// Ventana tras el daño (cartas de la demo: reducir daño, devolver el golpe…)
+function openAfterDamageWindow(state: GameState, attackerId: string, defenderId: string | null): void {
+    if (!defenderId || !state.units[defenderId]?.position || !state.units[attackerId]?.position) return
+    const defender = state.units[defenderId].playerId
+    const blocked = hasAbilityType(state, attackerId, 'block_enemy_responses') !== null
+    const hasCard = state.players[defender].tactics.hand.some(c =>
+        c.type === 'response' && c.effectData?.trigger === 'after_combat_damage')
+    if (!blocked && hasCard) {
+        state.pendingResponse = { trigger: 'after_combat_damage', forPlayerId: defender, attackerUnitId: attackerId, defenderUnitId: defenderId }
+    }
+}

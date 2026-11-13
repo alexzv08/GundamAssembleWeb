@@ -4,6 +4,11 @@ import { DEFAULT_SQUAD_SIZE, requiredDeckSize, cardRestriction, validateSquad, t
 
 const MAX_SQUAD = DEFAULT_SQUAD_SIZE
 
+const badge = (bg: string) => ({
+  display: 'inline-block', fontSize: 8.5, padding: '1px 4px', borderRadius: 3, background: bg, color: '#ddd', marginLeft: 4,
+  textTransform: 'uppercase' as const, letterSpacing: 0.6,
+})
+
 const toDeckCard = (c: TacticsCardData): DeckCard => ({ id: c.cardId, name: c.name, faction: c.faction, signature: c.signature })
 
 interface SquadSelectionScreenProps {
@@ -36,6 +41,10 @@ export function SquadSelectionScreen({
   const deckSize = requiredDeckSize(selectedSquad, availableUnitCards, deckCards)
   const canConfirm = selectedDeck.length === deckSize && !squadSubmitted
   const sets = [...new Set(availableUnitCards.map(c => c.set))]
+  // Primero lo que esta escuadra puede llevar, luego oficiales jugables; demo y sin implementar al final
+  const rank = (c: TacticsCardData) =>
+    (cardRestriction(toDeckCard(c), squadCards) ? 4 : 0) + (c.source === 'demo' ? 2 : 0) + (!c.effectData && !c.weapon ? 1 : 0)
+  const sortedCards = [...availableTacticsCards].sort((a, b) => rank(a) - rank(b))
   const playerColor = myPlayerId === 'player1' ? '#ef5350' : '#4fc3f7'
 
   return (
@@ -128,7 +137,7 @@ export function SquadSelectionScreen({
         {squadStep === 'deck' && (
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
-              {availableTacticsCards.map(card => {
+              {sortedCards.map(card => {
                 const isSelected = selectedDeck.includes(card.cardId)
                 const restriction = cardRestriction(toDeckCard(card), squadCards)
                 const isFull = selectedDeck.length >= deckSize || restriction !== null
@@ -193,6 +202,9 @@ export function SquadSelectionScreen({
                       }}>
                         {card.type === 'attack' ? 'Ataque' : isCommand ? 'Comando' : 'Respuesta'}
                       </div>
+                      {card.source === 'demo' && <span style={badge('#555')}>demo</span>}
+                      {!card.effectData && !card.weapon && <span style={badge('#8d6e00')} title="Se puede llevar en el mazo pero aún no se puede jugar">sin implementar</span>}
+                      {card.signature && <div style={{ fontSize: 9, color: '#4fc3f7', marginBottom: 3 }}>{card.signature}</div>}
                       <div style={{
                         fontSize: 9.5, color: '#9ca3af', lineHeight: 1.35,
                         display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',

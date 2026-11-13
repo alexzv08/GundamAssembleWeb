@@ -37,6 +37,8 @@ export type WeaponEffectType =
     | 'repeat_attack'              // "Repeat this attack at [Timeline 0] without this ability."
     | 'free_dash'                  // "Make an additional Dash at [Timeline 0]."
     | 'splash_damage'              // (legado) daño a adyacentes al objetivo
+    | 'strength_per_ally'          // Epic Shot: [Strength +N] por cada otro aliado a [Range R]
+    | 'capture_objective_near_target'  // Claiming Vengeance
 
 export interface WeaponEffect {
     trigger: WeaponEffectTrigger
@@ -112,6 +114,9 @@ export interface Weapon {
     effectData?: WeaponEffect | null
     critData?: WeaponEffect | null
     energyCost?: number
+    // Plantilla de área ("Range: SP"): cono o "flor" (hex elegido + sus 6 vecinos).
+    // La forma exacta sale de un diagrama de la carta; aquí es una aproximación.
+    area?: 'cone' | 'flower'
 }
 
 // ─── ABILITY ──────────────────────────────────────────────────────────────────

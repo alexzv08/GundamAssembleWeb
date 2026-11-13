@@ -16,13 +16,13 @@
       "hp": 15,
       "vp": 8,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Vulcan Guns",
           "effect": "",
           "crit": "Roll 2 addtional dice",
-          "tlCost": 1,
+          "tlCost": 2,
           "range": 2,
           "strength": 3,
           "critData": {
@@ -37,7 +37,7 @@
           "crit": "[Damage +2].",
           "tlCost": 3,
           "range": 1,
-          "strength": 4,
+          "strength": 6,
           "effectData": {
             "trigger": "after_attack_roll",
             "type": "deactivate_shields"
@@ -71,7 +71,8 @@
             "amount": 1
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_(Legendary_Hero)"
     },
     {
       "cardId": "ST01-U02",
@@ -86,13 +87,13 @@
       "hp": 12,
       "vp": 9,
       "tl": 3,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Beam Saber",
           "effect": "",
           "crit": "[After Combat Damage] This unit Moves 2, ignoring Engagement.",
-          "tlCost": 3,
+          "tlCost": 2,
           "range": 1,
           "strength": 4
         },
@@ -101,13 +102,14 @@
           "effect": "",
           "crit": "[Damage +1] for each [Crit] rolled (max. +4).",
           "tlCost": 4,
-          "range": 5,
-          "strength": 5,
+          "range": 3,
+          "strength": 6,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "damage_per_crit",
             "max": 4
-          }
+          },
+          "area": "cone"
         }
       ],
       "abilities": [
@@ -138,7 +140,8 @@
             "type": "hover"
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Wing_Gundam_Zero(EW)_(Wing_of_Destruction)"
     },
     {
       "cardId": "ST01-U03",
@@ -153,7 +156,7 @@
       "hp": 17,
       "vp": 10,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Rex Claws",
@@ -161,7 +164,7 @@
           "crit": "[Slow] the target.",
           "tlCost": 2,
           "range": 1,
-          "strength": 4,
+          "strength": 3,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "slow"
@@ -171,9 +174,9 @@
           "name": "Tail Blade",
           "effect": "[Before Attack Roll] Pull 1 the target.",
           "crit": "[Damage +1].",
-          "tlCost": 2,
+          "tlCost": 4,
           "range": 2,
-          "strength": 3,
+          "strength": 7,
           "effectData": {
             "trigger": "before_attack_roll",
             "type": "pull",
@@ -226,7 +229,8 @@
             ]
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_Barbatos_Lupus_Rex_(Final_Stand)"
     },
     {
       "cardId": "ST01-U04",
@@ -241,7 +245,7 @@
       "hp": 12,
       "vp": 7,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Heat Hawk",
@@ -259,9 +263,9 @@
           "name": "Zaku Bazooka",
           "effect": "[After Combat Damage] Make an additional Dash at [Timeline 0].",
           "crit": "[Damage +2].",
-          "tlCost": 3,
-          "range": 3,
-          "strength": 4,
+          "tlCost": 4,
+          "range": 4,
+          "strength": 7,
           "effectData": {
             "trigger": "after_combat_damage",
             "type": "free_dash"
@@ -303,7 +307,8 @@
             "amount": 1
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Char's_Zaku_II_(Fast_Encounter)"
     },
     {
       "cardId": "ST01-U05",
@@ -319,7 +324,7 @@
       "hp": 15,
       "vp": 9,
       "tl": 3,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Heat Rod",
@@ -344,7 +349,7 @@
           "crit": "[Damage +1].",
           "tlCost": 3,
           "range": 1,
-          "strength": 5,
+          "strength": 7,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "bonus_damage",
@@ -381,7 +386,8 @@
             "type": "hover"
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_Epyon_(Crimson_Cataclysm)"
     },
     {
       "cardId": "ST01-U06",
@@ -396,14 +402,14 @@
       "hp": 13,
       "vp": 7,
       "tl": 1,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Handguns",
           "effect": "",
           "crit": "[After Combat Damage] Repeat this attack at [Timeline 0] without this ability.",
-          "tlCost": 2,
-          "range": 3,
+          "tlCost": 3,
+          "range": 2,
           "strength": 3,
           "critData": {
             "trigger": "after_combat_damage",
@@ -414,9 +420,9 @@
           "name": "Burst Saber",
           "effect": "",
           "crit": "[Damage +2].",
-          "tlCost": 3,
+          "tlCost": 4,
           "range": 1,
-          "strength": 4,
+          "strength": 8,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "bonus_damage",
@@ -439,7 +445,6 @@
           "name": "Alaya-Vijnana Type E System",
           "effect": "If you control 2 or more Objectives, Move 2 and this unit gains [Strength +1] this activation.",
           "type": "CMD",
-          "energyCost": 1,
           "abilityData": {
             "type": "move",
             "amount": 2,
@@ -447,7 +452,8 @@
             "requiresObjectives": 2
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_Vidar_(Cold_Justice)"
     },
     {
       "cardId": "EX01-U01",
@@ -464,13 +470,13 @@
       "hp": 14,
       "vp": 10,
       "tl": 3,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Beam Saber",
           "effect": "",
           "crit": "[After Combat Damage] Gain 1 [Strength] Upgrade.",
-          "tlCost": 3,
+          "tlCost": 2,
           "range": 1,
           "strength": 4,
           "critData": {
@@ -484,8 +490,8 @@
           "effect": "",
           "crit": "[Damage +1] for each Upgrade on this unit (max. +4).",
           "tlCost": 4,
-          "range": 5,
-          "strength": 5,
+          "range": 4,
+          "strength": 8,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "damage_per_upgrade",
@@ -498,7 +504,8 @@
         {
           "name": "Psycho-Frame Synchrony",
           "effect": "[Before Attack Roll] Another attacker within [Range 3] gets [Strength +1] this attack for each [Strength] Upgrade on this unit.",
-          "type": "RSP"
+          "type": "RSP",
+          "energyCost": 1
         },
         {
           "name": "Newtype Destroyer",
@@ -508,7 +515,8 @@
             "type": "block_enemy_responses"
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Unicorn_Gundam(Destroy_Mode)_(Laplace's_Guardian)"
     },
     {
       "cardId": "EX01-U02",
@@ -524,7 +532,7 @@
       "hp": 8,
       "vp": 5,
       "tl": 1,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Armored Frame",
@@ -567,7 +575,8 @@
           "effect": "Redistribute Upgrades among this unit and another allied unit within [Range 3].",
           "type": "CMD"
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Torohachi_(Petite_Mobile_Suit)"
     },
     {
       "cardId": "EX01-U03",
@@ -583,7 +592,7 @@
       "hp": 11,
       "vp": 7,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Twin-Barreled Grenade Launcher",
@@ -601,9 +610,9 @@
           "name": "Beam Rifle",
           "effect": "[Strength +1] for each [Speed] Upgrade on this unit.",
           "crit": "Gain 1 [Speed] Upgrade.",
-          "tlCost": 3,
-          "range": 4,
-          "strength": 3,
+          "tlCost": 4,
+          "range": 5,
+          "strength": 6,
           "effectData": {
             "trigger": "always",
             "type": "strength_per_upgrade",
@@ -624,7 +633,8 @@
           "abilityData": {
             "type": "damage_after_move",
             "amount": 1
-          }
+          },
+          "energyCost": 1
         },
         {
           "name": "Jet Through",
@@ -636,7 +646,8 @@
             "upgradeType": "movement"
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Delta_Plus_(Rapid_Response)"
     },
     {
       "cardId": "EX02-U01",
@@ -651,15 +662,15 @@
       "hp": 16,
       "vp": 10,
       "tl": 1,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Beam Sabers",
           "effect": "",
           "crit": "[After Combat Damage] Repeat this attack at [Timeline 0] without this ability.",
-          "tlCost": 3,
+          "tlCost": 2,
           "range": 1,
-          "strength": 4,
+          "strength": 3,
           "critData": {
             "trigger": "after_combat_damage",
             "type": "repeat_attack"
@@ -669,9 +680,9 @@
           "name": "Beam Rifle",
           "effect": "[Strength +1] for each allied RWS adjacent to the target.",
           "crit": "[Damage +2].",
-          "tlCost": 3,
+          "tlCost": 4,
           "range": 4,
-          "strength": 4,
+          "strength": 6,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "bonus_damage",
@@ -683,7 +694,8 @@
         {
           "name": "Permet Burst",
           "effect": "[After Attack Roll] If this unit or another allied unit within [Range 3] is attacking, set 1 die to a [Crit].",
-          "type": "RSP"
+          "type": "RSP",
+          "energyCost": 1
         },
         {
           "name": "BIT Stave Direct",
@@ -695,7 +707,8 @@
           "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
           "type": "RSP"
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_Aerial_(Protective_Heroine)"
     },
     {
       "cardId": "EX02-U02",
@@ -710,14 +723,14 @@
       "hp": 12,
       "vp": 7,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Beak Foot",
           "effect": "",
           "crit": "Roll 2 additional dice.",
           "tlCost": 2,
-          "range": 1,
+          "range": 3,
           "strength": 3,
           "critData": {
             "trigger": "after_attack_roll",
@@ -729,9 +742,9 @@
           "name": "Beam Arquebus",
           "effect": "[After Attack Roll] Deactivate all [Shield] Upgrades on the target.",
           "crit": "[After Combat Damage] This unit Moves 2, ignoring Engagement.",
-          "tlCost": 3,
+          "tlCost": 4,
           "range": 5,
-          "strength": 4,
+          "strength": 6,
           "effectData": {
             "trigger": "after_attack_roll",
             "type": "deactivate_shields"
@@ -742,7 +755,8 @@
         {
           "name": "Lockdown",
           "effect": "[After Combat Damage] If this unit attacked an enemy adjacent to this unit's Corax, it applies [Slow] to that enemy unit.",
-          "type": "RSP"
+          "type": "RSP",
+          "energyCost": 1
         },
         {
           "name": "Corax Direct",
@@ -757,7 +771,8 @@
             "type": "hover"
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_Pharact_(Silent_Hunter)"
     },
     {
       "cardId": "EX02-U03",
@@ -772,7 +787,7 @@
       "hp": 13,
       "vp": 8,
       "tl": 3,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Shackle Claw",
@@ -780,7 +795,7 @@
           "crit": "[Disarm] the target.",
           "tlCost": 2,
           "range": 2,
-          "strength": 3,
+          "strength": 4,
           "effectData": {
             "trigger": "after_attack_roll",
             "type": "move_toward_target",
@@ -797,7 +812,7 @@
           "crit": "Deal [Damage 2] to each enemy adjacent to this unit's Iśvara B Type.",
           "tlCost": 3,
           "range": 1,
-          "strength": 4
+          "strength": 7
         }
       ],
       "abilities": [
@@ -818,7 +833,8 @@
           "effect": "Deploy or reposition this unit's Iśvara B Type on an empty hex within [Range 2].",
           "type": "CMD"
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Darilbalde_(Frontline_Duelist)"
     },
     {
       "cardId": "PA01-U01",
@@ -833,15 +849,15 @@
       "hp": 17,
       "vp": 10,
       "tl": 1,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "Beam Saber",
           "effect": "",
           "crit": "[After Combat Damage] [Fracture] the target.",
-          "tlCost": 3,
+          "tlCost": 2,
           "range": 1,
-          "strength": 4,
+          "strength": 3,
           "critData": {
             "trigger": "after_combat_damage",
             "type": "fracture"
@@ -852,8 +868,8 @@
           "effect": "",
           "crit": "[Disarm] the target.",
           "tlCost": 3,
-          "range": 4,
-          "strength": 4,
+          "range": 3,
+          "strength": 5,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "disarm"
@@ -868,7 +884,8 @@
           "abilityData": {
             "type": "push_on_attack",
             "amount": 2
-          }
+          },
+          "energyCost": 1
         },
         {
           "name": "Inspiring Presence",
@@ -880,7 +897,8 @@
           "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
           "type": "RSP"
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Gundam_(Elite_Mobile_Suit)"
     },
     {
       "cardId": "PA01-U02",
@@ -895,27 +913,28 @@
       "hp": 12,
       "vp": 7,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "240mm Low-Recoil Cannon",
           "effect": "",
           "crit": "[After Combat Damage] [Fracture] the targets.",
-          "tlCost": 3,
-          "range": 5,
-          "strength": 4,
+          "tlCost": 2,
+          "range": 3,
+          "strength": 3,
           "critData": {
             "trigger": "after_combat_damage",
             "type": "fracture"
-          }
+          },
+          "area": "flower"
         },
         {
           "name": "Beam Rifle",
           "effect": "This attack also targets each enemy adjacent to the target.",
           "crit": "[Damage +1].",
-          "tlCost": 3,
+          "tlCost": 4,
           "range": 4,
-          "strength": 3,
+          "strength": 7,
           "effectData": {
             "trigger": "always",
             "type": "also_target_adjacent"
@@ -935,7 +954,8 @@
           "abilityData": {
             "type": "stun_on_damage",
             "amount": 1
-          }
+          },
+          "energyCost": 1
         },
         {
           "name": "Firing Line",
@@ -952,7 +972,8 @@
           "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
           "type": "RSP"
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Guncannon_(In_Position)"
     },
     {
       "cardId": "PA01-U03",
@@ -967,15 +988,15 @@
       "hp": 13,
       "vp": 7,
       "tl": 2,
-      "provisionalStats": true,
+      "provisionalStats": false,
       "weapons": [
         {
           "name": "120mm Low-Recoil Cannons",
           "effect": "This attack ignores Line of Sight.",
           "crit": "[Disarm] the target.",
-          "tlCost": 3,
-          "range": 5,
-          "strength": 4,
+          "tlCost": 2,
+          "range": 4,
+          "strength": 2,
           "effectData": {
             "trigger": "always",
             "type": "ignore_los"
@@ -989,30 +1010,28 @@
           "name": "Quadruple Bop Missile",
           "effect": "This attack also targets each enemy adjacent to the target.",
           "crit": "[Damage +1].",
-          "tlCost": 3,
-          "range": 4,
-          "strength": 3,
-          "effectData": {
-            "trigger": "always",
-            "type": "also_target_adjacent"
-          },
+          "tlCost": 4,
+          "range": 3,
+          "strength": 4,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "bonus_damage",
             "amount": 1
-          }
+          },
+          "area": "flower"
         }
       ],
       "abilities": [
         {
           "name": "Coordinated Payload",
           "effect": "[Before Attack Roll] If this unit is attacking, it gains [Strength +2] this attack for each other allied unit within [Range 3].",
-          "type": "ONG",
+          "type": "RSP",
           "abilityData": {
             "type": "strength_per_ally_nearby",
             "amount": 2,
             "range": 3
-          }
+          },
+          "energyCost": 1
         },
         {
           "name": "Crowd Control",
@@ -1023,7 +1042,8 @@
             "amount": 1
           }
         }
-      ]
+      ],
+      "statsSource": "https://gundamassemble.wiki.gg/wiki/Guntank_(Battlefield_Bombarder)"
     },
     {
       "cardId": "DM01-U01",

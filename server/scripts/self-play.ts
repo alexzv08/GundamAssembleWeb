@@ -12,7 +12,7 @@
 import { createServerGame } from '../src/game/createServerGame'
 import { processAction } from '../src/game/engine'
 import { startGame } from '../src/game/activation'
-import { reachableFor, attackableHexes, targetAt } from '../src/game/queries'
+import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard } from '../src/game/queries'
 import { hexKey, keyToHex, gridDistance } from '../src/game/hexGrid'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, eligibleCards, requiredDeckSize } from '../src/game/catalog'
 import type { GameState, GameAction, PlayerId } from '../src/types'
@@ -54,7 +54,7 @@ function randomDeck(squad: string[]): string[] {
 // hace Dash o Energize; respeta "no terminar sobre la Base".
 function botAction(s: GameState, player: PlayerId): GameAction {
     if (s.pendingResponse?.forPlayerId === player) {
-        const card = s.players[player].tactics.hand.find(c => c.type === 'response' && c.effectData?.trigger === s.pendingResponse!.trigger)
+        const card = s.players[player].tactics.hand.find(c => canPlayResponseCard(s, player, c))
         return card && rand() < 0.7 ? { type: 'PLAY_RESPONSE', cardId: card.id } : { type: 'PASS_RESPONSE' }
     }
     const id = s.activeUnitId!
@@ -72,6 +72,19 @@ function botAction(s: GameState, player: PlayerId): GameAction {
                 ? { type: 'ATTACK', unitId: id, weaponIndex: wi, targetId: t.id }
                 : { type: 'ATTACK_GARRISON', unitId: id, weaponIndex: wi, garrisonId: t.id }
         }
+    }
+
+    // Cartas: Attack si aún no atacó, o Command que no necesitan objetivo
+    if (!act.cardPlayed && rand() < 0.35) {
+        const hand = s.players[player].tactics.hand.filter(c => !c.signature || c.signature === unit.signature)
+        const atk = !s.hasUsedPrimaryAction && hand.find(c => c.type === 'attack' && c.weapon && attackableHexesWith(s, id, c.weapon).length)
+        if (atk && atk.weapon) {
+            const t = targetAt(s, pickOne(attackableHexesWith(s, id, atk.weapon)), player)!
+            return { type: 'PLAY_CARD', unitId: id, cardId: atk.id, targetId: t.id }
+        }
+        const simple = new Set(['gain_upgrade', 'repair', 'activation_move_buff', 'aoe_status', 'free_attack', 'heal_per_upgrade', 'energy_if_rescued'])
+        const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type))
+        if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
     }
 
     const cmd = unit.abilities.findIndex((a, i) => a.type === 'CMD' && a.abilityData?.type === 'buff_activation' &&

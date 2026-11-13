@@ -231,7 +231,7 @@ export function UnitPanel({
                                     >
                                         ⚔ {weapon.name}
                                         <span style={{ color: '#aaa', marginLeft: 6 }}>
-                                            R{weapon.range} · S{weapon.strength} · TL{hasUsedPrimary ? 0 : weapon.tlCost}
+                                            {weapon.area ? `Área ${weapon.area === 'cone' ? 'cono' : 'flor'} ` : ''}R{weapon.range} · S{weapon.strength} · TL{hasUsedPrimary ? 0 : weapon.tlCost}
                                         </span>
                                     </button>
                                 ))}
@@ -270,6 +270,7 @@ export function UnitPanel({
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                                         <span style={{ color: '#ddd', fontWeight: 'bold' }}>{w.name}</span>
                                         <div style={{ display: 'flex', gap: 6 }}>
+                                            {w.area && <span style={{ color: '#ce93d8' }} title="Plantilla de área (forma aproximada)">{w.area === 'cone' ? 'Cono' : 'Flor'}</span>}
                                             <span style={{ color: '#4fc3f7' }}>R{w.range}</span>
                                             <span style={{ color: '#f5c518' }}>S{w.strength}</span>
                                             <span style={{ color: '#aaa' }}>TL{w.tlCost}</span>

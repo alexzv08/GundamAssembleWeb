@@ -56,7 +56,7 @@ function makeGame(units: Unit[], board = makeBoard()): GameState {
       player1: { id: 'player1', name: 'P1', vp: 0, garrisonsRescued: 0, squadUnitIds: [], deployHex: { q: 0, r: 7 }, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false } },
       player2: { id: 'player2', name: 'P2', vp: 0, garrisonsRescued: 0, squadUnitIds: [], deployHex: { q: 7, r: 7 }, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false } },
     },
-    actionLog: [], log: [], lastAttack: null, winner: null, pendingResponse: null,
+    actionLog: [], log: [], lastAttack: null, winner: null, pendingResponse: null, pendingAttack: null,
   }
 }
 
@@ -536,5 +536,144 @@ describe('Código compartido', () => {
     const { execFileSync } = await import('node:child_process')
     const path = await import('node:path')
     expect(() => execFileSync('node', [path.join(__dirname, '../../../../scripts/sync-shared.mjs'), '--check'], { stdio: 'pipe' })).not.toThrow()
+  })
+})
+
+// ─── RESPONSE DURANTE EL ATAQUE Y CARTAS OFICIALES ───────────────────────────
+
+describe('Ventanas de Response durante el ataque', () => {
+  const tactics = loadTacticsCatalog()
+  const card = (name: string) => structuredClone(tactics.find(c => c.name === name)!)
+
+  function duel(p1Hand: string[], p2Hand: string[]) {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    g.players.player1.tactics.hand = p1Hand.map(card)
+    g.players.player2.tactics.hand = p2Hand.map(card)
+    return g
+  }
+
+  it('sin cartas jugables el ataque se resuelve de golpe', () => {
+    const r = applyAttack(duel([], ['Strikethrough']), 'a', 0, 'e', 'player1', dice(5, 5, 5))  // Strikethrough es del atacante
+    expect(r.newState!.pendingAttack).toBeNull()
+    expect(r.newState!.units.e.currentHp).toBe(7)
+  })
+  it('Quick Block: el defensor reduce 3 de daño tras la tirada', () => {
+    const r = applyAttack(duel([], ['Quick Block']), 'a', 0, 'e', 'player1', dice(5, 5, 5))
+    const s = r.newState!
+    expect(s.pendingAttack?.stage).toBe('after_roll')
+    expect(s.pendingResponse).toMatchObject({ forPlayerId: 'player2', trigger: 'after_attack_roll', side: 'defender' })
+    const qb = s.players.player2.tactics.hand[0].id
+    const done = processAction(s, { type: 'PLAY_RESPONSE', cardId: qb }, 'player2', dice())
+    expect(done.state!.pendingAttack).toBeNull()
+    expect(done.state!.units.e.currentHp).toBe(10)
+  })
+  it('Limiter Release: el atacante añade 3 dados antes de tirar; primero responde el atacante', () => {
+    const s = applyAttack(duel(['Limiter Release'], ['Quick Block']), 'a', 0, 'e', 'player1', dice()).newState!
+    expect(s.pendingResponse).toMatchObject({ forPlayerId: 'player1', trigger: 'before_attack_roll' })
+    const lr = s.players.player1.tactics.hand[0].id
+    const s2 = processAction(s, { type: 'PLAY_RESPONSE', cardId: lr }, 'player1', dice(5, 5, 5, 5, 5, 5)).state!
+    expect(s2.pendingAttack!.rolls).toHaveLength(6)
+    expect(s2.pendingResponse).toMatchObject({ forPlayerId: 'player2', trigger: 'after_attack_roll' })
+    const s3 = processAction(s2, { type: 'PASS_RESPONSE' }, 'player2').state!
+    expect(s3.units.e.currentHp).toBe(4)
+    expect(s3.activation!.cardPlayed).toBe(true)   // el atacante ya gastó su carta de la activación
+  })
+  it('no se puede actuar mientras el ataque espera una respuesta', () => {
+    const s = applyAttack(duel([], ['Quick Block']), 'a', 0, 'e', 'player1', dice(5)).newState!
+    expect(processAction(s, { type: 'END_ACTIVATION', unitId: 'a' }, 'player1').success).toBe(false)
+  })
+  it('Newtype Destroyer impide las Response de los enemigos', () => {
+    const g = duel([], ['Quick Block'])
+    g.units.a.abilities = [{ name: 'Newtype Destroyer', type: 'ONG', description: '', abilityData: { type: 'block_enemy_responses' } }]
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).toBeNull()
+  })
+  it('Federation Shield exige un defensor Earth Federation', () => {
+    const g = duel([], ['Federation Shield'])
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).toBeNull()
+    g.units.e.traits = ['Earth Federation']
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.pendingResponse).not.toBeNull()
+  })
+})
+
+describe('Cartas oficiales', () => {
+  const tactics = loadTacticsCatalog()
+  const card = (name: string) => structuredClone(tactics.find(c => c.name === name)!)
+
+  it('Epic Shot: carta Attack de firma con +2 Strength por aliado a 3 hexes', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', A, { signature: 'Legendary Hero' }),
+      makeUnit('ally', 'player1', { q: 2, r: 3 }),
+      makeUnit('e', 'player2', { q: 6, r: 2 }),
+    ])
+    g.players.player1.tactics.hand = [card('Epic Shot')]
+    const id = g.players.player1.tactics.hand[0].id
+    const r = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, targetId: 'e' }, 'player1', dice())
+    expect(r.success).toBe(true)
+    expect(r.state!.lastAttack!.rolls).toHaveLength(9)            // 7 + 2×1 aliado
+    expect(r.state!.hasUsedPrimaryAction).toBe(true)
+    expect(getUnitRound(r.state!.timeline, 'a')).toBe(4)        // TL 3
+    g.units.a.signature = 'Elite Mobile Suit'
+    expect(processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, targetId: 'e' }, 'player1').success).toBe(false)
+  })
+  it('Field Engineers repara 4 y no gasta la acción primaria', () => {
+    const g = makeGame([makeUnit('a', 'player1', A, { currentHp: 3 })])
+    g.players.player1.tactics.hand = [card('Field Engineers')]
+    const r = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: g.players.player1.tactics.hand[0].id }, 'player1')
+    expect(r.state!.units.a.currentHp).toBe(7)
+    expect(r.state!.hasUsedPrimaryAction).toBe(false)
+  })
+  it('Full System Burn: solo Londo Bell; +3 Speed y Hover esta activación', () => {
+    const g = makeGame([makeUnit('a', 'player1', { q: 0, r: 2 })])
+    g.players.player1.tactics.hand = [card('Full System Burn')]
+    const id = g.players.player1.tactics.hand[0].id
+    expect(processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id }, 'player1').success).toBe(false)
+    g.units.a.traits = ['Londo Bell']
+    const s = processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id }, 'player1').state!
+    expect(reachableFor(s, 'a', { kind: 'advance' }).has('6,2')).toBe(true)
+  })
+})
+
+describe('Plantillas de área y Response con Energy', () => {
+  it('cono: alcanza a los enemigos dentro del ángulo, no a los de detrás', () => {
+    const cone = weapon({ name: 'Twin Buster Rifle', range: 3, strength: 3, area: 'cone' })
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 2, r: 2 }, { weapons: [cone] }),
+      makeUnit('e1', 'player2', { q: 4, r: 2 }),
+      makeUnit('e2', 'player2', { q: 5, r: 2 }),
+      makeUnit('e3', 'player2', { q: 0, r: 2 }, { startingTl: 5 }),   // detrás del atacante
+    ])
+    const s = applyAttack(g, 'a', 0, 'e1', 'player1', dice(5, 5, 5)).newState!
+    expect(s.units.e1.currentHp).toBe(7)
+    expect(s.units.e2.currentHp).toBe(7)
+    expect(s.units.e3.currentHp).toBe(10)
+  })
+  it('Coordinated Payload: +2 Strength por aliado solo si paga 1 Energy', () => {
+    const payload: Ability = { name: 'Coordinated Payload', type: 'RSP', description: '', energyCost: 1, abilityData: { type: 'strength_per_ally_nearby', amount: 2, range: 3 } }
+    const units = () => [
+      makeUnit('a', 'player1', A, { abilities: [payload] }),
+      makeUnit('ally', 'player1', { q: 2, r: 3 }),
+      makeUnit('e', 'player2', { q: 5, r: 2 }),
+    ]
+    const sin = applyAttack(makeGame(units()), 'a', 0, 'e', 'player1', dice()).newState!
+    expect(sin.lastAttack!.rolls).toHaveLength(3)
+    const con = makeGame(units())
+    con.units.a.energy = 1
+    const s = applyAttack(con, 'a', 0, 'e', 'player1', dice()).newState!
+    expect(s.lastAttack!.rolls).toHaveLength(5)
+    expect(s.units.a.energy).toBe(0)
+  })
+})
+
+describe('Datos actualizados', () => {
+  it('stats de armas de la wiki aplicadas a las unidades oficiales', () => {
+    const gundam = loadUnitCatalog().find(u => u.cardId === 'ST01-U01')!
+    expect(gundam.provisionalStats).toBe(false)
+    expect(gundam.weapons.find(w => w.name === 'Beam Saber')).toMatchObject({ tlCost: 3, range: 1, strength: 6 })
+    expect(loadUnitCatalog().find(u => u.cardId === 'ST01-U02')!.weapons[1].area).toBe('cone')
+  })
+  it('las cartas oficiales tienen requisitos que la escuadra puede cumplir', () => {
+    const units = loadUnitCatalog()
+    const sigs = new Set(units.map(u => u.signature).filter(Boolean))
+    for (const c of loadTacticsCatalog()) if (c.signature) expect(sigs.has(c.signature)).toBe(true)
   })
 })
