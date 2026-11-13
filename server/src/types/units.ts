@@ -5,6 +5,21 @@ export type TerrainType =
     | 'normal' | 'water' | 'debris' | 'impassable' | 'minovsky'
     | 'elevation_1' | 'elevation_2' | 'elevation_3'
 
+// ─── REMOTE WEAPON SYSTEMS ────────────────────────────────────────────────────
+// RWS (Q&A 110): no son unidades; no bloquean LoS ni movimiento ni causan
+// Engagement, pero nadie termina un movimiento en su hex. Se pueden atacar.
+export type RwsKind = 'bit_stave' | 'corax' | 'isvara'
+
+export interface RemoteWeapon {
+    id: string
+    kind: RwsKind
+    name: string
+    owner: 'player1' | 'player2'
+    ownerUnitId: string
+    position: HexCoord | null   // null = en la reserva de su unidad
+    vp: number
+}
+
 export interface HexCoord {
     q: number
     r: number
@@ -39,6 +54,8 @@ export type WeaponEffectType =
     | 'splash_damage'              // (legado) daño a adyacentes al objetivo
     | 'strength_per_ally'          // Epic Shot: [Strength +N] por cada otro aliado a [Range R]
     | 'capture_objective_near_target'  // Claiming Vengeance
+    | 'strength_per_rws_adjacent'  // Beam Rifle de Aerial: [Strength +1] por cada RWS aliada adyacente al objetivo
+    | 'damage_adjacent_to_rws'     // Beam Saber de Darilbalde: daño a cada enemigo adyacente a su Iśvara
 
 export interface WeaponEffect {
     trigger: WeaponEffectTrigger
@@ -80,6 +97,12 @@ export type AbilityEffectType =
     | 'self_damage_move'           // Alaya-Vijnana Exertion
     | 'rescue_at_range'            // Rescue Maneuver
     | 'grant_free_attack'          // Annihilate / Burst Attack: ataque adicional a TL 0
+    | 'deploy_rws'                 // BIT Stave / Corax / Iśvara B Type Direct
+    // ── Response automáticas de apoyo ──
+    | 'slow_near_rws'              // Lockdown
+    | 'permet_burst'               // Permet Burst: un dado pasa a crit
+    | 'psycho_frame'               // Psycho-Frame Synchrony
+    | 'inspiring_presence'         // Inspiring Presence: repetir hasta 3 fallos
     | 'fracture_enemy' | 'saturated_fire' | 'capture_objective'  // legado
 
 export interface AbilityEffect {
@@ -98,6 +121,7 @@ export interface AbilityEffect {
     weapon?: string               // arma del ataque adicional
     requiresWeapon?: string       // arma que debe haberse usado antes en la activación
     requiresObjectives?: number   // nº de Objetivos controlados necesarios
+    rws?: RwsKind
     // Escalones de Fight to the End: [{ damage: 6, strength: 1 }, { damage: 12, strength: 1 }]
     steps?: { damage: number; strength: number }[]
 }

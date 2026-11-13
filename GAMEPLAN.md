@@ -7,7 +7,7 @@ Fuentes oficiales:
 - Reglamento: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/rules/
 - Q&A: https://global.bandai-hobby.net/en-us/site/gundam-assemble/rules-qa/qa/
 - Unidades: https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/
-- Cartas de Tactics: https://global.bandai-hobby.net/en-us/site/gundam-assemble/tacticscard/ (bloqueada desde el entorno de desarrollo; datos tomados de la wiki comunitaria https://gundamassemble.wiki.gg — revisar con las cartas físicas)
+- Cartas de Tactics, otras cartas (RWS) y Q&A completo: volcados de la web oficial en una hoja de cálculo aportada por el autor (`gundam_assemble_datos.xlsx`). Los números de las armas (unidades y cartas Attack) vienen de la wiki comunitaria https://gundamassemble.wiki.gg
 - Otras cartas: https://global.bandai-hobby.net/en-us/site/gundam-assemble/othercard/ (pendiente de volcar)
 - Escenarios y material extra: https://global.bandai-hobby.net/en-us/site/gundam-assemble/data/enrich-gameplay/ (pendiente de volcar)
 - Guía de juego organizado (06/11/2026): escuadra de exactamente 3 Mobile Suits + 9 cartas de Tactics en las partidas normales ✅
@@ -74,33 +74,35 @@ Fuentes oficiales:
 - ✅ Ataques que también alcanzan a los adyacentes al objetivo (una sola tirada)
 - ✅ Derrota: VP al rival, Reserva, +2 TL, HP al máximo, sin estados, conserva Energy y Upgrades
 - ✅ **Ventanas de Response durante el ataque**: antes y después de la tirada (primero el atacante, luego el defensor); el ataque se pausa solo si alguien tiene una carta jugable
-- ⚠️ **Plantillas de área "SP"** (Twin Buster Rifle, Quadruple Bop Missile, 240mm Cannon, War Edge): cono = 60° hasta 3 hexes; flor = hex elegido + 6 vecinos. La forma exacta está en el diagrama de la carta
+- ⚠️ **Plantillas de área "SP"** (Twin Buster Rifle, Quadruple Bop Missile, 240mm Cannon, War Edge): cono = 60° hasta 3 hexes; flor = hex elegido + 6 vecinos. La forma exacta está en el diagrama de la carta (la hoja enlaza la imagen de War Edge)
 - ⚠️ **Elección del jugador** en Push/Pull: se toma automáticamente el primer hex válido y siempre la distancia máxima (el Q&A 7 permite elegir mover menos, incluso 0)
 - ✅ Push/Pull hacia un hex más bajo: la unidad cae sin daño (Q&A 10)
 
 ## 6. Habilidades y cartas
 
-- ✅ Ongoing: Zero System, Firing Line, Exploit Weakness, Fight to the End, Coordinated Payload, Three-Times Faster, Hover, Newtype Destroyer…
-- ✅ Command: Full Power, Checkmate, No Escape, Sundering Strike, Hunter's Edge, Frenzied Charge, Alaya-Vijnana, Annihilate, Rescue Maneuver…
-- ✅ Response automáticas: Char Kick, Blitzing Slash, Escape from Side 7, Supply, Toss Away, Stunning Shot, Crowd Control
-- ✅ Cartas Response en el turno del rival (ventana tras daño / rescate / movimiento enemigo)
-- ❌ **RWS** (BIT Stave, Corax, Iśvara) y habilidades que dependen de ellos
-- ❌ **Challenge**, Psycho-Frame Synchrony, Permet Burst, Inspiring Presence, Material Transfer
-- ✅ **46 cartas de Tactics oficiales** (wiki) utilizables con las 15 unidades; **29 jugables**:
-  - Attack: Epic Shot, War Edge, Claiming Vengeance
-  - Command: Ghost Step, Thrust Boosters, Renewed Power, Armor Upgrade, Focus, Armor Shatter, Field Engineers, Salvage Systems, Hero's Might, Shoulder Bash, All In, Psycho-Frame Overload, Interference Pattern, Full System Burn, Critical Rescue, Swift Appropriation
-  - Response en el ataque: Federation Shield, Quick Block, Grunt's Guard, Neutralize, Strikethrough, Limiter Release, Locked On, Breaking Blow, Turn of Fortune, Target Reacquisition
-- ❌ 17 cartas oficiales sin implementar (se pueden llevar en el mazo pero no jugar): las de RWS (BIT, Corax, Iśvara), Challenge/Interception, elección de Upgrade, Vantage Point, Ball Reinforcements, Zaku Ambush Tactics, Protective Shot, Iron-Blooded Tenacity, Three Man Team
-- ❌ 11 cartas omitidas por pertenecer a unidades que aún no están en la lista oficial (GM, Zeong, Rick Dom…)
-- Se conservan las 18 cartas de la demo (marcadas como `demo`)
+- ✅ Ongoing: Zero System, Firing Line, Exploit Weakness, Fight to the End, Three-Times Faster, Hover, Jet Through, Newtype Destroyer…
+- ✅ Command: Full Power, Checkmate, No Escape, Sundering Strike, Hunter's Edge, Frenzied Charge, Alaya-Vijnana, Annihilate, Rescue Maneuver, BIT Stave / Corax / Iśvara B Type Direct…
+- ✅ Response automáticas: Char Kick, Blitzing Slash, Escape from Side 7, Supply, Toss Away, Stunning Shot, Crowd Control, Coordinated Payload, Lockdown, Permet Burst, Psycho-Frame Synchrony, Inspiring Presence
+- ⚠️ Las Response de unidad con coste de Energy se usan solas cuando hay Energy; no se puede elegir guardarla
+- ❌ **Challenge** y **Material Transfer** (necesitan que el jugador elija)
 
-## 6b. Q&A oficial revisado (página 1 de 9)
+### Remote Weapon Systems (Q&A 110)
+- ✅ BIT Stave, Corax e Iśvara B Type: empiezan en la reserva de su unidad; se despliegan o recolocan en un hex vacío a alcance con su habilidad "Direct"
+- ✅ No bloquean LoS ni movimiento, no causan Engagement, nadie termina en su hex; se pueden atacar (1 HP, 2 VP); vuelven a la reserva al ser destruidas o al caer su unidad; Push/Pull chocan con ellas
+- ✅ Efectos: Corax +1 Accuracy a aliados contra enemigos adyacentes; BIT Stave −1 de daño a aliados adyacentes; Iśvara 1 de daño a un enemigo adyacente al desplegarse; Beam Rifle de Aerial; crítico del Beam Saber de Darilbalde
+- ❌ Empujar o atraer RWS (ningún efecto actual lo hace)
 
-- ✅ Q1 movimiento no fraccionable · Q4 unidad derrotada en su activación · Q6 no terminar donde empezó (Slow no cuenta como moverse) · Q9 Command una vez, Response una por trigger · Q10 caer de terreno elevado sin daño · Q13 dados adicionales no reactivan el crítico · Q14 unidades fuera de la fase siguen usando Response
-- ✅ Q3 línea de visión entre dos hexes, elección por punto
+### Cartas de Tactics (lista oficial: 45)
+- ✅ **39 jugables**: 3 Attack (Epic Shot, War Edge, Claiming Vengeance), 22 Command y 14 Response (antes de tirar, después de tirar y tras el daño)
+- ❌ 6 sin implementar (se pueden llevar en el mazo pero no jugar): On-Site Integration y Special OPs (elegir Upgrade), Bit Assault (recolocar varias RWS), Interception (Challenge), Protective Shot (ataque fuera de turno), Iron-Blooded Tenacity (evitar la derrota)
+- Se conservan 17 cartas de la demo (marcadas como `demo`)
+
+## 6b. Q&A oficial (130 preguntas revisadas)
+
+- ✅ Q1 movimiento no fraccionable · Q3 LoS entre dos hexes, elección por punto · Q4/Q24 derrota en mitad de la activación o del ataque · Q6 no terminar donde empezó · Q9 Command una vez · Q10 caer sin daño · Q13 dados extra · Q14 · **Q16 empujar contra el borde no hace daño** · Q18 las áreas no dañan aliados · Q19 · Q20 Push/Pull ignoran penalizaciones · Q29 Engagement · Q34 colisión con aliados al atraer · Q37 colisión no es daño de ataque · Q38 · Q39 · **Q43/Q44 Newtype Destroyer también bloquea las Response tras el daño** · Q87 hex vacío · Q100 Move afectado por terreno · Q110 RWS
 - ⚠️ Q7 Push/Pull de 0 hexes (no se puede elegir)
-- ❌ Q2 efectos que hacen retroceder fichas en el Timeline (ninguna unidad actual lo usa)
-- ❌ Páginas 2–9 del Q&A sin revisar
+- ❌ Q2/Q22/Q28 efectos que hacen retroceder fichas en el Timeline (ninguna carta actual)
+- Las preguntas sobre unidades y productos aún no publicados en la lista de unidades (Zeong, Strike, Buster, Deathscythe, Heavyarms, Carriers…) no aplican todavía
 
 ## 7. Objetivos y victoria
 

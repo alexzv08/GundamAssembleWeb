@@ -3,7 +3,8 @@ import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
 import { hexKey, gridDistance } from './game/hexGrid'
-import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard } from './game/queries'
+import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex } from './game/queries'
+import { getNeighbors } from './game/hexGrid'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
 import { UnitPanel } from './components/ui/UnitPanel'
@@ -405,6 +406,12 @@ export default function App() {
     if (!gameState || !selectedUnitId) return
 
     if (selectionMode === 'attacking' && attackableHexes.has(key)) {
+      const rws = rwsAt(gameState, key)
+      if (rws && rws.owner !== myPlayerId && !gameState.board[key]?.occupiedBy) {
+        socket.emit('GAME_ACTION', { action: { type: 'ATTACK_RWS', unitId: selectedUnitId, weaponIndex: selectedWeaponIndex ?? 0, rwsId: rws.id } })
+        clearSelection()
+        return
+      }
       const hex = gameState.board[key]
       if (hex?.garrisonToken && hex.garrisonToken.owner !== myPlayerId) {
         socket.emit('GAME_ACTION', { action: { type: 'ATTACK_GARRISON', unitId: selectedUnitId, weaponIndex: selectedWeaponIndex ?? 0, garrisonId: hex.garrisonToken.id } })
@@ -414,6 +421,12 @@ export default function App() {
     }
 
     if (selectionMode === 'playing_card' && pendingCardId && attackableHexes.has(key)) {
+      const rws = rwsAt(gameState, key)
+      if (rws && rws.owner !== myPlayerId && !gameState.board[key]?.occupiedBy) {
+        socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId: selectedUnitId, cardId: pendingCardId, targetId: rws.id } })
+        clearSelection()
+        return
+      }
       const hex = gameState.board[key]
       if (hex?.garrisonToken && hex.garrisonToken.owner !== myPlayerId) {
         socket.emit('GAME_ACTION', { action: { type: 'PLAY_CARD', unitId: selectedUnitId, cardId: pendingCardId, targetId: hex.garrisonToken.id } })
@@ -484,6 +497,17 @@ export default function App() {
       setMessage(`${ability.name} — elige un enemigo`)
       return
     }
+    // Desplegar o recolocar una RWS: elegir un hex vacío a alcance
+    if (data?.type === 'deploy_rws') {
+      const hexes = new Set(rwsDeployHexes(gameState, selectedUnitId, data.range ?? 3))
+      if (hexes.size === 0) { setMessage(`${ability.name}: no hay hexes vacíos a alcance`); return }
+      setPendingAbilityIndex(abilityIndex)
+      setSelectionMode('ability_hex')
+      setReachableHexes(hexes)
+      setAttackableHexes(new Set())
+      setMessage(`${ability.name} — elige un hex vacío`)
+      return
+    }
     // Habilidades "Move N": elegir el hex de destino
     if (data && (data.type === 'move' || data.type === 'self_damage_move')) {
       const amount = data.type === 'move' ? (data.amount ?? 2) : (data.range ?? 2)
@@ -550,6 +574,19 @@ export default function App() {
       startTargeting(new Set(Object.values(gameState.units)
         .filter(u => u.playerId !== myPlayerId && u.position && gridDistance(unit.position!, u.position) <= range)
         .map(u => hexKey(u.position!))), 'playing_card', 'un enemigo')
+      return
+    }
+    // Dismantle: enemigo junto a una RWS aliada
+    if (e.type === 'dismantle') {
+      startTargeting(new Set(Object.values(gameState.units)
+        .filter(u => u.playerId !== myPlayerId && u.position && rwsAdjacentTo(gameState, hexKey(u.position), myPlayerId).length > 0)
+        .map(u => hexKey(u.position!))), 'playing_card', 'un enemigo junto a tu RWS')
+      return
+    }
+    // Iśvara Assault: hex vacío junto a tu RWS
+    if (e.type === 'reposition_near_rws') {
+      const own = alliedRws(gameState, myPlayerId, e.rws).find(r => r.ownerUnitId === unitId)
+      startTargeting(new Set(own ? getNeighbors(own.position!).map(hexKey).filter(k => isEmptyHex(gameState, k)) : []), 'card_hex', 'un hex junto a tu RWS')
       return
     }
     // Cartas de movimiento: elegir el hex de destino

@@ -104,7 +104,7 @@ un test falla si quedan desincronizadas.
 ## Datos de unidades y cartas
 
 - `server/data/units/unit_library.json`: las 15 unidades oficiales (ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos y textos de la [web oficial](https://global.bandai-hobby.net/en-us/site/gundam-assemble/unitlist/). El coste de TL, alcance y Strength de las armas y los costes de Energy vienen de la [wiki comunitaria](https://gundamassemble.wiki.gg), porque la web oficial solo los muestra en la imagen de la carta. Incluye también las 6 unidades de la demo previa.
-- `server/data/cards/card_library.json`: 46 cartas de Tactics oficiales (de la misma wiki), 29 de ellas jugables, más las 18 de la demo.
+- `server/data/cards/card_library.json`: las 45 cartas de Tactics de la lista oficial (39 jugables) más las 17 de la demo. Los números de las cartas Attack vienen de la wiki.
 
 Conviene revisar ambos ficheros con las cartas físicas: la wiki tiene alguna errata.
 

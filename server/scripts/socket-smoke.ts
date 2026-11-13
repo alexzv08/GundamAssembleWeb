@@ -14,6 +14,7 @@ import { registerGameEvents } from '../src/socket/gameEvents'
 import { reachableFor } from '../src/game/queries'
 import { keyToHex } from '../src/game/hexGrid'
 import type { GameState } from '../src/types'
+import { loadUnitCatalog, loadTacticsCatalog, eligibleCards, requiredDeckSize } from '../src/game/catalog'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { io: ioc } = require(path.join(__dirname, '../../client/node_modules/socket.io-client'))
@@ -24,14 +25,16 @@ const rm = new RoomManager()
 io.use((socket, next) => { socket.data.userId = socket.handshake.auth.userId; socket.data.userName = socket.handshake.auth.userId; next() })
 io.on('connection', s => { registerGameEvents(io, s, rm); s.on('disconnect', () => rm.handleDisconnect(s.id, io)) })
 
+setTimeout(() => { console.error('FALLO: timeout de 60 s'); process.exit(1) }, 60000).unref()
 http.listen(0, async () => {
+    console.log('servidor de prueba escuchando')
     const port = (http.address() as { port: number }).port
     const url = `http://localhost:${port}`
     const a = ioc(url, { auth: { userId: 'ana' } })
     const b = ioc(url, { auth: { userId: 'bea' } })
     const intruder = ioc(url, { auth: { userId: 'intruso' } })
     const wait = (sock: any, ev: string) => new Promise<any>(res => sock.once(ev, res))
-    const fail = (msg: string) => { console.error('FALLO:', msg); process.exit(1) }
+    const fail = (msg: string): never => { console.error('FALLO:', msg); process.exit(1) }
 
     a.emit('CREATE_ROOM', { playerName: 'Ana' })
     const { roomId } = await wait(a, 'ROOM_CREATED')
@@ -48,12 +51,21 @@ http.listen(0, async () => {
     const err = await wait(a, 'ACTION_ERROR')
     console.log('✓ escuadra inválida rechazada:', err.message)
 
-    const fed = ['T01', 'T-02', 'T03', 'T04', 'T05', 'T06', 'T-07', 'T08', 'T09']
-    const zeon = ['T-10', 'T-11', 'T-12', 'T-13', 'T-14', 'T-15', 'T-16', 'T-17', 'T-18']
-    a.emit('SELECT_SQUAD', { unitCardIds: ['ST01-U01', 'PA01-U02', 'PA01-U03'], cardIds: fed })
-    await wait(a, 'SQUAD_ACCEPTED')
+    // Mazos legales construidos con las reglas oficiales
+    const units = loadUnitCatalog(), tactics = loadTacticsCatalog()
+    const deck = (squad: string[]) => eligibleCards(squad, units, tactics).slice(0, requiredDeckSize(squad, units, tactics)).map(c => c.id)
+    const squadA = ['ST01-U01', 'PA01-U02', 'PA01-U03']
+    const squadB = ['ST01-U04', 'DM01-U05', 'DM01-U05']
+    const accepted = (sock: any) => new Promise<void>(res => {
+        const onError = (e: any) => fail(`escuadra rechazada: ${e.message}`)
+        sock.once('ACTION_ERROR', onError)
+        sock.once('SQUAD_ACCEPTED', () => { sock.off('ACTION_ERROR', onError); res() })
+    })
+    a.emit('SELECT_SQUAD', { unitCardIds: squadA, cardIds: deck(squadA) })
+    await accepted(a)
     const started = Promise.all([wait(a, 'GAME_STARTED'), wait(b, 'GAME_STARTED')])
-    b.emit('SELECT_SQUAD', { unitCardIds: ['ST01-U04', 'DM01-U05', 'DM01-U05'], cardIds: zeon })
+    b.emit('SELECT_SQUAD', { unitCardIds: squadB, cardIds: deck(squadB) })
+    await accepted(b)
     await started
     console.log('✓ partida creada (con dos copias Mass Produced)')
 

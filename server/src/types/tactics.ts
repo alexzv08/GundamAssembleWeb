@@ -20,7 +20,9 @@ export interface CardEffect {
           // ── Response tras el daño ──
           'self_and_targets_damage' | 'gain_energy' |
           // ── Command (lista oficial) ──
-          'destroy_upgrades' | 'strength_if_garrisons_defeated' | 'free_dash_and_attack'
+          'destroy_upgrades' | 'strength_if_garrisons_defeated' | 'free_dash_and_attack' |
+          // ── RWS ──
+          'rws_damage' | 'dismantle' | 'reposition_near_rws' | 'rws_timeline_push'
     range?: number
     amount?: number
     upgradeType?: string
@@ -43,6 +45,9 @@ export interface CardEffect {
     requiresAllyWithin?: number         // el atacante necesita otro aliado a esta distancia
     thenStatus?: 'slow' | 'fracture' | 'disarm'   // tras moverse, estado a enemigos a `thenRange`
     thenRange?: number
+    perRwsAdjacentToTarget?: number     // Linked Strike
+    perRwsWithin?: number               // BIT Shield: −1 daño extra por cada RWS aliada a esta distancia
+    rws?: 'bit_stave' | 'corax' | 'isvara'
 }
 
 // ─── TACTICS CARD ─────────────────────────────────────────────────────────────

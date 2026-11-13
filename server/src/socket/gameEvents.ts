@@ -5,7 +5,7 @@ import { reorderSlotTokens } from '../game/timeline'
 import type { GameAction } from '../types'
 
 const ACTION_TYPES = new Set<GameAction['type']>([
-    'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON',
+    'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON', 'ATTACK_RWS',
     'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE',
 ])
 

@@ -195,7 +195,9 @@ function attackAt(
     act.attacksMade.push(weaponIndex)
     s.actionLog.push(target.kind === 'unit'
         ? { type: 'ATTACK', unitId, weaponIndex, targetId: target.id }
-        : { type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId: target.id })
+        : target.kind === 'rws'
+            ? { type: 'ATTACK_RWS', unitId, weaponIndex, rwsId: target.id }
+            : { type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId: target.id })
     startAttack(s, unitId, weapon, targetKey, rng)
     return { success: true, newState: s }
 }
@@ -208,6 +210,15 @@ export function applyAttack(
     if (!target.position) return fail('El objetivo está en la Reserva')
     if (target.playerId === playerId) return fail('No puedes atacar unidades aliadas')
     return attackAt(state, unitId, weaponIndex, hexKey(target.position), playerId, rng)
+}
+
+export function applyAttackRws(
+    state: GameState, unitId: string, weaponIndex: number, rwsId: string, playerId: PlayerId, rng: Rng = rollD10,
+): ActionResult {
+    const rws = state.rws?.[rwsId]
+    if (!rws?.position) return fail('RWS no encontrado')
+    if (rws.owner === playerId) return fail('No puedes atacar tus propias RWS')
+    return attackAt(state, unitId, weaponIndex, hexKey(rws.position), playerId, rng)
 }
 
 export function applyAttackGarrison(
@@ -278,7 +289,9 @@ export function applyPlayCard(
         const unitPos = s.units[unitId].position
         if (!unitPos) return fail('La unidad está en la Reserva')
         const target = targetId ? s.units[targetId] : null
+        const rwsTarget = targetId ? s.rws?.[targetId] : undefined
         attackKey = target?.position ? hexKey(target.position)
+            : rwsTarget?.position ? hexKey(rwsTarget.position)
             : Object.entries(s.board).find(([, h]) => h.garrisonToken?.id === targetId)?.[0] ?? null
         if (!attackKey) return fail('Elige un objetivo para el ataque')
         const check = checkAttackTargetWith(s, unitId, card.weapon, attackKey)
@@ -365,6 +378,7 @@ export function applyAction(state: GameState, action: GameAction, playerId: Play
         case 'ADVANCE': return applyAdvance(state, action.unitId, action.to, playerId)
         case 'ATTACK': return applyAttack(state, action.unitId, action.weaponIndex, action.targetId, playerId, rng)
         case 'ATTACK_GARRISON': return applyAttackGarrison(state, action.unitId, action.weaponIndex, action.garrisonId, playerId, rng)
+        case 'ATTACK_RWS': return applyAttackRws(state, action.unitId, action.weaponIndex, action.rwsId, playerId, rng)
         case 'DASH': return applyDash(state, action.unitId, action.to, playerId)
         case 'ENERGIZE': return applyEnergize(state, action.unitId, playerId)
         case 'RESCUE': return applyRescue(state, action.unitId, action.garrisonId, playerId)

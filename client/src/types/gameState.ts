@@ -1,5 +1,5 @@
 // AUTO-GENERADO por scripts/sync-shared.mjs desde server/src — NO EDITAR AQUÍ.
-import type { Unit, HexCoord } from './units'
+import type { Unit, HexCoord, RemoteWeapon } from './units'
 import type { BoardMap } from './board'
 import type { Timeline } from './timeline'
 import type { TacticsState, PendingResponse, PendingAttack } from './tactics'
@@ -43,7 +43,7 @@ export interface AttackReport {
   weaponName: string
   rolls: number[]
   rerolled: number[]
-  targets: { id: string; kind: 'unit' | 'garrison'; hits: number; crits: number; damage: number; defeated: boolean }[]
+  targets: { id: string; kind: 'unit' | 'garrison' | 'rws'; hits: number; crits: number; damage: number; defeated: boolean }[]
 }
 
 export interface GameState {
@@ -57,6 +57,7 @@ export interface GameState {
   activation: ActivationState | null
   board: BoardMap
   units: Record<string, Unit>
+  rws: Record<string, RemoteWeapon>
   timeline: Timeline
   players: {
     player1: PlayerState
@@ -89,6 +90,7 @@ export type GameAction =
   | { type: 'ENERGIZE'; unitId: string }
   | { type: 'RESCUE'; unitId: string; garrisonId: string }
   | { type: 'ATTACK_GARRISON'; unitId: string; weaponIndex: number; garrisonId: string }
+  | { type: 'ATTACK_RWS'; unitId: string; weaponIndex: number; rwsId: string }
   | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string; targetHex?: HexCoord }
   | { type: 'USE_ABILITY'; unitId: string; abilityIndex: number; targetId?: string; targetHex?: HexCoord }
   | { type: 'END_ACTIVATION'; unitId: string }

@@ -1,7 +1,7 @@
 // Consultas puras sobre el GameState que comparten servidor (validación) y
 // cliente (resaltado de hexes). Así lo que la UI ofrece coincide siempre con lo
 // que el servidor acepta.
-import type { GameState, PlayerId, Unit, HexCoord, BoardMap, Weapon, TacticsCard, ResponseTrigger } from '../types'
+import type { GameState, PlayerId, Unit, HexCoord, BoardMap, Weapon, TacticsCard, ResponseTrigger, RemoteWeapon, RwsKind } from '../types'
 import {
   hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, getReachableHexes,
   type MoveOptions,
@@ -46,9 +46,49 @@ export function enemyHexes(state: GameState, playerId: PlayerId): Set<string> {
   return keys
 }
 
-// Hexes donde no se puede terminar un movimiento (cualquier unidad, Garrison o Base).
+// ─── RWS ──────────────────────────────────────────────────────────────────────
+
+export function rwsAt(state: GameState, key: string): RemoteWeapon | null {
+  return Object.values(state.rws ?? {}).find(r => r.position && hexKey(r.position) === key) ?? null
+}
+
+export function alliedRws(state: GameState, player: PlayerId, kind?: RwsKind): RemoteWeapon[] {
+  return Object.values(state.rws ?? {}).filter(r => r.owner === player && r.position && (!kind || r.kind === kind))
+}
+
+// RWS aliadas de `player` adyacentes a `key`
+export function rwsAdjacentTo(state: GameState, key: string, player: PlayerId, kind?: RwsKind): RemoteWeapon[] {
+  const near = new Set(getNeighbors(keyToHex(key)).map(hexKey))
+  return alliedRws(state, player, kind).filter(r => near.has(hexKey(r.position!)))
+}
+
+// Hex vacío: sin unidades, Garrisons, RWS, estructuras ni fichas (Q&A 87).
+export function isEmptyHex(state: GameState, key: string): boolean {
+  const hex = state.board[key]
+  if (!hex || hex.occupiedBy || hex.garrisonToken || hex.upgradeToken || hex.objectiveToken) return false
+  if (hex.terrain === 'impassable') return false
+  if (baseOwnerAt(state, key) !== null) return false
+  return rwsAt(state, key) === null
+}
+
+// Hexes vacíos donde la unidad puede desplegar o recolocar su RWS (a [Range N], con LoS).
+export function rwsDeployHexes(state: GameState, unitId: string, range: number): string[] {
+  const unit = state.units[unitId]
+  if (!unit?.position) return []
+  const blockers = enemyHexes(state, unit.playerId)
+  return Object.keys(state.board).filter(k => {
+    if (!isEmptyHex(state, k)) return false
+    const h = keyToHex(k)
+    const d = gridDistance(unit.position!, h)
+    if (d === 0 || d > range) return false
+    return d <= 1 || checkLineOfSight(unit.position!, h, state.board, blockers).clear
+  })
+}
+
+// Hexes donde no se puede terminar un movimiento (cualquier unidad, Garrison, Base o RWS).
 export function occupiedHexes(state: GameState, exceptUnitId?: string): Set<string> {
   const keys = new Set<string>()
+  for (const r of Object.values(state.rws ?? {})) if (r.position) keys.add(hexKey(r.position))
   for (const u of Object.values(state.units)) {
     if (u.id !== exceptUnitId && u.position) keys.add(hexKey(u.position))
   }
@@ -153,7 +193,7 @@ export function reachableFor(state: GameState, unitId: string, req: MoveRequest)
 // ─── ATAQUE ───────────────────────────────────────────────────────────────────
 
 export interface TargetRef {
-  kind: 'unit' | 'garrison'
+  kind: 'unit' | 'garrison' | 'rws'
   id: string
   key: string
 }
@@ -168,6 +208,8 @@ export function targetAt(state: GameState, key: string, attackerPlayer: PlayerId
   if (hex.garrisonToken && hex.garrisonToken.owner !== attackerPlayer) {
     return { kind: 'garrison', id: hex.garrisonToken.id, key }
   }
+  const rws = rwsAt(state, key)
+  if (rws && rws.owner !== attackerPlayer) return { kind: 'rws', id: rws.id, key }
   return null
 }
 
@@ -344,5 +386,11 @@ export function canPlayResponseCard(state: GameState, player: PlayerId, card: Ta
   if (e.requiresAllyWithin && attacker.position && !Object.values(state.units).some(u => u.id !== attacker.id &&
       u.playerId === attacker.playerId && u.position && gridDistance(u.position, attacker.position!) <= e.requiresAllyWithin!)) return false
   if (e.type === 'gain_energy' && !pa.damagedIds.some(id => state.units[id]?.playerId === player && state.units[id].position)) return false
+  // Counter Attack: algún defensor superviviente debe poder alcanzar al atacante
+  if (e.type === 'counter_attack') {
+    if (!attacker.position) return false
+    const key = hexKey(attacker.position)
+    if (!actors.some(id => state.units[id].weapons.some(w => checkAttackTargetWith(state, id, w, key).ok))) return false
+  }
   return true
 }

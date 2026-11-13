@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import type { GameState } from '../types/gameState'
 import { GameBoard } from './GameBoard'
 import { UnitMesh } from './UnitMesh'
+import { RwsMesh } from './RwsMesh'
 import { hexKey } from '../game/hexGrid'
 
 interface GameSceneProps {
@@ -59,6 +60,17 @@ export function GameScene({
           onTokenHover={onTokenHover}
           logHighlightedHexes={logHighlightedHexes}
         />
+
+        {Object.values(gameState.rws ?? {}).map(rws => rws.position && (
+          <RwsMesh
+            key={rws.id}
+            rws={rws}
+            elevation={gameState.board[hexKey(rws.position)]?.elevation ?? 0}
+            isMine={rws.owner === myPlayerId}
+            onClick={() => onHexClick(hexKey(rws.position!))}
+            onHover={onTokenHover}
+          />
+        ))}
 
         {Object.values(gameState.units).map(unit => {
           const elevation = unit.position

@@ -28,6 +28,7 @@ const MOCK_STATE: GameState = {
     hasUsedPrimaryAction: false,
     activation: null,
     pendingAttack: null,
+    rws: {},
     lastAttack: null,
     winner: null,
     pendingResponse: null,

@@ -505,7 +505,11 @@
           "name": "Psycho-Frame Synchrony",
           "effect": "[Before Attack Roll] Another attacker within [Range 3] gets [Strength +1] this attack for each [Strength] Upgrade on this unit.",
           "type": "RSP",
-          "energyCost": 1
+          "energyCost": 1,
+          "abilityData": {
+            "type": "psycho_frame",
+            "range": 3
+          }
         },
         {
           "name": "Newtype Destroyer",
@@ -687,6 +691,11 @@
             "trigger": "after_attack_roll",
             "type": "bonus_damage",
             "amount": 2
+          },
+          "effectData": {
+            "trigger": "always",
+            "type": "strength_per_rws_adjacent",
+            "amount": 1
           }
         }
       ],
@@ -695,12 +704,21 @@
           "name": "Permet Burst",
           "effect": "[After Attack Roll] If this unit or another allied unit within [Range 3] is attacking, set 1 die to a [Crit].",
           "type": "RSP",
-          "energyCost": 1
+          "energyCost": 1,
+          "abilityData": {
+            "type": "permet_burst",
+            "range": 3
+          }
         },
         {
           "name": "BIT Stave Direct",
           "effect": "Deploy or reposition this unit's BIT Stave on an empty hex within [Range 3].",
-          "type": "CMD"
+          "type": "CMD",
+          "abilityData": {
+            "type": "deploy_rws",
+            "rws": "bit_stave",
+            "range": 3
+          }
         },
         {
           "name": "Challenge",
@@ -756,12 +774,21 @@
           "name": "Lockdown",
           "effect": "[After Combat Damage] If this unit attacked an enemy adjacent to this unit's Corax, it applies [Slow] to that enemy unit.",
           "type": "RSP",
-          "energyCost": 1
+          "energyCost": 1,
+          "abilityData": {
+            "type": "slow_near_rws",
+            "rws": "corax"
+          }
         },
         {
           "name": "Corax Direct",
           "effect": "Deploy or reposition this unit's Corax on an empty hex within [Range 4].",
-          "type": "CMD"
+          "type": "CMD",
+          "abilityData": {
+            "type": "deploy_rws",
+            "rws": "corax",
+            "range": 4
+          }
         },
         {
           "name": "Hover",
@@ -812,7 +839,12 @@
           "crit": "Deal [Damage 2] to each enemy adjacent to this unit's Iśvara B Type.",
           "tlCost": 3,
           "range": 1,
-          "strength": 7
+          "strength": 7,
+          "critData": {
+            "trigger": "after_attack_roll",
+            "type": "damage_adjacent_to_rws",
+            "amount": 2
+          }
         }
       ],
       "abilities": [
@@ -831,7 +863,12 @@
         {
           "name": "Iśvara B Type Direct",
           "effect": "Deploy or reposition this unit's Iśvara B Type on an empty hex within [Range 2].",
-          "type": "CMD"
+          "type": "CMD",
+          "abilityData": {
+            "type": "deploy_rws",
+            "rws": "isvara",
+            "range": 2
+          }
         }
       ],
       "statsSource": "https://gundamassemble.wiki.gg/wiki/Darilbalde_(Frontline_Duelist)"
@@ -890,7 +927,12 @@
         {
           "name": "Inspiring Presence",
           "effect": "[After Attack Roll] If another allied unit within [Range 2] is attacking, reroll up to 3 misses.",
-          "type": "RSP"
+          "type": "RSP",
+          "abilityData": {
+            "type": "inspiring_presence",
+            "range": 2,
+            "amount": 3
+          }
         },
         {
           "name": "Challenge",

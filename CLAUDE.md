@@ -94,7 +94,7 @@ server/src/
   routes/                 — /api/maps, /api/units, /api/cards, /api/auth
 server/data/
   units/unit_library.json — 15 unidades oficiales + 6 de la demo (formato v2)
-  cards/card_library.json — 46 cartas de Tactics oficiales (wiki) + 18 de la demo
+  cards/card_library.json — 45 cartas de Tactics oficiales + 17 de la demo
   maps/                   — mapas
 server/scripts/
   self-play.ts            — partidas bot contra bot (npm run selfplay)
@@ -106,7 +106,7 @@ client/src/
   game/                   — copias compartidas + loaders/useGameData (datos de la API)
   screens/                — lobby, espera, selección de escuadra (usa deckRules), setup
   components/ui/          — UnitPanel, TacticsHand, TimelineBar, ActionLog…
-  three/                  — escena 3D; models.ts asocia cardId → modelo STL
+  three/                  — escena 3D; models.ts asocia cardId → modelo STL; RwsMesh.tsx dibuja las RWS
 tools/map-editor.html     — editor de mapas
 ```
 
@@ -150,8 +150,14 @@ Cada carta: `cardId, set, name, model, signature, traits[], hp, vp, tl, provisio
 
 `cardId, name, type: command|attack|response, faction (rasgo requerido), signature (título de firma), effect, effectData, weapon (cartas Attack), source`.
 
-- `source: 'demo'` = cartas de la demo previa; el resto vienen de la wiki comunitaria.
+- `source: 'oficial'` = las 45 cartas de la lista oficial (ID, set, firma, rasgos y texto de Bandai; los números de las cartas Attack son de la wiki); `source: 'demo'` = cartas de la demo previa.
 - Las Response con `trigger: before_attack_roll | after_attack_roll` y `side: attacker | defender` se juegan durante un ataque: `combat.ts` pausa el ataque (`GameState.pendingAttack`) y abre una ventana por jugador (atacante primero). `canPlayResponseCard` (queries.ts, compartido) decide si una carta es jugable.
+
+---
+
+## Remote Weapon Systems
+
+`GameState.rws: Record<id, RemoteWeapon>` (BIT Stave, Corax, Iśvara B Type). `position: null` = en la reserva de su unidad. Se crean en `createServerGame` para cada unidad con habilidad `deploy_rws`. Consultas en `queries.ts` (`rwsAt`, `alliedRws`, `rwsAdjacentTo`, `rwsDeployHexes`, `isEmptyHex`); destrucción con `destroyRws` (damage.ts); se atacan con la acción `ATTACK_RWS`.
 
 ---
 
@@ -317,4 +323,12 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **Cliente**: cartas que piden un enemigo o un hex de destino, Attack con resaltado según su arma, la mano resalta solo las Response jugables, aviso cuando el rival está respondiendo, plantilla de área en el panel de unidad y etiquetas demo / sin implementar en la selección de mazo.
 - **Tests**: 72 (13 nuevos); self-play 200/200 con el bot jugando cartas.
 - Archivos: `server/data/units/unit_library.json`, `server/data/cards/card_library.json`, `server/src/types/{units,tactics,gameState}.ts`, `server/src/game/{combat,actions,effects,queries,catalog,activation,createServerGame}.ts`, `server/src/game/__tests__/engine.test.ts`, `server/scripts/self-play.ts`, `client/src/App.tsx`, `client/src/components/ui/{TacticsHand,UnitPanel}.tsx`, `client/src/screens/SquadSelectionScreen.tsx`, `client/src/api/gameData.ts`, copias compartidas del cliente, `GAMEPLAN.md`, `README.md`.
+
+### 2026-11-13 — Lista oficial de cartas, Q&A completo y Remote Weapon Systems
+- **Datos** (hoja `gundam_assemble_datos.xlsx` aportada por el autor, volcada de la web oficial): `card_library.json` v3 con las 45 cartas oficiales (ID, set, firma, rasgos, texto); quitadas las 10 cartas de la wiki que no están en la lista oficial; 39 jugables.
+- **Ventanas de Response**: la de tras el daño sigue el mismo flujo que las otras (atacante y luego defensor). Nuevas cartas: Interference, Formative Strength, Counter Attack (ataque real a TL −1), Sacrificial Overload, Sayla's Encouragement, Breaker Sweep, Systematic Elimination, Bulwark Siege, Crimson Execution.
+- **Q&A**: revisadas las 130 preguntas; corregidos Q16 (empujar contra el borde no hace daño) y Q43/Q44 (Newtype Destroyer bloquea también las Response tras el daño).
+- **RWS**: BIT Stave, Corax e Iśvara B Type con las reglas de la Q&A 110, sus habilidades Direct, efectos pasivos, ataque a RWS, Beam Rifle de Aerial, crítico de Darilbalde, Lockdown, Permet Burst, Psycho-Frame Synchrony, Inspiring Presence y las cartas Linked Strike, BIT Shield, Drone Assault, Dismantle, Iśvara Assault y Cold Silence. En el cliente, `RwsMesh` y modos de selección para desplegarlas y atacarlas.
+- **Tests**: 90; self-play 200/200 desplegando y atacando RWS, ahora determinista (`createServerGame` acepta `random` para barajar) y cortando solo ante 50 rechazos seguidos. `npm run smoke` construye mazos legales con `eligibleCards` (estaba roto desde el cambio de cartas: usaba la carta demo `T-10`, ya retirada) y tiene un timeout de 60 s.
+- Archivos: `server/data/{units,cards}/*.json`, `server/src/types/*`, `server/src/game/{combat,actions,effects,queries,damage,createServerGame}.ts`, `server/src/socket/gameEvents.ts`, tests, `server/scripts/self-play.ts`, `client/src/App.tsx`, `client/src/three/{GameScene,RwsMesh}.tsx`, copias compartidas, `GAMEPLAN.md`, `README.md`.
 

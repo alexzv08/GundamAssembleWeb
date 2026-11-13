@@ -4,7 +4,7 @@
 import type { GameState, PlayerId } from '../types'
 import { hexKey, keyToHex, getNeighbors, gridDistance } from './hexGrid'
 import { advanceToken, getCurrentRound } from './timeline'
-import { otherPlayer, upgradeCount } from './queries'
+import { otherPlayer, upgradeCount, rwsAt } from './queries'
 
 export function cloneState(state: GameState): GameState {
     return structuredClone(state)
@@ -32,6 +32,8 @@ export function defeatUnit(state: GameState, unitId: string): void {
     unit.position = null
     unit.currentHp = unit.maxHp
     unit.statusEffects = []
+    // Sus RWS vuelven a su reserva ("RWS Return")
+    for (const r of Object.values(state.rws ?? {})) if (r.ownerUnitId === unitId) r.position = null
     state.timeline = advanceToken(state.timeline, unitId, 2)
     pushLog(state, scorer, `¡${unit.name} derrotado! (+${unit.vp} VP)`, 'attack')
 }
@@ -102,10 +104,25 @@ export function destroyGarrison(state: GameState, key: string, byPlayer: PlayerI
     return true
 }
 
+// RWS (1 HP): al destruirla vuelve a la reserva de su unidad; el rival gana sus VP.
+export function destroyRws(state: GameState, rwsId: string, byPlayer: PlayerId): boolean {
+    const rws = state.rws?.[rwsId]
+    if (!rws?.position) return false
+    const key = hexKey(rws.position)
+    rws.position = null
+    if (rws.owner !== byPlayer) {
+        state.players[byPlayer].vp += rws.vp
+        pushLog(state, byPlayer, `${rws.name} destruido (+${rws.vp} VP)`, 'attack', [key])
+    }
+    return true
+}
+
 // Daño "directo" a lo que haya en un hex (habilidades, colisiones).
 export function damageAt(state: GameState, key: string, amount: number, byPlayer: PlayerId): void {
     const hex = state.board[key]
     if (!hex || amount <= 0) return
+    const rws = rwsAt(state, key)
+    if (rws) destroyRws(state, rws.id, byPlayer)
     if (hex.occupiedBy) damageUnit(state, hex.occupiedBy, amount)
     else if (hex.garrisonToken) destroyGarrison(state, key, byPlayer)
 }
@@ -141,7 +158,7 @@ export function forceMove(
 
         const isFree = (k: string) => {
             const h = state.board[k]
-            return h && !h.occupiedBy && !h.garrisonToken && h.terrain !== 'impassable' && h.elevation <= curHex.elevation
+            return h && !h.occupiedBy && !h.garrisonToken && !rwsAt(state, k) && h.terrain !== 'impassable' && h.elevation <= curHex.elevation
         }
         const free = candidates.find(n => isFree(hexKey(n)))
         if (free) {
@@ -155,7 +172,7 @@ export function forceMove(
         // Colisión
         const blockedKey = hexKey(candidates[0])
         const blocked = state.board[blockedKey]
-        if (blocked && (blocked.occupiedBy || blocked.garrisonToken)) {
+        if (blocked && (blocked.occupiedBy || blocked.garrisonToken || rwsAt(state, blockedKey))) {
             damageAt(state, blockedKey, 2, byPlayer)
         }
         damageUnit(state, unitId, 2)

@@ -144,7 +144,11 @@
       "effect": "All enemy units adjacent to Gundam Pharact's Corax move up 1 [Timeline].",
       "source": "oficial",
       "signature": "Silent Hunter",
-      "effectData": null
+      "effectData": {
+        "type": "rws_timeline_push",
+        "rws": "corax",
+        "amount": 1
+      }
     },
     {
       "cardId": "EX02-T03",
@@ -155,7 +159,11 @@
       "effect": "Reposition Darilbalde to a hex adjacent to its Iśvara B Type. Darilbalde's attacks deal [Damage +2] this activation.",
       "source": "oficial",
       "signature": "Frontline Duelist",
-      "effectData": null
+      "effectData": {
+        "type": "reposition_near_rws",
+        "rws": "isvara",
+        "damage": 2
+      }
     },
     {
       "cardId": "EX02-T04",
@@ -165,7 +173,9 @@
       "faction": "Asticassia",
       "effect": "Your active unit destroys all Upgrades on an enemy unit adjacent to an allied RWS.",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "dismantle"
+      }
     },
     {
       "cardId": "EX02-T05",
@@ -175,7 +185,10 @@
       "faction": "Asticassia",
       "effect": "Each allied RWS deals [Damage 1] to an adjacent enemy.",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "rws_damage",
+        "amount": 1
+      }
     },
     {
       "cardId": "EX02-T06",
@@ -200,7 +213,13 @@
       "faction": "Asticassia",
       "effect": "[After Attack Roll] A defender is dealt [Damage -3] this attack and an additional [Damage -1] for each allied RWS within [Range 2].",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "reduce_damage",
+        "amount": 3,
+        "perRwsWithin": 2,
+        "side": "defender",
+        "trigger": "after_attack_roll"
+      }
     },
     {
       "cardId": "EX02-T08",
@@ -210,7 +229,13 @@
       "faction": "Asticassia",
       "effect": "[Before Attack Roll] The attacker gains [Strength +3] this attack and an additional [Strength +1] for each allied RWS adjacent to the target.",
       "source": "oficial",
-      "effectData": null
+      "effectData": {
+        "type": "attack_bonus",
+        "strength": 3,
+        "perRwsAdjacentToTarget": 1,
+        "side": "attacker",
+        "trigger": "before_attack_roll"
+      }
     },
     {
       "cardId": "EX02-T09",

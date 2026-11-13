@@ -20,9 +20,9 @@ import type { CardEffect } from '../types/tactics'
 import { hexKey, keyToHex, gridDistance, findPath } from './hexGrid'
 import {
     terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer,
-    attackDefenders, canPlayResponseCard, checkAttackTargetWith, type TargetRef,
+    attackDefenders, canPlayResponseCard, checkAttackTargetWith, rwsAdjacentTo, alliedRws, type TargetRef,
 } from './queries'
-import { damageUnit, destroyGarrison, forceMove, pushLog } from './damage'
+import { damageUnit, destroyGarrison, destroyRws, damageAt, forceMove, pushLog } from './damage'
 import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, useResponseAbility, hasAbilityType } from './effects'
 import { advanceToken } from './timeline'
 import { captureObjective } from './victory'
@@ -55,7 +55,9 @@ function accuracyFor(state: GameState, pa: PendingAttack, key: string): number {
     const primary = targetAt(state, pa.primaryKey, attacker.playerId)
     const mods = getAttackModifiers(state, pa.attackerId, pa.weapon.name, primary?.kind === 'unit' ? primary.id : null)
     const terrain = attacker.position ? terrainAccuracy(state.board, attacker.position, keyToHex(key)) : 0
-    return mods.accuracyBonus + pa.bonusAccuracy + terrain
+    // Corax "Hold In Position": aliados +1 Accuracy contra enemigos adyacentes a ella
+    const corax = rwsAdjacentTo(state, key, attacker.playerId, 'corax').length > 0 ? 1 : 0
+    return mods.accuracyBonus + pa.bonusAccuracy + terrain + corax
 }
 
 export function primaryAccuracy(state: GameState): number {
@@ -126,6 +128,12 @@ function rollDice(state: GameState, pa: PendingAttack, rng: Rng): void {
             gridDistance(attacker.position!, u.position) <= range).length
         : 0
     if (effect?.type === 'strength_per_ally') strength += (effect.amount ?? 2) * nearbyAllies(effect.max ?? 3)
+    if (effect?.type === 'strength_per_rws_adjacent') strength += rwsAdjacentTo(state, pa.primaryKey, attacker.playerId).length * (effect.amount ?? 1)
+    // Psycho-Frame Synchrony: otro aliado a 3 hexes da +1 Strength por cada Strength Upgrade suyo
+    for (const ally of nearbyAllyUnits(state, pa.attackerId, 3)) {
+        const n = upgradeCount(ally, 'attack')
+        if (n > 0 && ally.abilities.some(a => a.abilityData?.type === 'psycho_frame') && useResponseAbility(state, ally.id, 'psycho_frame')) strength += n
+    }
     // Coordinated Payload (Response con coste de Energy): se usa si hay Energy
     const payload = useResponseAbility(state, pa.attackerId, 'strength_per_ally_nearby')
     if (payload) strength += (payload.amount ?? 2) * nearbyAllies(payload.range ?? 3)
@@ -166,6 +174,26 @@ function finishAttack(state: GameState, rng: Rng): void {
     const weapon = pa.weapon
     const effect = weapon.effectData
     const crit = weapon.critData
+    // Inspiring Presence: otro aliado a 2 hexes repite hasta 3 fallos
+    const inspirer = nearbyAllyUnits(state, pa.attackerId, 2).find(u => u.abilities.some(a => a.abilityData?.type === 'inspiring_presence'))
+    if (inspirer && useResponseAbility(state, inspirer.id, 'inspiring_presence')) {
+        const acc = accuracyFor(state, pa, pa.primaryKey)
+        let left = 3
+        pa.rolls = pa.rolls.map((r, i) => {
+            if (left <= 0 || isHit(r, acc, pa.critThreshold)) return r
+            left--; pa.rerolled.push(i)
+            return rng()
+        })
+    }
+    // Permet Burst: si esta unidad o un aliado a 3 hexes ataca, un dado pasa a crítico
+    if (!pa.disarmed && pa.rolls.length && !pa.rolls.every(r => r >= pa.critThreshold)) {
+        const burster = [attacker, ...nearbyAllyUnits(state, pa.attackerId, 3)].find(u => u.abilities.some(a => a.abilityData?.type === 'permet_burst'))
+        if (burster && useResponseAbility(state, burster.id, 'permet_burst')) {
+            let idx = 0
+            pa.rolls.forEach((r, i) => { if (r < pa.rolls[idx]) idx = i })
+            pa.rolls[idx] = 10
+        }
+    }
     const critTriggered = !pa.disarmed && pa.rolls.some(r => r >= pa.critThreshold)
     let primary = targetAt(state, pa.primaryKey, player)
     const primaryUnit = primary?.kind === 'unit' ? state.units[primary.id] : null
@@ -209,10 +237,17 @@ function finishAttack(state: GameState, rng: Rng): void {
             report.targets.push({ id: t.id, kind: 'garrison', hits, crits, damage: hits > 0 ? 1 : 0, defeated: destroyed })
             continue
         }
+        if (t.kind === 'rws') {
+            const destroyed = hits > 0 && destroyRws(state, t.id, player)
+            report.targets.push({ id: t.id, kind: 'rws', hits, crits, damage: hits > 0 ? 1 : 0, defeated: destroyed })
+            continue
+        }
+        // BIT Stave "Blocking BIT": los aliados adyacentes reciben −1 de daño de ataques enemigos
+        const bits = rwsAdjacentTo(state, t.key, state.units[t.id].playerId, 'bit_stave').length
         let damage = hits
         if (hits > 0 || critTriggered) damage += bonusDamage(state, pa.attackerId, weapon, critTriggered, crits, t) + pa.bonusDamage + actBonus
         // Las reducciones de daño se aplican antes que los Shields
-        damage = Math.max(0, damage - (pa.reductions[t.id] ?? 0))
+        damage = Math.max(0, damage - (pa.reductions[t.id] ?? 0) - bits)
         const { dealt, defeated } = damageUnit(state, t.id, damage, { combat: true })
         report.targets.push({ id: t.id, kind: 'unit', hits, crits, damage: dealt, defeated })
     }
@@ -230,6 +265,12 @@ function finishAttack(state: GameState, rng: Rng): void {
                 applyOnTarget(state, pa.attackerId, t.id, crit)
             }
         }
+    }
+    // Lockdown: si atacó a un enemigo adyacente a su Corax, le aplica Slow
+    if (primaryId && state.units[primaryId]?.position &&
+        alliedRws(state, player, 'corax').some(r => r.ownerUnitId === pa.attackerId && gridDistance(r.position!, state.units[primaryId].position!) === 1) &&
+        useResponseAbility(state, pa.attackerId, 'slow_near_rws')) {
+        addStatus(state, primaryId, 'slow')
     }
     // Stunning Shot: cada objetivo dañado avanza en el Timeline.
     if (report.targets.some(t => t.kind === 'unit' && t.damage > 0)) {
@@ -272,7 +313,14 @@ function finishAttack(state: GameState, rng: Rng): void {
 }
 
 function describe(state: GameState, t: TargetRef): string {
-    return t.kind === 'unit' ? state.units[t.id].name : 'una Garrison'
+    return t.kind === 'unit' ? state.units[t.id].name : t.kind === 'rws' ? state.rws[t.id].name : 'una Garrison'
+}
+
+function nearbyAllyUnits(state: GameState, unitId: string, range: number) {
+    const unit = state.units[unitId]
+    if (!unit?.position) return []
+    return Object.values(state.units).filter(u => u.id !== unitId && u.playerId === unit.playerId && u.position &&
+        gridDistance(u.position, unit.position!) <= range)
 }
 
 function logAttack(state: GameState, report: AttackReport, attackerName: string, targetName: string): void {
@@ -333,6 +381,13 @@ function applyOnTarget(state: GameState, attackerId: string, targetId: string, e
         case 'push': case 'pull':
             if (attacker.position) forceMove(state, hexKey(attacker.position), targetId, e.amount ?? 1, e.type, attacker.playerId)
             break
+        case 'damage_adjacent_to_rws': {
+            // "Deal [Damage 2] to each enemy adjacent to this unit's Iśvara B Type"
+            for (const r of alliedRws(state, attacker.playerId, 'isvara').filter(r => r.ownerUnitId === attackerId)) {
+                for (const t of enemiesAdjacentTo(state, hexKey(r.position!), attacker.playerId)) damageAt(state, t.key, e.amount ?? 2, attacker.playerId)
+            }
+            break
+        }
         case 'free_dash':
             if (state.activation?.unitId === attackerId) state.activation.freeDashes += 1
             break
@@ -420,6 +475,7 @@ export function applyAttackResponse(state: GameState, player: PlayerId, card: Ta
     if (!pa) return 'No hay ningún ataque en curso'
     switch (e.type) {
         case 'attack_bonus':
+            if (e.perRwsAdjacentToTarget) pa.bonusStrength += e.perRwsAdjacentToTarget * rwsAdjacentTo(state, pa.primaryKey, player).length
             pa.bonusStrength += e.strength ?? 0
             pa.bonusAccuracy += e.accuracy ?? 0
             pa.bonusDamage += e.damage ?? 0
@@ -431,7 +487,9 @@ export function applyAttackResponse(state: GameState, player: PlayerId, card: Ta
                 (!e.ifLowerVp || state.units[id].vp < state.units[pa.attackerId].vp))
             const id = ids[0]
             if (!id) return 'No tienes un defensor válido en este ataque'
-            pa.reductions[id] = (pa.reductions[id] ?? 0) + (e.amount ?? 0)
+            const nearRws = e.perRwsWithin && state.units[id].position
+                ? alliedRws(state, player).filter(r => gridDistance(r.position!, state.units[id].position!) <= e.perRwsWithin!).length : 0
+            pa.reductions[id] = (pa.reductions[id] ?? 0) + (e.amount ?? 0) + nearRws
             if (e.gainShield) gainUpgrade(state, id, 'shield')
             if (e.destroyAttackerUpgrade) destroyUpgrade(state, pa.attackerId, 'any', 1)
             return null

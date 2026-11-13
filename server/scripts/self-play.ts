@@ -12,7 +12,7 @@
 import { createServerGame } from '../src/game/createServerGame'
 import { processAction } from '../src/game/engine'
 import { startGame } from '../src/game/activation'
-import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard } from '../src/game/queries'
+import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes } from '../src/game/queries'
 import { hexKey, keyToHex, gridDistance } from '../src/game/hexGrid'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, eligibleCards, requiredDeckSize } from '../src/game/catalog'
 import type { GameState, GameAction, PlayerId } from '../src/types'
@@ -70,7 +70,9 @@ function botAction(s: GameState, player: PlayerId): GameAction {
             const t = targetAt(s, pickOne(targets), player)!
             return t.kind === 'unit'
                 ? { type: 'ATTACK', unitId: id, weaponIndex: wi, targetId: t.id }
-                : { type: 'ATTACK_GARRISON', unitId: id, weaponIndex: wi, garrisonId: t.id }
+                : t.kind === 'rws'
+                    ? { type: 'ATTACK_RWS', unitId: id, weaponIndex: wi, rwsId: t.id }
+                    : { type: 'ATTACK_GARRISON', unitId: id, weaponIndex: wi, garrisonId: t.id }
         }
     }
 
@@ -82,9 +84,16 @@ function botAction(s: GameState, player: PlayerId): GameAction {
             const t = targetAt(s, pickOne(attackableHexesWith(s, id, atk.weapon)), player)!
             return { type: 'PLAY_CARD', unitId: id, cardId: atk.id, targetId: t.id }
         }
-        const simple = new Set(['gain_upgrade', 'repair', 'activation_move_buff', 'aoe_status', 'free_attack', 'heal_per_upgrade', 'energy_if_rescued'])
+        const simple = new Set(['gain_upgrade', 'repair', 'activation_move_buff', 'aoe_status', 'free_attack', 'heal_per_upgrade', 'energy_if_rescued', 'rws_damage', 'rws_timeline_push', 'free_dash_and_attack', 'strength_if_garrisons_defeated'])
         const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type))
         if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
+    }
+
+    // Desplegar RWS
+    const dep = unit.abilities.findIndex((a, i) => a.abilityData?.type === 'deploy_rws' && !act.usedCommands.includes(i) && unit.energy >= (a.energyCost ?? 0))
+    if (dep !== -1 && rand() < 0.5) {
+        const hexes = rwsDeployHexes(s, id, unit.abilities[dep].abilityData!.range ?? 3)
+        if (hexes.length) return { type: 'USE_ABILITY', unitId: id, abilityIndex: dep, targetHex: keyToHex(pickOne(hexes)) }
     }
 
     const cmd = unit.abilities.findIndex((a, i) => a.type === 'CMD' && a.abilityData?.type === 'buff_activation' &&
@@ -115,7 +124,7 @@ interface Result { ok: boolean; actions: number; winner?: PlayerId; vp?: [number
 
 function runGame(): Result {
     const sq1 = randomSquad(), sq2 = randomSquad()
-    let s = createServerGame('BotA', 'BotB', sq1, sq2, randomDeck(sq1), randomDeck(sq2), { rng: d10 })
+    let s = createServerGame('BotA', 'BotB', sq1, sq2, randomDeck(sq1), randomDeck(sq2), { rng: d10, random: rand })
     s = startGame(s)
     let errors = 0
     for (let n = 0; n < MAX_ACTIONS; n++) {
@@ -130,7 +139,8 @@ function runGame(): Result {
         }
         if (!r.success) {
             // Un fallo de validación no es un bug si el bot puede seguir: forzamos una salida segura.
-            if (++errors > 50) return { ok: false, actions: n, error: `Demasiados rechazos; último: ${action.type} → ${r.error}` }
+            // Solo cuenta como bloqueo una racha de rechazos seguidos
+            if (++errors > 50) return { ok: false, actions: n, error: `50 rechazos seguidos; último: ${action.type} → ${r.error}` }
             const fallback: GameAction = s.pendingResponse
                 ? { type: 'PASS_RESPONSE' }
                 : s.hasUsedPrimaryAction
@@ -144,9 +154,14 @@ function runGame(): Result {
                 if (reach.length) r = processAction(s, { type: 'ADVANCE', unitId: s.activeUnitId!, to: keyToHex(reach[0]) }, player, d10)
             }
             if (!r.success) return { ok: false, actions: n, error: `Bloqueo: ${r.error}` }
+        } else {
+            errors = 0
         }
         s = r.state!
         // Invariantes
+        for (const r of Object.values(s.rws)) {
+            if (r.position && (s.board[hexKey(r.position)]?.occupiedBy || s.board[hexKey(r.position)]?.garrisonToken)) return { ok: false, actions: n, error: `RWS ${r.id} comparte hex` }
+        }
         for (const u of Object.values(s.units)) {
             if (u.position && s.board[hexKey(u.position)]?.occupiedBy !== u.id) return { ok: false, actions: n, error: `Ocupación incoherente para ${u.id}` }
             if (u.currentHp <= 0 || u.currentHp > u.maxHp) return { ok: false, actions: n, error: `HP inválido para ${u.id}: ${u.currentHp}` }

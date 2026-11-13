@@ -1,6 +1,6 @@
 // Construye el GameState inicial a partir del mapa, la escuadra y el mazo de
 // cada jugador (Core Rulebook v1.2, "Setup").
-import type { GameState, BoardMap, TerrainType, PlayerId, HexCoord, Unit } from '../types'
+import type { GameState, BoardMap, TerrainType, PlayerId, HexCoord, Unit, RemoteWeapon } from '../types'
 import { createEmptyTimeline, placeInitialToken, reorderSlotForTie } from './timeline'
 import { offsetToAxial, hexKey, getNeighbors } from './hexGrid'
 import { loadUnitCatalog, loadTacticsCatalog, buildUnit, type UnitCardJSON } from './catalog'
@@ -40,10 +40,10 @@ function findNearestValidHex(coord: HexCoord, board: BoardMap): HexCoord {
     return coord
 }
 
-function shuffleArray<T>(arr: T[]): T[] {
+function shuffleArray<T>(arr: T[], random: () => number): T[] {
     const a = [...arr]
     for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(random() * (i + 1));
         [a[i], a[j]] = [a[j], a[i]]
     }
     return a
@@ -52,6 +52,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 export interface CreateGameOptions {
     mapId?: string
     rng?: Rng
+    random?: () => number   // uniforme en [0,1): barajar mazos y Upgrades aleatorios
 }
 
 export function createServerGame(
@@ -64,6 +65,7 @@ export function createServerGame(
     opts: CreateGameOptions = {},
 ): GameState {
     const rng = opts.rng ?? rollD10
+    const random = opts.random ?? Math.random
     const dataDir = path.join(__dirname, '../../data')
     const mapData = loadJSON<MapJSON>(path.join(dataDir, `maps/${opts.mapId ?? 'DemoMap'}.json`))
     const unitCatalog = loadUnitCatalog()
@@ -103,7 +105,7 @@ export function createServerGame(
             const key = hexKey(offsetToAxial(upg.col, upg.row))
             if (!board[key]) return
             const type = upg.type === 'random'
-                ? UPGRADE_TYPES[Math.floor(Math.random() * UPGRADE_TYPES.length)]
+                ? UPGRADE_TYPES[Math.floor(random() * UPGRADE_TYPES.length)]
                 : upg.type
             board[key].upgradeToken = { type, value: upg.value || 1, revealed: false }
         })
@@ -134,6 +136,18 @@ export function createServerGame(
     const p2Units = pick(p2UnitCardIds, 'player2')
     const allUnits = [...p1Units, ...p2Units]
 
+    // RWS: cada unidad con una habilidad "Direct" empieza con su RWS en la reserva
+    const RWS_NAMES = { bit_stave: 'BIT Stave', corax: 'Corax', isvara: 'Iśvara B Type' } as const
+    const rws: Record<string, RemoteWeapon> = {}
+    for (const u of allUnits) {
+        for (const a of u.abilities) {
+            const kind = a.abilityData?.type === 'deploy_rws' ? a.abilityData.rws : undefined
+            if (!kind) continue
+            const id = `${u.id}_${kind}`
+            rws[id] = { id, kind, name: RWS_NAMES[kind], owner: u.playerId, ownerUnitId: u.id, position: null, vp: 2 }
+        }
+    }
+
     // ─── TIMELINE ─────────────────────────────────────────────────────────────
     let timeline = createEmptyTimeline()
     for (const u of allUnits) timeline = placeInitialToken(timeline, { unitId: u.id, playerId: u.playerId }, u.startingTl)
@@ -159,7 +173,7 @@ export function createServerGame(
     const firstToken = firstSlot?.tokens[0]
 
     // ─── MAZOS ────────────────────────────────────────────────────────────────
-    const deckFor = (ids: string[]) => shuffleArray(tacticsCatalog.filter(c => ids.includes(c.id)))
+    const deckFor = (ids: string[]) => shuffleArray(tacticsCatalog.filter(c => ids.includes(c.id)), random)
     const p1Deck = deckFor(p1CardIds)
     const p2Deck = deckFor(p2CardIds)
     const p1Hand = p1Deck.splice(0, 3)
@@ -176,6 +190,7 @@ export function createServerGame(
         roundNumber: firstSlot?.round ?? 1,
         board,
         units: Object.fromEntries(allUnits.map(u => [u.id, u])),
+        rws,
         timeline,
         players: {
             player1: {

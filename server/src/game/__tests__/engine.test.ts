@@ -56,7 +56,7 @@ function makeGame(units: Unit[], board = makeBoard()): GameState {
       player1: { id: 'player1', name: 'P1', vp: 0, garrisonsRescued: 0, squadUnitIds: [], deployHex: { q: 0, r: 7 }, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false } },
       player2: { id: 'player2', name: 'P2', vp: 0, garrisonsRescued: 0, squadUnitIds: [], deployHex: { q: 7, r: 7 }, tactics: { deck: [], hand: [], discarded: [], usedResponseThisTurn: false } },
     },
-    actionLog: [], log: [], lastAttack: null, winner: null, pendingResponse: null, pendingAttack: null,
+    actionLog: [], log: [], lastAttack: null, winner: null, pendingResponse: null, pendingAttack: null, rws: {},
   }
 }
 
@@ -751,5 +751,86 @@ describe('Datos actualizados', () => {
     const units = loadUnitCatalog()
     const sigs = new Set(units.map(u => u.signature).filter(Boolean))
     for (const c of loadTacticsCatalog()) if (c.signature) expect(sigs.has(c.signature)).toBe(true)
+  })
+})
+
+// ─── REMOTE WEAPON SYSTEMS ────────────────────────────────────────────────────
+
+describe('Remote Weapon Systems (Q&A 110)', () => {
+  const tactics = loadTacticsCatalog()
+  const card = (name: string) => structuredClone(tactics.find(c => c.name === name)!)
+  const direct = (rws: 'bit_stave' | 'corax' | 'isvara', range: number): Ability =>
+    ({ name: `${rws} Direct`, type: 'CMD', description: '', abilityData: { type: 'deploy_rws', rws, range } })
+
+  function withRws(kind: 'bit_stave' | 'corax' | 'isvara', owner: 'player1' | 'player2', ownerUnitId: string, pos: { q: number; r: number } | null, g: GameState) {
+    const id = `${ownerUnitId}_${kind}`
+    g.rws[id] = { id, kind, name: kind, owner, ownerUnitId, position: pos, vp: 2 }
+    return id
+  }
+
+  it('se despliega con su habilidad Direct en un hex vacío a alcance y no se puede terminar encima', () => {
+    const g = makeGame([makeUnit('a', 'player1', A, { abilities: [direct('corax', 4)] })])
+    const id = withRws('corax', 'player1', 'a', null, g)
+    expect(processAction(g, { type: 'USE_ABILITY', unitId: 'a', abilityIndex: 0, targetHex: { q: 7, r: 2 } }, 'player1').success).toBe(false)
+    const s = processAction(g, { type: 'USE_ABILITY', unitId: 'a', abilityIndex: 0, targetHex: { q: 4, r: 2 } }, 'player1').state!
+    expect(s.rws[id].position).toEqual({ q: 4, r: 2 })
+    expect(reachableFor(s, 'a', { kind: 'advance' }).has('4,2')).toBe(false)
+    expect(reachableFor(s, 'a', { kind: 'advance' }).has('5,2')).toBe(true)   // no bloquea el paso
+  })
+  it('no bloquea la línea de visión ni causa Engagement', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    withRws('bit_stave', 'player2', 'e', { q: 3, r: 2 }, g)
+    expect(isEngaged(g, 'a')).toBe(false)
+    expect(checkAttackTarget(g, 'a', 0, '5,2').ok).toBe(true)
+  })
+  it('se puede atacar: un impacto la destruye, da 2 VP y vuelve a la reserva', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 6, r: 6 })])
+    const id = withRws('corax', 'player2', 'e', { q: 4, r: 2 }, g)
+    const s = processAction(g, { type: 'ATTACK_RWS', unitId: 'a', weaponIndex: 0, rwsId: id }, 'player1', dice(5)).state!
+    expect(s.rws[id].position).toBeNull()
+    expect(s.players.player1.vp).toBe(2)
+  })
+  it('vuelve a la reserva cuando cae su unidad', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 }, { currentHp: 1 })])
+    const id = withRws('corax', 'player2', 'e', { q: 6, r: 4 }, g)
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5)).newState!.rws[id].position).toBeNull()
+  })
+  it('Corax: +1 Accuracy contra enemigos adyacentes a ella', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(3, 3, 3)).newState!.units.e.currentHp).toBe(10)
+    withRws('corax', 'player1', 'a', { q: 6, r: 2 }, g)
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(3, 3, 3)).newState!.units.e.currentHp).toBe(7)
+  })
+  it('BIT Stave: los aliados adyacentes reciben −1 de daño', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    withRws('bit_stave', 'player2', 'e', { q: 6, r: 2 }, g)
+    expect(applyAttack(g, 'a', 0, 'e', 'player1', dice(5, 5, 5)).newState!.units.e.currentHp).toBe(8)
+  })
+  it('Iśvara: al desplegarse hace 1 de daño a un enemigo adyacente', () => {
+    const g = makeGame([makeUnit('a', 'player1', A, { abilities: [direct('isvara', 2)] }), makeUnit('e', 'player2', { q: 4, r: 3 })])
+    withRws('isvara', 'player1', 'a', null, g)
+    const s = processAction(g, { type: 'USE_ABILITY', unitId: 'a', abilityIndex: 0, targetHex: { q: 4, r: 2 } }, 'player1').state!
+    expect(s.units.e.currentHp).toBe(9)
+  })
+  it('Linked Strike: +3 Strength y +1 por cada RWS aliada adyacente al objetivo', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 })])
+    withRws('corax', 'player1', 'a', { q: 6, r: 2 }, g)
+    g.players.player1.tactics.hand = [card('Linked Strike')]
+    const s1 = applyAttack(g, 'a', 0, 'e', 'player1', dice()).newState!
+    const s2 = processAction(s1, { type: 'PLAY_RESPONSE', cardId: s1.players.player1.tactics.hand[0].id }, 'player1', dice()).state!
+    expect(s2.lastAttack!.rolls).toHaveLength(7)   // 3 + 3 + 1
+  })
+  it('Dismantle exige que el enemigo esté junto a una RWS aliada', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 5, r: 2 }, { upgrades: [{ type: 'attack', value: 1 }] })])
+    g.players.player1.tactics.hand = [card('Dismantle')]
+    const id = g.players.player1.tactics.hand[0].id
+    expect(processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, targetId: 'e' }, 'player1').success).toBe(false)
+    withRws('bit_stave', 'player1', 'a', { q: 6, r: 2 }, g)
+    expect(processAction(g, { type: 'PLAY_CARD', unitId: 'a', cardId: id, targetId: 'e' }, 'player1').state!.units.e.upgrades).toHaveLength(0)
+  })
+  it('las unidades con habilidad Direct empiezan la partida con su RWS en la reserva', () => {
+    const g = createServerGame('A', 'B', ['EX02-U01', 'EX02-U02', 'EX02-U03'], ['ST01-U01', 'ST01-U02', 'ST01-U04'], [], [], { rng: dice(3, 7) })
+    expect(Object.values(g.rws).map(r => r.kind).sort()).toEqual(['bit_stave', 'corax', 'isvara'])
+    expect(Object.values(g.rws).every(r => r.position === null)).toBe(true)
   })
 })

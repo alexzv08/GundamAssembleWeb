@@ -3,8 +3,9 @@
 import type { GameState, PlayerId, HexCoord, AbilityEffect } from '../types'
 import type { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
-import { upgradeCount, enemyHexes, moveOptionsFor } from './queries'
+import { upgradeCount, enemyHexes, moveOptionsFor, rwsDeployHexes, alliedRws, rwsAdjacentTo, isEmptyHex, targetAt } from './queries'
 import { damageUnit, damageAt, destroyGarrison, forceMove, pushLog } from './damage'
+import { advanceToken } from './timeline'
 import { captureObjective } from './victory'
 
 export interface EffectResult {
@@ -347,6 +348,17 @@ export function applyCommandAbility(
             return ok
         }
 
+        case 'deploy_rws': {
+            // "Deploy or reposition this unit's <RWS> on an empty hex within [Range N]."
+            const rws = Object.values(state.rws ?? {}).find(r => r.ownerUnitId === unitId && r.kind === d.rws)
+            if (!rws) return fail('Esta unidad no tiene ese RWS')
+            if (!targetHex) return fail('Elige un hex vacío')
+            const key = hexKey(targetHex)
+            if (!rwsDeployHexes(state, unitId, d.range ?? 3).includes(key)) return fail('Ese hex no está vacío o está fuera de alcance')
+            placeRws(state, rws.id, targetHex)
+            return ok
+        }
+
         case 'capture_objective': {
             if (!unit.position) return fail('La unidad no está en el tablero')
             const entry = Object.entries(state.board).find(([, h]) =>
@@ -541,6 +553,49 @@ export function applyCardEffect(
             return ok
         }
 
+        // ── Cartas de RWS ──
+        case 'rws_damage': {
+            // Drone Assault: cada RWS aliada hace [Damage 1] a un enemigo adyacente
+            for (const r of alliedRws(state, playerId)) {
+                const enemy = getNeighbors(r.position!).map(hexKey).map(k => targetAt(state, k, playerId)).find(t => t?.kind === 'unit')
+                if (enemy) damageUnit(state, enemy.id, effect.amount ?? 1)
+            }
+            return ok
+        }
+
+        case 'dismantle': {
+            // "destroys all Upgrades on an enemy unit adjacent to an allied RWS"
+            const t = targetId ? unitById(state, targetId) : null
+            if (!t?.position || t.playerId === playerId) return fail('Elige un enemigo')
+            if (rwsAdjacentTo(state, hexKey(t.position), playerId).length === 0) return fail('El enemigo debe estar junto a una RWS aliada')
+            t.upgrades = []
+            return ok
+        }
+
+        case 'reposition_near_rws': {
+            // Iśvara Assault: recoloca a la unidad junto a su RWS y +2 de daño esta activación
+            const rws = alliedRws(state, playerId, effect.rws).find(r => r.ownerUnitId === unitId)
+            if (!rws) return fail('Tu RWS no está en el tablero')
+            if (!targetHex) return fail('Elige un hex junto a tu RWS')
+            const key = hexKey(targetHex)
+            if (gridDistance(targetHex, rws.position!) !== 1 || !isEmptyHex(state, key)) return fail('Elige un hex vacío junto a tu RWS')
+            if (unit.position) state.board[hexKey(unit.position)].occupiedBy = null
+            state.board[key].occupiedBy = unitId
+            unit.position = targetHex
+            if (state.activation) { state.activation.moved = true; state.activation.damageBonus += effect.damage ?? 2 }
+            return ok
+        }
+
+        case 'rws_timeline_push': {
+            // Cold Silence: los enemigos adyacentes a su Corax avanzan 1 en el Timeline
+            const rws = alliedRws(state, playerId, effect.rws).find(r => r.ownerUnitId === unitId)
+            if (!rws) return fail('Tu RWS no está en el tablero')
+            for (const t of getNeighbors(rws.position!).map(hexKey).map(k => targetAt(state, k, playerId))) {
+                if (t?.kind === 'unit') state.timeline = advanceToken(state.timeline, t.id, effect.amount ?? 1)
+            }
+            return ok
+        }
+
         case 'free_dash_and_attack': {
             // Crimson Execution: Dash adicional a TL 0 y luego un ataque adicional a TL 0
             const idx = unit.weapons.findIndex(w => w.name === effect.weapon)
@@ -657,3 +712,16 @@ export function hasAbilityType(state: GameState, unitId: string, type: string): 
     const a = state.units[unitId]?.abilities.find(x => x.abilityData?.type === type)
     return a ? (a.abilityData?.amount ?? 1) : null
 }
+
+// Coloca (o recoloca) una RWS. Iśvara B Type "Beam Saber Drones": al
+// desplegarse o recolocarse hace [Damage 1] a una unidad enemiga adyacente.
+export function placeRws(state: GameState, rwsId: string, to: HexCoord): void {
+    const rws = state.rws[rwsId]
+    rws.position = to
+    pushLog(state, rws.owner, `${rws.name} se despliega en (${to.q},${to.r})`, 'ability', [hexKey(to)])
+    if (rws.kind === 'isvara') {
+        const enemy = getNeighbors(to).map(hexKey).map(k => targetAt(state, k, rws.owner)).find(t => t?.kind === 'unit')
+        if (enemy) damageUnit(state, enemy.id, 1)
+    }
+}
+
