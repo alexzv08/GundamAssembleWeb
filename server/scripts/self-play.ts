@@ -10,6 +10,7 @@
  *   npx tsx scripts/self-play.ts [--games 50] [--seed 42] [--verbose]
  */
 import { createServerGame } from '../src/game/createServerGame'
+import { chooseBotAction } from '../src/game/bot'
 import { processAction } from '../src/game/engine'
 import { startGame } from '../src/game/activation'
 import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes } from '../src/game/queries'
@@ -38,6 +39,8 @@ function shuffle<T>(xs: T[]): T[] {
 
 const units = loadUnitCatalog()
 const tactics = loadTacticsCatalog()
+// La IA es la misma que usa el rival automático (src/game/bot.ts)
+const botAction = (s: GameState, player: PlayerId) => chooseBotAction(s, player, rand)
 
 function randomSquad(): string[] {
     for (;;) {
@@ -48,76 +51,6 @@ function randomSquad(): string[] {
 function randomDeck(squad: string[]): string[] {
     const size = requiredDeckSize(squad, units, tactics)
     return shuffle(eligibleCards(squad, units, tactics)).slice(0, size).map(c => c.id)
-}
-
-// Bot sencillo: ataca si puede; si no, avanza hacia el enemigo más cercano y
-// hace Dash o Energize; respeta "no terminar sobre la Base".
-function botAction(s: GameState, player: PlayerId): GameAction {
-    if (s.pendingResponse?.forPlayerId === player) {
-        const card = s.players[player].tactics.hand.find(c => canPlayResponseCard(s, player, c))
-        return card && rand() < 0.7 ? { type: 'PLAY_RESPONSE', cardId: card.id } : { type: 'PASS_RESPONSE' }
-    }
-    const id = s.activeUnitId!
-    const unit = s.units[id]
-    const act = s.activation!
-
-    if (!s.hasUsedPrimaryAction || act.freeAttacks.length > 0) {
-        const weaponOrder = shuffle(unit.weapons.map((_, i) => i))
-        for (const wi of weaponOrder) {
-            if (s.hasUsedPrimaryAction && !act.freeAttacks.includes(wi)) continue
-            const targets = attackableHexes(s, id, wi)
-            if (targets.length === 0) continue
-            const t = targetAt(s, pickOne(targets), player)!
-            return t.kind === 'unit'
-                ? { type: 'ATTACK', unitId: id, weaponIndex: wi, targetId: t.id }
-                : t.kind === 'rws'
-                    ? { type: 'ATTACK_RWS', unitId: id, weaponIndex: wi, rwsId: t.id }
-                    : { type: 'ATTACK_GARRISON', unitId: id, weaponIndex: wi, garrisonId: t.id }
-        }
-    }
-
-    // Cartas: Attack si aún no atacó, o Command que no necesitan objetivo
-    if (!act.cardPlayed && rand() < 0.35) {
-        const hand = s.players[player].tactics.hand.filter(c => !c.signature || c.signature === unit.signature)
-        const atk = !s.hasUsedPrimaryAction && hand.find(c => c.type === 'attack' && c.weapon && attackableHexesWith(s, id, c.weapon).length)
-        if (atk && atk.weapon) {
-            const t = targetAt(s, pickOne(attackableHexesWith(s, id, atk.weapon)), player)!
-            return { type: 'PLAY_CARD', unitId: id, cardId: atk.id, targetId: t.id }
-        }
-        const simple = new Set(['gain_upgrade', 'repair', 'activation_move_buff', 'aoe_status', 'free_attack', 'heal_per_upgrade', 'energy_if_rescued', 'rws_damage', 'rws_timeline_push', 'free_dash_and_attack', 'strength_if_garrisons_defeated'])
-        const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type))
-        if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
-    }
-
-    // Desplegar RWS
-    const dep = unit.abilities.findIndex((a, i) => a.abilityData?.type === 'deploy_rws' && !act.usedCommands.includes(i) && unit.energy >= (a.energyCost ?? 0))
-    if (dep !== -1 && rand() < 0.5) {
-        const hexes = rwsDeployHexes(s, id, unit.abilities[dep].abilityData!.range ?? 3)
-        if (hexes.length) return { type: 'USE_ABILITY', unitId: id, abilityIndex: dep, targetHex: keyToHex(pickOne(hexes)) }
-    }
-
-    const cmd = unit.abilities.findIndex((a, i) => a.type === 'CMD' && a.abilityData?.type === 'buff_activation' &&
-        !act.usedCommands.includes(i) && unit.energy >= (a.energyCost ?? 0))
-    if (cmd !== -1 && rand() < 0.5) return { type: 'USE_ABILITY', unitId: id, abilityIndex: cmd }
-
-    if (!act.advanced && unit.position) {
-        const reach = [...reachableFor(s, id, { kind: 'advance' }).keys()]
-        if (reach.length) {
-            const enemies = Object.values(s.units).filter(u => u.playerId !== player && u.position)
-            const score = (k: string) => enemies.length ? Math.min(...enemies.map(e => gridDistance(keyToHex(k), e.position!))) : 0
-            reach.sort((a, b) => score(a) - score(b))
-            return { type: 'ADVANCE', unitId: id, to: keyToHex(rand() < 0.8 ? reach[0] : pickOne(reach)) }
-        }
-    }
-
-    if (!s.hasUsedPrimaryAction) {
-        const rescue = unit.position && Object.values(s.board).find(h => h.garrisonToken?.owner === player && gridDistance(h.coord, unit.position!) === 1)
-        if (rescue) return { type: 'RESCUE', unitId: id, garrisonId: rescue.garrisonToken!.id }
-        const dash = [...reachableFor(s, id, { kind: 'dash' }).keys()]
-        if (dash.length && rand() < 0.4) return { type: 'DASH', unitId: id, to: keyToHex(pickOne(dash)) }
-        return { type: 'ENERGIZE', unitId: id }
-    }
-    return { type: 'END_ACTIVATION', unitId: id }
 }
 
 interface Result { ok: boolean; actions: number; winner?: PlayerId; vp?: [number, number]; error?: string }

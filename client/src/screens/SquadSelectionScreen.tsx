@@ -2,7 +2,6 @@ import { UnitCardPreview } from '../components/ui/UnitCardPreview'
 import type { UnitCardData, TacticsCardData } from '../api/gameData'
 import { DEFAULT_SQUAD_SIZE, requiredDeckSize, cardRestriction, validateSquad, type DeckCard } from '../game/deckRules'
 
-const MAX_SQUAD = DEFAULT_SQUAD_SIZE
 
 const badge = (bg: string) => ({
   display: 'inline-block', fontSize: 8.5, padding: '1px 4px', borderRadius: 3, background: bg, color: '#ddd', marginLeft: 4,
@@ -12,6 +11,7 @@ const badge = (bg: string) => ({
 const toDeckCard = (c: TacticsCardData): DeckCard => ({ id: c.cardId, name: c.name, faction: c.faction, signature: c.signature })
 
 interface SquadSelectionScreenProps {
+  squadSize?: number
   playerName: string
   myPlayerId: 'player1' | 'player2'
   availableUnitCards: UnitCardData[]
@@ -27,6 +27,7 @@ interface SquadSelectionScreenProps {
 }
 
 export function SquadSelectionScreen({
+  squadSize: MAX_SQUAD = DEFAULT_SQUAD_SIZE,
   playerName, myPlayerId,
   availableUnitCards, availableTacticsCards,
   selectedSquad, onToggleUnit,

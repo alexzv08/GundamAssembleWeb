@@ -21,6 +21,17 @@ interface LobbyScreenProps {
   onCancelMatch: () => void
   onCreateRoom: () => void
   onJoinRoom: () => void
+  onPlayBot: () => void
+  maps: { id: string; name: string }[]
+  mapId: string
+  onMapIdChange: (id: string) => void
+  squadSize: number
+  onSquadSizeChange: (n: number) => void
+}
+
+const selectStyle: React.CSSProperties = {
+  flex: 1, padding: '9px 10px', background: '#0d0d1a', border: '1px solid #444',
+  borderRadius: 8, color: 'white', fontSize: 13,
 }
 
 export function LobbyScreen({
@@ -28,7 +39,8 @@ export function LobbyScreen({
   isSearching, lobbyMode, onSetLobbyMode,
   lobbyError, onClearLobbyError, roomInput, onRoomInputChange,
   showProfile, onShowProfile, onProfileUpdated,
-  onFindMatch, onCancelMatch, onCreateRoom, onJoinRoom,
+  onFindMatch, onCancelMatch, onCreateRoom, onJoinRoom, onPlayBot,
+  maps, mapId, onMapIdChange, squadSize, onSquadSizeChange,
 }: LobbyScreenProps) {
   const canPlay = playerName.trim().length > 0 && connected
 
@@ -141,9 +153,34 @@ export function LobbyScreen({
             >
               Sala privada →
             </button>
+            <button
+              disabled={!canPlay}
+              onClick={onPlayBot}
+              title="Partida de práctica contra un bot del servidor"
+              style={{
+                width: '100%', padding: '11px', marginTop: 12,
+                background: 'transparent',
+                color: canPlay ? '#81c784' : '#444',
+                border: `1px solid ${canPlay ? '#2e7d32' : '#2a2a2a'}`,
+                borderRadius: 8,
+                cursor: canPlay ? 'pointer' : 'not-allowed',
+                fontSize: 14,
+              }}
+            >
+              🤖 Jugar contra la máquina
+            </button>
           </>
         ) : (
           <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <select value={mapId} onChange={e => onMapIdChange(e.target.value)} style={selectStyle} aria-label="Mapa">
+                {maps.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              <select value={squadSize} onChange={e => onSquadSizeChange(Number(e.target.value))} style={selectStyle} aria-label="Tamaño de escuadra">
+                <option value={3}>Escuadras de 3</option>
+                <option value={5}>Escuadras de 5</option>
+              </select>
+            </div>
             <button
               onClick={onCreateRoom}
               disabled={!canPlay}

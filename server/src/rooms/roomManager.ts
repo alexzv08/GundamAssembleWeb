@@ -4,6 +4,8 @@ import { randomInt } from 'crypto'
 import { startGame } from '../game/activation'
 import { createServerGame } from '../game/createServerGame'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from '../game/catalog'
+import { mapExists } from '../game/maps'
+import { randomSquad, randomDeck } from '../game/bot'
 
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
 
@@ -15,7 +17,14 @@ export interface Room {
     squadSelections: { player1: string[] | null; player2: string[] | null }
     deckSelections: { player1: string[] | null; player2: string[] | null }
     setupConfirmed: { player1: boolean; player2: boolean }
+    mapId: string
+    squadSize: number
+    vsBot?: boolean          // el jugador 2 es el bot del servidor
 }
+
+export const BOT_USER_ID = 'bot'
+
+export interface RoomOptions { mapId?: string; squadSize?: number }
 
 export class RoomManager {
     private rooms = new Map<string, Room>()
@@ -32,7 +41,7 @@ export class RoomManager {
         return id
     }
 
-    createRoom(socketId: string, playerName: string, userId: string): Room {
+    createRoom(socketId: string, playerName: string, userId: string, opts: RoomOptions = {}): Room {
         const roomId = this.newRoomId()
         const room: Room = {
             id: roomId,
@@ -42,9 +51,23 @@ export class RoomManager {
             squadSelections: { player1: null, player2: null },
             deckSelections: { player1: null, player2: null },
             setupConfirmed: { player1: false, player2: false },
+            mapId: opts.mapId && mapExists(opts.mapId) ? opts.mapId : 'DemoMap',
+            squadSize: opts.squadSize === 5 ? 5 : 3,
         }
         this.rooms.set(roomId, room)
         this.socketToRoom.set(socketId, roomId)
+        return room
+    }
+
+    // Sala de práctica: el jugador 2 es el bot, que elige escuadra y confirma solo.
+    createBotRoom(socketId: string, playerName: string, userId: string, opts: RoomOptions = {}): Room {
+        const room = this.createRoom(socketId, playerName, userId, opts)
+        room.players.push({ socketId: '', userId: BOT_USER_ID, playerId: 'player2', name: 'Bot' })
+        room.status = 'squad_selection'
+        room.vsBot = true
+        const squad = randomSquad(room.squadSize)
+        room.squadSelections.player2 = squad
+        room.deckSelections.player2 = randomDeck(squad)
         return room
     }
 
@@ -72,7 +95,7 @@ export class RoomManager {
 
         const units = loadUnitCatalog()
         const tactics = loadTacticsCatalog()
-        const squadError = validateSquad(unitCardIds, units)
+        const squadError = validateSquad(unitCardIds, units, room.squadSize)
         if (squadError) return { error: squadError }
         const deckError = validateDeck(cardIds, unitCardIds, units, tactics)
         if (deckError) return { error: deckError }
@@ -89,6 +112,7 @@ export class RoomManager {
                 room.squadSelections.player2!,
                 room.deckSelections.player1!,
                 room.deckSelections.player2!,
+                { mapId: room.mapId },
             )
             room.status = 'playing'
         }
@@ -102,6 +126,7 @@ export class RoomManager {
         if (!room || !playerId || !room.gameState || room.gameState.phase !== 'setup') return null
 
         room.setupConfirmed[playerId] = true
+        if (room.vsBot) room.setupConfirmed.player2 = true   // el bot confirma siempre
         const bothConfirmed = room.setupConfirmed.player1 && room.setupConfirmed.player2
 
         if (bothConfirmed) {

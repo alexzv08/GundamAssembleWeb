@@ -934,3 +934,21 @@ describe('Challenge, Protective Shot e Iron-Blooded Tenacity', () => {
     expect(s.units.e.currentHp).toBe(9)
   })
 })
+
+describe('Mapas y tamaño de escuadra', () => {
+  it('los ids de mapa no admiten rutas', async () => {
+    const { mapExists, listMaps } = await import('../maps')
+    expect(mapExists('DemoMap')).toBe(true)
+    expect(mapExists('../units/unit_library')).toBe(false)
+    expect(listMaps().map(m => m.id)).toContain('MyMap')
+  })
+  it('una sala de 5 exige escuadras de 5 y usa su mapa', () => {
+    const rm = new RoomManager()
+    const room = rm.createRoom('s1', 'Ana', 'u1', { mapId: 'MyMap', squadSize: 5 })
+    expect(room.mapId).toBe('MyMap')
+    rm.joinRoom(room.id, 's2', 'Bea', 'u2')
+    const three = ['ST01-U01', 'ST01-U02', 'ST01-U03']
+    expect('error' in rm.submitSquad('s1', three, [])).toBe(true)
+    expect(rm.createRoom('s3', 'X', 'u3', { mapId: '../../etc' }).mapId).toBe('DemoMap')
+  })
+})

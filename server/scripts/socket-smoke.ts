@@ -109,5 +109,41 @@ http.listen(0, async () => {
     }
     if (!over) fail('la partida no terminó')
     console.log(`✓ partida terminada en ${steps} acciones. Ganador: ${state!.winner} (${state!.winReason})`)
+
+    // ── Partida contra la máquina ──
+    const h = ioc(url, { auth: { userId: 'humano' } })
+    h.emit('PLAY_BOT', { playerName: 'Humano', squadSize: 3 })
+    await wait(h, 'SQUAD_SELECTION_STARTED')
+    const squadH = ['ST01-U01', 'ST01-U02', 'ST01-U03']
+    h.emit('SELECT_SQUAD', { unitCardIds: squadH, cardIds: deck(squadH) })
+    await wait(h, 'GAME_STARTED')
+    let bs: GameState | null = null
+    let botOver = false
+    h.on('GAME_STATE_UPDATE', (p: any) => { bs = p.gameState })
+    h.on('PHASE_TRANSITION', (p: any) => { bs = p.gameState })
+    h.on('GAME_OVER', (p: any) => { bs = p.gameState; botOver = true })
+    h.emit('CONFIRM_SETUP')
+    await wait(h, 'GAME_STATE_UPDATE')
+    let botActions = 0
+    for (let i = 0; i < 3000 && !botOver; i++) {
+        const s: GameState = bs!
+        const mine = (s.pendingResponse?.forPlayerId ?? s.activePlayerId) === 'player1'
+        if (!mine) { await new Promise(r => setTimeout(r, 5)); botActions++; continue }
+        const id = s.activeUnitId!
+        let action: object
+        if (s.pendingResponse) action = { type: 'PASS_RESPONSE' }
+        else if (!s.activation!.advanced) {
+            const reach = [...reachableFor(s, id, { kind: 'advance' }).keys()]
+            action = reach.length ? { type: 'ADVANCE', unitId: id, to: keyToHex(reach[0]) } : { type: 'ENERGIZE', unitId: id }
+        } else if (!s.hasUsedPrimaryAction) action = { type: 'ENERGIZE', unitId: id }
+        else action = { type: 'END_ACTIVATION', unitId: id }
+        const next = new Promise(res => { h.once('GAME_STATE_UPDATE', res); h.once('PHASE_TRANSITION', res); h.once('GAME_OVER', res); h.once('ACTION_ERROR', res) })
+        h.emit('GAME_ACTION', { action })
+        await next
+    }
+    if (!botOver) fail('la partida contra el bot no terminó')
+    const botMoves = bs!.log.filter(l => l.playerId === 'player2').length
+    if (botMoves === 0) fail('el bot no hizo nada')
+    console.log(`✓ partida contra el bot terminada (${botMoves} entradas del bot en el registro). Ganador: ${bs!.winner}`)
     process.exit(0)
 })

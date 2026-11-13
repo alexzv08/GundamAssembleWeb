@@ -12,7 +12,7 @@
     "selfplay": "tsx scripts/self-play.ts",
     "sync-shared": "node ../scripts/sync-shared.mjs",
     "check-shared": "node ../scripts/sync-shared.mjs --check",
-    "smoke": "tsx scripts/socket-smoke.ts"
+    "smoke": "BOT_DELAY_MS=0 tsx scripts/socket-smoke.ts"
   },
   "keywords": [],
   "author": "",

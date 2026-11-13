@@ -1,6 +1,9 @@
 import { Server, Socket } from 'socket.io'
-import { RoomManager } from '../rooms/roomManager'
-import { processAction } from '../game/engine'
+import { RoomManager, type Room } from '../rooms/roomManager'
+import { processAction, type ProcessResult } from '../game/engine'
+import { chooseBotAction, botFallback, actingPlayer } from '../game/bot'
+import { reachableFor } from '../game/queries'
+import { keyToHex } from '../game/hexGrid'
 import { reorderSlotTokens } from '../game/timeline'
 import type { GameAction } from '../types'
 
@@ -18,13 +21,64 @@ function cleanName(name: unknown, fallback: string): string {
     return s || fallback
 }
 
+// Envía a la sala el resultado de una acción y actualiza su estado.
+function publish(io: Server, room: Room, result: ProcessResult, action: GameAction): void {
+    const before = room.gameState!
+    const gameState = result.state!
+    room.gameState = gameState
+    // Dados del ataque recién resuelto (para el popup)
+    const diceRolls = gameState.lastAttack !== before.lastAttack ? gameState.lastAttack?.rolls ?? null : null
+    if (result.gameOver) {
+        room.status = 'finished'
+        io.to(room.id).emit('GAME_OVER', { gameState, winner: gameState.winner, reason: gameState.winReason ?? '', diceRolls })
+        return
+    }
+    if (result.phaseChanged) {
+        io.to(room.id).emit('PHASE_TRANSITION', { gameState, message: 'Inicio de la Fase 2 — cada jugador roba 3 cartas' })
+        return
+    }
+    io.to(room.id).emit('GAME_STATE_UPDATE', { gameState, action, actionType: action.type, diceRolls })
+}
+
+// Si le toca al bot (actuar o responder), juega una acción tras una pausa
+// corta para que el humano vea lo que pasa, y repite mientras siga siendo su turno.
+const BOT_DELAY_MS = Number(process.env.BOT_DELAY_MS ?? 700)
+function driveBot(io: Server, room: Room): void {
+    const s = room.gameState
+    if (!room.vsBot || !s || s.phase === 'setup' || s.phase === 'finished' || room.status !== 'playing') return
+    if (actingPlayer(s) !== 'player2') return
+    setTimeout(() => {
+        const cur = room.gameState
+        if (!cur || cur !== s) return   // el estado cambió mientras esperaba
+        let action = chooseBotAction(cur, 'player2')
+        let result = processAction(cur, action, 'player2')
+        if (!result.success) {
+            action = botFallback(cur)
+            result = processAction(cur, action, 'player2')
+        }
+        if (!result.success && cur.activeUnitId && !cur.pendingResponse) {
+            const reach = [...reachableFor(cur, cur.activeUnitId, { kind: 'advance' }).keys()]
+            if (reach.length) {
+                action = { type: 'ADVANCE', unitId: cur.activeUnitId, to: keyToHex(reach[0]) }
+                result = processAction(cur, action, 'player2')
+            }
+        }
+        if (!result.success || !result.state) {
+            console.error('[bot] sin acción válida:', result.error)
+            return
+        }
+        publish(io, room, result, action)
+        driveBot(io, room)
+    }, BOT_DELAY_MS)
+}
+
 export function registerGameEvents(io: Server, socket: Socket, roomManager: RoomManager) {
     const userId = socket.data.userId as string
     const defaultName = (socket.data.userName as string) ?? 'Jugador'
 
     // ── Crear sala ─────────────────────────────────────────────────────────────
-    socket.on('CREATE_ROOM', ({ playerName }: { playerName?: string } = {}) => {
-        const room = roomManager.createRoom(socket.id, cleanName(playerName, defaultName), userId)
+    socket.on('CREATE_ROOM', ({ playerName, mapId, squadSize }: { playerName?: string; mapId?: string; squadSize?: number } = {}) => {
+        const room = roomManager.createRoom(socket.id, cleanName(playerName, defaultName), userId, { mapId, squadSize })
         socket.join(room.id)
         socket.emit('ROOM_CREATED', { roomId: room.id, playerId: 'player1' })
     })
@@ -38,8 +92,15 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         }
         socket.join(room.id)
         for (const player of room.players) {
-            io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', { playerId: player.playerId, roomId: room.id })
+            io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', { playerId: player.playerId, roomId: room.id, mapId: room.mapId, squadSize: room.squadSize })
         }
+    })
+
+    // ── Partida contra la máquina ──────────────────────────────────────────────
+    socket.on('PLAY_BOT', ({ playerName, mapId, squadSize }: { playerName?: string; mapId?: string; squadSize?: number } = {}) => {
+        const room = roomManager.createBotRoom(socket.id, cleanName(playerName, defaultName), userId, { mapId, squadSize })
+        socket.join(room.id)
+        socket.emit('SQUAD_SELECTION_STARTED', { playerId: 'player1', roomId: room.id, mapId: room.mapId, squadSize: room.squadSize, vsBot: true })
     })
 
     // ── Emparejamiento aleatorio ───────────────────────────────────────────────
@@ -53,7 +114,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         io.sockets.sockets.get(result.p1SocketId)?.join(room.id)
         socket.join(room.id)
         for (const player of room.players) {
-            io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', { playerId: player.playerId, roomId: room.id })
+            io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', { playerId: player.playerId, roomId: room.id, mapId: room.mapId, squadSize: room.squadSize })
         }
     })
 
@@ -72,7 +133,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         socket.emit('SQUAD_ACCEPTED')
         if (result.ready) {
             for (const player of result.room.players) {
-                io.to(player.socketId).emit('GAME_STARTED', { gameState: result.room.gameState, playerId: player.playerId })
+                if (player.socketId) io.to(player.socketId).emit('GAME_STARTED', { gameState: result.room.gameState, playerId: player.playerId })
             }
         }
     })
@@ -98,6 +159,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             io.to(result.room.id).emit('GAME_STATE_UPDATE', {
                 gameState: result.room.gameState, action: null, actionType: 'CONFIRM_SETUP',
             })
+            driveBot(io, result.room)
         }
     })
 
@@ -115,30 +177,13 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        const before = room.gameState
-        const result = processAction(before, action, playerId)
+        const result = processAction(room.gameState, action, playerId)
         if (!result.success || !result.state) {
             socket.emit('ACTION_ERROR', { message: result.error })
             return
         }
-        const gameState = result.state
-        room.gameState = gameState
-
-        // Dados del ataque recién resuelto (para el popup)
-        const diceRolls = gameState.lastAttack !== before.lastAttack ? gameState.lastAttack?.rolls ?? null : null
-
-        if (result.gameOver) {
-            room.status = 'finished'
-            io.to(room.id).emit('GAME_OVER', {
-                gameState, winner: gameState.winner, reason: gameState.winReason ?? '', diceRolls,
-            })
-            return
-        }
-        if (result.phaseChanged) {
-            io.to(room.id).emit('PHASE_TRANSITION', { gameState, message: 'Inicio de la Fase 2 — cada jugador roba 3 cartas' })
-            return
-        }
-        io.to(room.id).emit('GAME_STATE_UPDATE', { gameState, action, actionType: action.type, diceRolls })
+        publish(io, room, result, action)
+        driveBot(io, room)
     })
 
     // ── Reconexión ────────────────────────────────────────────────────────────
@@ -156,7 +201,10 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             roomStatus: room.status,
             gameState: room.gameState ?? undefined,
             squadSubmitted: room.squadSelections[playerId] !== null,
+            mapId: room.mapId,
+            squadSize: room.squadSize,
         })
+        driveBot(io, room)
         const opponent = room.players.find(p => p.playerId !== playerId)
         if (opponent?.socketId) {
             io.to(opponent.socketId).emit('OPPONENT_RECONNECTED', { message: 'El oponente ha vuelto a conectarse' })

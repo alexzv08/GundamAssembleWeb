@@ -8,6 +8,7 @@ import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWi
 import { getNeighbors, keyToHex } from './game/hexGrid'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
+import { fetchMapList } from './api/gameData'
 import { UnitPanel } from './components/ui/UnitPanel'
 import { TimelineBar } from './components/ui/TimelineBar'
 import { TacticsHand } from './components/ui/TacticsHand'
@@ -81,6 +82,10 @@ export default function App() {
   const [setupConfirmed, setSetupConfirmed] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [lobbyMode, setLobbyMode] = useState<'main' | 'private'>('main')
+  const [maps, setMaps] = useState<{ id: string; name: string }[]>([{ id: 'DemoMap', name: 'Demo Map' }])
+  const [mapId, setMapId] = useState('DemoMap')
+  const [squadSize, setSquadSize] = useState(3)
+  useEffect(() => { fetchMapList().then(r => setMaps(r.maps)).catch(() => {}) }, [])
   const [showProfile, setShowProfile] = useState(false)
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false)
   const [usernameSuggestion, setUsernameSuggestion] = useState('')
@@ -193,9 +198,10 @@ export default function App() {
     socket.on('MATCH_SEARCHING', () => setIsSearching(true))
     socket.on('MATCH_CANCELLED', () => setIsSearching(false))
 
-    socket.on('SQUAD_SELECTION_STARTED', ({ playerId, roomId: rId }: { playerId: 'player1' | 'player2'; roomId: string }) => {
+    socket.on('SQUAD_SELECTION_STARTED', ({ playerId, roomId: rId, squadSize: size }: { playerId: 'player1' | 'player2'; roomId: string; squadSize?: number }) => {
       setMyPlayerId(playerId)
       setRoomId(rId)
+      setSquadSize(size ?? 3)
       setSelectedSquad([])
       setSelectedDeck([])
       setSquadStep('units')
@@ -304,10 +310,11 @@ export default function App() {
       sessionStorage.removeItem('reconnectData')
     })
 
-    socket.on('RECONNECT_SUCCESS', ({ playerId, roomId: rId, roomStatus, gameState: gs, squadSubmitted: submitted }: {
+    socket.on('RECONNECT_SUCCESS', ({ playerId, roomId: rId, roomStatus, gameState: gs, squadSubmitted: submitted, squadSize: size }: {
       playerId: 'player1' | 'player2'; roomId: string; roomStatus: string
-      gameState?: GameState; squadSubmitted: boolean
+      gameState?: GameState; squadSubmitted: boolean; squadSize?: number
     }) => {
+      if (size) setSquadSize(size)
       setMyPlayerId(playerId)
       setRoomId(rId)
       if (roomStatus === 'waiting') {
@@ -805,7 +812,13 @@ export default function App() {
         onProfileUpdated={p => { setProfile(p); setPlayerName(p.username) }}
         onFindMatch={() => socket.emit('FIND_MATCH', { playerName: playerName.trim() })}
         onCancelMatch={() => socket.emit('CANCEL_MATCH')}
-        onCreateRoom={() => socket.emit('CREATE_ROOM', { playerName: playerName.trim() })}
+        onCreateRoom={() => socket.emit('CREATE_ROOM', { playerName: playerName.trim(), mapId, squadSize })}
+        onPlayBot={() => socket.emit('PLAY_BOT', { playerName: playerName.trim(), mapId, squadSize })}
+        maps={maps}
+        mapId={mapId}
+        onMapIdChange={setMapId}
+        squadSize={squadSize}
+        onSquadSizeChange={setSquadSize}
         onJoinRoom={() => { setLobbyError(''); socket.emit('JOIN_ROOM', { roomId: roomInput.trim(), playerName: playerName.trim() }) }}
       />
       {showProfile && (
@@ -823,6 +836,7 @@ export default function App() {
 
   if (screen === 'squad_selection') return (
     <SquadSelectionScreen
+      squadSize={squadSize}
       playerName={playerName}
       myPlayerId={myPlayerId ?? 'player1'}
       availableUnitCards={gameData.allUnitCards}
@@ -833,8 +847,8 @@ export default function App() {
         const card = gameData.allUnitCards.find(c => c.cardId === cardId)
         const copies = selectedSquad.filter(id => id === cardId).length
         const mass = card?.traits.includes('Mass Produced') ?? false
-        if (copies > 0 && (!mass || selectedSquad.length >= 3)) setSelectedSquad(prev => prev.filter(id => id !== cardId))
-        else if (selectedSquad.length < 3) setSelectedSquad(prev => [...prev, cardId])
+        if (copies > 0 && (!mass || selectedSquad.length >= squadSize)) setSelectedSquad(prev => prev.filter(id => id !== cardId))
+        else if (selectedSquad.length < squadSize) setSelectedSquad(prev => [...prev, cardId])
         setSelectedDeck([])
       }}
       selectedDeck={selectedDeck}
