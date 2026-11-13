@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { Mesh } from 'three'
-import type { ThreeEvent } from '@react-three/fiber'
+import { Mesh, Group, Vector3 } from 'three'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import type { Unit } from '../types'
 import { hexToWorld } from './hexUtils'
 import { useSTLModel } from './useSTLModel'
@@ -37,7 +37,7 @@ export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = f
   }
 
   return (
-    <group position={[x, y + 0.6, z]}>
+    <MovingGroup target={[x, y + 0.6, z]}>
       {stlUrl && stlGeometry ? (
         <mesh
           ref={meshRef}
@@ -63,8 +63,27 @@ export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = f
       )}
 
       <HPBar current={unit.currentHp} max={unit.maxHp} />
-    </group>
+    </MovingGroup>
   )
+}
+
+// Grupo que se desliza hacia su posición objetivo en vez de teletransportarse.
+// La primera vez (despliegue) aparece directamente en su sitio.
+function MovingGroup({ target, children }: { target: [number, number, number]; children: React.ReactNode }) {
+  const ref = useRef<Group>(null)
+  const placed = useRef(false)
+  const goal = useRef(new Vector3())
+  useFrame((_, delta) => {
+    const g = ref.current
+    if (!g) return
+    goal.current.set(target[0], target[1], target[2])
+    if (!placed.current) { g.position.copy(goal.current); placed.current = true; return }
+    // Arco suave: un pequeño salto mientras se desplaza
+    const dist = g.position.distanceTo(goal.current)
+    g.position.lerp(goal.current, 1 - Math.exp(-delta * 7))
+    g.position.y += Math.min(dist, 2) * 0.08
+  })
+  return <group ref={ref}>{children}</group>
 }
 
 function HPBar({ current, max }: { current: number; max: number }) {

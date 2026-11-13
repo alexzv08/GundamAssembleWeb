@@ -13,6 +13,8 @@ import { UnitPanel } from './components/ui/UnitPanel'
 import { TimelineBar } from './components/ui/TimelineBar'
 import { TacticsHand } from './components/ui/TacticsHand'
 import { ToastContainer } from './components/ui/Toast'
+import { ChatPanel, type ChatMessage } from './components/ui/ChatPanel'
+import { sfx, isMuted, setMuted } from './game/sound'
 import { ChoiceModal, type ChoiceRequest } from './components/ui/ChoiceModal'
 import { UPGRADE_OPTIONS } from './components/ui/choiceOptions'
 import { useToasts } from './components/ui/useToasts'
@@ -71,6 +73,8 @@ export default function App() {
   const [pendingAbilityIndex, setPendingAbilityIndex] = useState<number | null>(null)
   const [pendingCardId, setPendingCardId] = useState<string | null>(null)
   const [choice, setChoice] = useState<ChoiceRequest | null>(null)
+  const [chat, setChat] = useState<ChatMessage[]>([])
+  const [muted, setMutedState] = useState(isMuted())
   const allyPickRef = useRef<((allyId: string) => void) | null>(null)
   const [bitAssault, setBitAssault] = useState<{ unitId: string; cardId: string; queue: string[]; picks: string[] } | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
@@ -91,9 +95,11 @@ export default function App() {
   const [usernameSuggestion, setUsernameSuggestion] = useState('')
 
   const gameStateRef = useRef<GameState | null>(null)
+  const myPlayerIdRef = useRef<'player1' | 'player2' | null>(null)
   const { toasts, addToast } = useToasts()
 
   useEffect(() => { gameStateRef.current = gameState }, [gameState])
+  useEffect(() => { myPlayerIdRef.current = myPlayerId }, [myPlayerId])
 
   const clearSelection = useCallback(() => {
     setSelectedUnitId(null)
@@ -213,6 +219,7 @@ export default function App() {
     })
 
     socket.on('SQUAD_ACCEPTED', () => setSquadSubmitted(true))
+    socket.on('CHAT_MESSAGE', (m: ChatMessage) => { setChat(prev => [...prev.slice(-99), m]); sfx.chat() })
 
     socket.on('GAME_STARTED', ({ gameState, playerId }: { gameState: GameState; playerId: 'player1' | 'player2' }) => {
       setGameState(gameState)
@@ -226,7 +233,16 @@ export default function App() {
       const prevState = gameStateRef.current
 
       if (prevState) {
+        if (diceRolls?.length) sfx.dice()
+        const someoneHurt = Object.values(newState.units).some(u => prevState.units[u.id] && u.position && u.currentHp < prevState.units[u.id].currentHp)
+        if (someoneHurt) sfx.hit()
+        const moved = Object.values(newState.units).some(u => {
+          const p = prevState.units[u.id]?.position
+          return p && u.position && (p.q !== u.position.q || p.r !== u.position.r)
+        })
+        if (moved) sfx.move()
         if (prevState.activeUnitId !== newState.activeUnitId && newState.activeUnitId) {
+          if (newState.activePlayerId === myPlayerIdRef.current) sfx.myTurn()
           const unit = newState.units[newState.activeUnitId]
           const player = newState.players[newState.activePlayerId]
           const color = newState.activePlayerId === 'player1' ? '#4fc3f7' : '#ef9a9a'
@@ -235,7 +251,7 @@ export default function App() {
 
         Object.values(newState.units).forEach(unit => {
           const prev = prevState.units[unit.id]
-          if (prev?.position && !unit.position) addToast(`¡${unit.name} derrotado!`, '#ef5350', 4000)
+          if (prev?.position && !unit.position) { addToast(`¡${unit.name} derrotado!`, '#ef5350', 4000); sfx.defeat() }
         })
 
         Object.values(newState.board).forEach(hex => {
@@ -350,6 +366,7 @@ export default function App() {
       socket.off('connect'); socket.off('disconnect'); socket.off('connect_error')
       socket.off('ROOM_CREATED'); socket.off('JOIN_ERROR'); socket.off('MATCH_SEARCHING')
       socket.off('MATCH_CANCELLED'); socket.off('SQUAD_SELECTION_STARTED'); socket.off('SQUAD_ACCEPTED'); socket.off('GAME_STARTED')
+      socket.off('CHAT_MESSAGE')
       socket.off('GAME_STATE_UPDATE'); socket.off('GAME_OVER'); socket.off('ACTION_ERROR')
       socket.off('OPPONENT_DISCONNECTED'); socket.off('OPPONENT_RECONNECTED'); socket.off('OPPONENT_ABANDONED')
       socket.off('RECONNECT_SUCCESS'); socket.off('RECONNECT_FAILED'); socket.off('PHASE_TRANSITION')
@@ -915,6 +932,15 @@ export default function App() {
         />
 
         <ToastContainer toasts={toasts} />
+        <ChatPanel messages={chat} myPlayerId={myPlayerId} onSend={text => socket.emit('CHAT', { text })} />
+        <button
+          onClick={() => { setMuted(!muted); setMutedState(!muted) }}
+          aria-label={muted ? 'Activar sonido' : 'Silenciar'}
+          title={muted ? 'Activar sonido' : 'Silenciar'}
+          style={{ position: 'absolute', top: 12, left: 66, zIndex: 25, background: 'rgba(10,10,20,0.9)', border: '1px solid #444', borderRadius: 8, color: 'white', padding: '6px 10px', cursor: 'pointer', fontSize: 13 }}
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
         {choice && <ChoiceModal request={choice} onCancel={() => { setChoice(null); clearSelection() }} />}
 
         <ObjectivesPanel objectiveHexes={objectiveHexes} players={gameState.players} />

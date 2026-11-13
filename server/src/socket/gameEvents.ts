@@ -186,6 +186,20 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         driveBot(io, room)
     })
 
+    // ── Chat de la sala ────────────────────────────────────────────────────────
+    // Texto plano, como mucho 200 caracteres y un mensaje por segundo.
+    let lastChat = 0
+    socket.on('CHAT', ({ text }: { text?: unknown } = {}) => {
+        const room = roomManager.getRoomBySocket(socket.id)
+        const playerId = roomManager.getPlayerIdBySocket(socket.id)
+        const clean = typeof text === 'string' ? text.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200) : ''
+        const now = Date.now()
+        if (!room || !playerId || !clean || now - lastChat < 1000) return
+        lastChat = now
+        const name = room.players.find(p => p.playerId === playerId)?.name ?? 'Jugador'
+        io.to(room.id).emit('CHAT_MESSAGE', { playerId, name, text: clean, at: now })
+    })
+
     // ── Reconexión ────────────────────────────────────────────────────────────
     socket.on('RECONNECT', ({ roomId, playerId }: { roomId?: string; playerId?: 'player1' | 'player2' } = {}) => {
         if (playerId !== 'player1' && playerId !== 'player2') return
