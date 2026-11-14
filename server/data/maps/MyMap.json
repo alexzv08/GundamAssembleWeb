@@ -875,8 +875,8 @@
     ]
   ],
   "scenario": {
-    "name": "MyMap",
-    "description": "",
+    "name": "Colina central · Objetivos de 3 VP",
+    "description": "El mismo tablero con Objetivos que valen 3 VP: partidas más centradas en derrotar unidades.",
     "vpToWin": 0,
     "objectives": [
       {

@@ -56,8 +56,8 @@ export function AuthScreen() {
 
   return (
     <div style={{
-      width: '100vw', height: '100vh',
-      background: 'linear-gradient(160deg, #0d0d1a 0%, #0a0a12 60%, #0d0d1a 100%)',
+      width: '100vw', height: '100dvh', padding: 16,
+      background: 'radial-gradient(900px 520px at 25% 30%, #0d3b5788, transparent 70%), radial-gradient(700px 420px at 85% 100%, #4a141866, transparent 70%), #0a0f1e',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       {/* Fondo decorativo */}
@@ -77,10 +77,10 @@ export function AuthScreen() {
       </div>
 
       <div style={{
-        background: 'rgba(26,26,46,0.95)',
+        background: 'rgba(14, 20, 38, 0.94)',
         border: '1px solid rgba(79,195,247,0.2)',
         borderRadius: 16, padding: '48px 44px',
-        width: 380, textAlign: 'center',
+        width: '100%', maxWidth: 380, textAlign: 'center',
         boxShadow: '0 0 60px rgba(79,195,247,0.08)',
         position: 'relative',
       }}>
@@ -89,17 +89,17 @@ export function AuthScreen() {
           <div style={{ fontSize: 13, color: '#4fc3f7', letterSpacing: 4, textTransform: 'uppercase', marginBottom: 12 }}>
             GUNDAM
           </div>
-          <div style={{ fontSize: 32, fontWeight: 'bold', color: 'white', letterSpacing: 1 }}>
+          <div style={{ fontFamily: "'Chakra Petch', sans-serif", fontSize: 40, fontWeight: 700, color: 'white', letterSpacing: 2 }}>
             ASSEMBLE
           </div>
-          <div style={{ fontSize: 11, color: '#555', letterSpacing: 3, marginTop: 4 }}>
-            TACTICAL SIMULATOR
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#aab4cc', letterSpacing: 3, marginTop: 4 }}>
+            SIMULADOR TÁCTICO
           </div>
         </div>
 
         <div style={{ width: 40, height: 1, background: 'rgba(79,195,247,0.3)', margin: '24px auto' }} />
 
-        <div style={{ color: '#888', fontSize: 13, marginBottom: 32 }}>
+        <div style={{ color: '#aab4cc', fontSize: 13.5, marginBottom: 32 }}>
           Accede para guardar tu progreso
         </div>
 
@@ -156,7 +156,7 @@ export function AuthScreen() {
               display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
             }}>
               <div style={{ flex: 1, height: 1, background: '#222' }} />
-              <span style={{ color: '#333', fontSize: 10, letterSpacing: 1, whiteSpace: 'nowrap' }}>
+              <span style={{ color: '#8590ab', fontSize: 10, letterSpacing: 1, whiteSpace: 'nowrap' }}>
                 DEV — email
               </span>
               <div style={{ flex: 1, height: 1, background: '#222' }} />
@@ -203,7 +203,7 @@ export function AuthScreen() {
           </form>
         )}
 
-        <div style={{ color: '#444', fontSize: 11, lineHeight: 1.5 }}>
+        <div style={{ color: '#8590ab', fontSize: 11.5, lineHeight: 1.5 }}>
           Al acceder aceptas el uso de tu perfil para identificarte en el juego.
           No compartimos tus datos con terceros.
         </div>

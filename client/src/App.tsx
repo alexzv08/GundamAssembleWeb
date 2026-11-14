@@ -4,7 +4,7 @@ import { GameScene } from './three/GameScene'
 import type { GameState } from './types/gameState'
 import type { Unit } from './types/units'
 import { hexKey, gridDistance } from './game/hexGrid'
-import { reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
+import { baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
 import { getNeighbors, keyToHex } from './game/hexGrid'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
@@ -90,7 +90,7 @@ export default function App() {
   const [setupConfirmed, setSetupConfirmed] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [lobbyMode, setLobbyMode] = useState<'main' | 'private'>('main')
-  const [maps, setMaps] = useState<{ id: string; name: string }[]>([{ id: 'DemoMap', name: 'Demo Map' }])
+  const [maps, setMaps] = useState<{ id: string; name: string; description?: string }[]>([{ id: 'DemoMap', name: 'Colina central' }])
   const [mapId, setMapId] = useState('DemoMap')
   const [squadSize, setSquadSize] = useState(3)
   useEffect(() => { fetchMapList().then(r => setMaps(r.maps)).catch(() => {}) }, [])
@@ -962,6 +962,8 @@ export default function App() {
       selectedWeaponIndex={selectedWeaponIndex}
       currentTlRound={getUnitRound(gameState.timeline, panelUnit.id)}
       canRescue={myPlayerId && gameState.activeUnitId ? calcCanRescue(gameState.activeUnitId, gameState, myPlayerId) : false}
+      mustLeaveBase={gameState.activeUnitId === panelUnit.id && !!panelUnit.position && baseOwnerAt(gameState, hexKey(panelUnit.position)) !== null
+        && !(gameState.activation?.advanced ?? false) && reachableFor(gameState, panelUnit.id, { kind: 'advance' }).size > 0}
       onMove={() => {
         const id = gameState.activeUnitId
         if (!id) return
@@ -1096,6 +1098,7 @@ export default function App() {
       {isFinished && (
         <GameOverModal
           gameState={gameState}
+          myPlayerId={myPlayerId}
           onReturnToLobby={() => {
             sessionStorage.removeItem('reconnectData')
             setScreen('lobby')

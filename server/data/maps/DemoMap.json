@@ -875,8 +875,8 @@
     ]
   ],
   "scenario": {
-    "name": "MyMap",
-    "description": "",
+    "name": "Colina central",
+    "description": "Meseta en el centro, 4 Objetivos de 5 VP y 3 Garrisons por bando.",
     "vpToWin": 0,
     "objectives": [
       {

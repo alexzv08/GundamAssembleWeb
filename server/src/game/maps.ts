@@ -5,7 +5,7 @@ import path from 'path'
 const MAPS_DIR = path.join(__dirname, '../../data/maps')
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/
 
-export interface MapSummary { id: string; name: string; squadSize: number }
+export interface MapSummary { id: string; name: string; squadSize: number; description?: string }
 
 // Lista de mapas oficiales (no incluye los de la comunidad)
 export function listMaps(): MapSummary[] {
@@ -18,6 +18,7 @@ export function listMaps(): MapSummary[] {
                 id,
                 name: data.scenario?.name && data.scenario.name !== id ? data.scenario.name : id.replace(/([A-Z])/g, ' $1').trim(),
                 squadSize: data.scenario?.squadSize === 5 ? 5 : 3,
+                description: data.scenario?.description || undefined,
             }
         })
 }

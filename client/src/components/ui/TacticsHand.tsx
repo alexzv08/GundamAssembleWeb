@@ -84,11 +84,11 @@ export function TacticsHand({ hand, isMyTurn, selectedCardId, deckCount, onPlayC
     )
 }
 
-export function CardFace({ card, playable, selected = false, highlight = false, large = false, compact = false }: {
-    card: TacticsCard; playable: boolean; selected?: boolean; highlight?: boolean; large?: boolean; compact?: boolean
+export function CardFace({ card, playable, selected = false, highlight = false, large = false, compact = false, fluid = false }: {
+    card: TacticsCard; playable: boolean; selected?: boolean; highlight?: boolean; large?: boolean; compact?: boolean; fluid?: boolean
 }) {
     const t = CARD_TYPE[card.type]
-    const w = large ? 250 : compact ? 112 : 136
+    const w = fluid ? '100%' : large ? 250 : compact ? 112 : 136
     return (
         <div style={{
             width: w, height: large ? 'auto' : '100%', minHeight: large ? 220 : undefined,

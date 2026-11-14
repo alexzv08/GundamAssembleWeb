@@ -1,20 +1,23 @@
+import { useState } from 'react'
+import { C, FONT, eyebrow, button } from '../theme'
+
 interface WaitingScreenProps {
   roomId: string
 }
 
 export function WaitingScreen({ roomId }: WaitingScreenProps) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard?.writeText(roomId).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) }).catch(() => {})
+  }
   return (
-    <div style={{
-      width: '100vw', height: '100vh', background: '#0d0d1a',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
-    }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 22, marginBottom: 16 }}>Sala creada</div>
-        <div style={{ fontSize: 36, fontWeight: 'bold', color: '#f5c518', marginBottom: 16, letterSpacing: 8 }}>
-          {roomId}
-        </div>
-        <div style={{ color: '#aaa', marginBottom: 8 }}>Comparte este código con tu oponente</div>
-        <div style={{ color: '#666', fontSize: 13 }}>Esperando jugador 2...</div>
+    <div style={{ width: '100vw', height: '100dvh', background: `radial-gradient(800px 480px at 50% 30%, ${C.allyDeep}66, ${C.bg} 65%)`, color: C.text, display: 'grid', placeItems: 'center', padding: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+        <span style={eyebrow}>Sala creada · código</span>
+        <span style={{ fontFamily: FONT.mono, fontSize: 44, fontWeight: 600, letterSpacing: '0.3em', color: C.amber, userSelect: 'all' }}>{roomId}</span>
+        <button onClick={copy} style={button('primary')}>{copied ? 'Copiado' : 'Copiar código'}</button>
+        <p style={{ color: C.textSoft, fontSize: 14 }}>Pásaselo a tu rival para que se una desde «Sala privada».</p>
+        <p style={{ color: C.textDim, fontSize: 13, animation: 'ga-pulse 1.8s infinite' }}>Esperando al segundo jugador…</p>
       </div>
     </div>
   )

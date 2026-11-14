@@ -1,107 +1,89 @@
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Group } from 'three'
 import { useUnitModel } from '../../three/useUnitModel'
-import { modelUrlFor, DEFAULT_MODEL_SCALE } from '../../three/models'
+import { modelUrlFor } from '../../three/models'
 import type { UnitCardData } from '../../api/gameData'
+import { C, FONT, chip } from '../../theme'
 
 function RotatingModel({ url, color }: { url: string | null; color: string }) {
   const groupRef = useRef<Group>(null)
   const geometry = useUnitModel(url)
-  useFrame(() => {
-    if (groupRef.current) groupRef.current.rotation.y += 0.012
-  })
+  useFrame((_, d) => { if (groupRef.current) groupRef.current.rotation.y += d * 0.6 })
   return (
     <group ref={groupRef}>
-      {geometry && url ? (
-        <mesh geometry={geometry} scale={DEFAULT_MODEL_SCALE} position={[0, -0.6, 0]}>
-          <meshStandardMaterial color={color} roughness={0.5} metalness={0.3} flatShading />
+      <mesh position={[0, -0.66, 0]}>
+        <cylinderGeometry args={[0.62, 0.68, 0.08, 6]} />
+        <meshStandardMaterial color="#141a2c" metalness={0.5} roughness={0.45} />
+      </mesh>
+      {geometry ? (
+        <mesh geometry={geometry} position={[0, -0.62, 0]}>
+          <meshStandardMaterial color="#d3dcea" roughness={0.5} metalness={0.3} flatShading emissive={color} emissiveIntensity={0.06} />
         </mesh>
       ) : (
-        <mesh>
-          <sphereGeometry args={[0.4, 16, 16]} />
-          <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} />
-        </mesh>
+        <group>
+          <mesh position={[0, -0.15, 0]}><capsuleGeometry args={[0.24, 0.5, 6, 12]} /><meshStandardMaterial color="#d3dcea" roughness={0.5} metalness={0.3} /></mesh>
+          <mesh position={[0, 0.36, 0]}><boxGeometry args={[0.3, 0.18, 0.26]} /><meshStandardMaterial color="#d3dcea" roughness={0.5} metalness={0.3} /></mesh>
+        </group>
       )}
     </group>
   )
 }
 
-interface UnitCardPreviewProps {
+// Visor 3D de una unidad (uno solo en la pantalla: un Canvas por carta agotaría
+// los contextos WebGL del navegador).
+export function UnitModelViewer({ cardId, color = C.ally }: { cardId: string; color?: string }) {
+  return (
+    <Canvas camera={{ position: [0, 0.25, 3.9], fov: 36 }} style={{ width: '100%', height: '100%' }} dpr={[1, 2]}>
+      <hemisphereLight args={['#c4d2ff', '#2a2110', 1.1]} />
+      <directionalLight position={[2, 4, 3]} intensity={2.2} color="#ffe9c9" />
+      <directionalLight position={[-3, 1, -2]} intensity={1.2} color={color} />
+      <RotatingModel url={modelUrlFor(cardId)} color={color} />
+    </Canvas>
+  )
+}
+
+interface UnitTileProps {
   card: UnitCardData
   copies: number
   canSelect: boolean
-  playerColor: string
+  focused: boolean
   onClick: () => void
+  onFocus: () => void
 }
 
-// El visor 3D solo se monta mientras el ratón está encima: con muchas cartas,
-// un Canvas por carta agotaría los contextos WebGL del navegador.
-export function UnitCardPreview({ card, copies, canSelect, playerColor, onClick }: UnitCardPreviewProps) {
-  const [hovered, setHovered] = useState(false)
+// Ficha de unidad en la selección de escuadra
+export function UnitCardPreview({ card, copies, canSelect, focused, onClick, onFocus }: UnitTileProps) {
   const isSelected = copies > 0
   const interactive = isSelected || canSelect
-  const modelColor = isSelected ? playerColor : '#9ab0cc'
-  const url = modelUrlFor(card.cardId)
-  const affiliations = card.traits.filter((_, i) => i > 0 || card.traits.length === 1)
-
   return (
-    <div
+    <button type="button"
       onClick={interactive ? onClick : undefined}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={card.abilities.map(a => `${a.name}: ${a.effect}`).join('\n')}
+      onMouseEnter={onFocus} onFocus={onFocus}
+      aria-pressed={isSelected}
       style={{
-        width: 168,
-        border: `2px solid ${isSelected ? playerColor : '#333'}`,
-        borderRadius: 10,
-        overflow: 'hidden',
-        cursor: interactive ? 'pointer' : 'not-allowed',
-        background: isSelected ? `${playerColor}11` : '#0d0d1a',
-        opacity: !isSelected && !canSelect ? 0.35 : 1,
-        boxShadow: isSelected ? `0 0 16px ${playerColor}55` : 'none',
-        transition: 'opacity 0.15s, box-shadow 0.15s, border-color 0.15s',
-        flexShrink: 0,
-      }}
-    >
-      <div style={{ height: 120, background: '#0e1220', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {hovered ? (
-          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }} style={{ width: '100%', height: '100%' }}>
-            <ambientLight intensity={1.2} />
-            <directionalLight position={[3, 4, 3]} intensity={2.5} />
-            <directionalLight position={[-2, 2, -1]} intensity={1.0} />
-            <RotatingModel url={url} color={modelColor} />
-          </Canvas>
-        ) : (
-          <div style={{ textAlign: 'center', color: '#556', fontSize: 11, padding: 8 }}>
-            <div style={{ fontSize: 26, marginBottom: 4, color: modelColor }}>◆</div>
-            {card.model ?? card.cardId}
-          </div>
-        )}
-        <div style={{ position: 'absolute', top: 6, left: 8, fontSize: 9, color: '#778', letterSpacing: 0.5 }}>{card.cardId}</div>
-        {isSelected && (
-          <div style={{
-            position: 'absolute', top: 6, right: 8, minWidth: 20, height: 20, borderRadius: 10,
-            background: playerColor, color: '#000', padding: '0 4px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 'bold', pointerEvents: 'none',
-          }}>{copies > 1 ? `×${copies}` : '✓'}</div>
-        )}
-        {card.provisionalStats && (
-          <div title="Valores de armas y Energy provisionales: revisar con la carta física"
-            style={{ position: 'absolute', bottom: 4, right: 6, fontSize: 9, color: '#f5c518' }}>stats provisionales</div>
-        )}
+        textAlign: 'left', color: C.text, padding: 0, cursor: interactive ? 'pointer' : 'not-allowed',
+        background: isSelected ? `${C.ally}14` : C.panelSolid,
+        border: `1px solid ${isSelected ? C.ally : focused ? C.lineStrong : C.line}`,
+        borderRadius: 8, overflow: 'hidden', opacity: !isSelected && !canSelect ? 0.45 : 1,
+        boxShadow: isSelected ? `0 0 14px ${C.ally}40` : 'none', transition: 'border-color 120ms, box-shadow 120ms',
+        display: 'flex', flexDirection: 'column', minWidth: 0,
+      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: `1px solid ${C.line}`, gap: 6 }}>
+        <span style={{ fontFamily: FONT.mono, fontSize: 10, color: C.textDim }}>{card.cardId}</span>
+        {isSelected
+          ? <span style={chip(C.ally)}>{copies > 1 ? `×${copies}` : 'En la escuadra'}</span>
+          : card.traits.includes('Mass Produced') ? <span style={chip(C.textSoft)}>Mass Produced</span> : null}
       </div>
-      <div style={{ padding: '8px 10px', background: '#111827' }}>
-        <div style={{ fontWeight: 'bold', color: 'white', fontSize: 13 }}>{card.name}</div>
-        {card.signature && <div style={{ color: '#4fc3f7', fontSize: 10, fontStyle: 'italic' }}>{card.signature}</div>}
-        <div style={{ color: '#888', fontSize: 10, margin: '2px 0 6px' }}>{affiliations.join(' · ')}</div>
-        <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#aaa' }}>
-          <span>HP {card.hp}</span>
-          <span>VP {card.vp}</span>
-          <span>TL {card.tl}</span>
-        </div>
+      <div style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 15, lineHeight: 1.15 }}>{card.name}</span>
+        {card.signature && <span style={{ color: C.textSoft, fontSize: 11, fontStyle: 'italic' }}>{card.signature}</span>}
+        <span style={{ display: 'flex', gap: 10, fontFamily: FONT.mono, fontSize: 11, color: C.textSoft, marginTop: 4 }}>
+          <span>HP <b style={{ color: C.text }}>{card.hp}</b></span>
+          <span>VP <b style={{ color: C.amber }}>{card.vp}</b></span>
+          <span>TL <b style={{ color: C.text }}>{card.tl}</b></span>
+        </span>
       </div>
-    </div>
+    </button>
   )
 }

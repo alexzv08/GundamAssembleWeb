@@ -16,6 +16,8 @@ interface UnitPanelProps {
     selectedWeaponIndex: number | null
     currentTlRound?: number | null
     canRescue?: boolean
+    /** Está sobre su Base y aún puede moverse: no puede terminar ahí */
+    mustLeaveBase?: boolean
     /** Modo de selección actual, para marcar el botón pulsado */
     mode?: string
     compact?: boolean
@@ -38,7 +40,7 @@ const STATUS_LABEL: Record<string, string> = { disarm: 'Disarm', fracture: 'Frac
 
 export function UnitPanel({
     unit, isActive, isMyUnit, isMyTurn, advanced, usedCommands, freeDashes, freeAttacks, hasUsedPrimary,
-    selectedWeaponIndex, currentTlRound, canRescue = false, mode, compact = false,
+    selectedWeaponIndex, currentTlRound, canRescue = false, mustLeaveBase = false, mode, compact = false,
     onMove, onDash, onAttack, onUseAbility, onEnergize, onRescue, onEndTurn, onCancel, onToggleAutoResponses, onClose,
 }: UnitPanelProps) {
     const side = isMyUnit ? C.ally : C.enemy
@@ -160,9 +162,9 @@ export function UnitPanel({
                         )}
 
                         <div style={{ display: 'flex', gap: 6 }}>
-                            <button onClick={onEndTurn} disabled={!hasUsedPrimary}
-                                title={hasUsedPrimary ? undefined : 'Antes haz una acción primaria: Atacar, Dash, Energize o Rescue'}
-                                style={{ ...button(hasUsedPrimary ? 'amber' : 'ghost', !hasUsedPrimary), flex: 1, fontWeight: 600 }}>
+                            <button onClick={onEndTurn} disabled={!hasUsedPrimary || mustLeaveBase}
+                                title={mustLeaveBase ? 'No puedes terminar sobre tu Base' : hasUsedPrimary ? undefined : 'Antes haz una acción primaria: Atacar, Dash, Energize o Rescue'}
+                                style={{ ...button(hasUsedPrimary && !mustLeaveBase ? 'amber' : 'ghost', !hasUsedPrimary || mustLeaveBase), flex: 1, fontWeight: 600 }}>
                                 Terminar activación
                             </button>
                             {mode && mode !== 'none' && (
@@ -170,6 +172,7 @@ export function UnitPanel({
                             )}
                         </div>
                         {!hasUsedPrimary && <div style={{ color: C.textDim, fontSize: 11 }}>Falta tu acción primaria: Atacar, Dash, Energize o Rescue.</div>}
+                        {mustLeaveBase && <div style={{ color: C.warn, fontSize: 11 }}>Estás sobre tu Base: muévete a otro hex antes de terminar.</div>}
                     </div>
                 )}
 

@@ -1,14 +1,18 @@
-import { UnitCardPreview } from '../components/ui/UnitCardPreview'
+import { useState } from 'react'
+import { UnitCardPreview, UnitModelViewer } from '../components/ui/UnitCardPreview'
+import { CardFace } from '../components/ui/TacticsHand'
 import type { UnitCardData, TacticsCardData } from '../api/gameData'
+import type { TacticsCard } from '../types/tactics'
 import { DEFAULT_SQUAD_SIZE, requiredDeckSize, cardRestriction, validateSquad, type DeckCard } from '../game/deckRules'
-
-
-const badge = (bg: string) => ({
-  display: 'inline-block', fontSize: 8.5, padding: '1px 4px', borderRadius: 3, background: bg, color: '#ddd', marginLeft: 4,
-  textTransform: 'uppercase' as const, letterSpacing: 0.6,
-})
+import { C, FONT, eyebrow, button, chip, ABILITY_TYPE } from '../theme'
+import { useIsMobile } from '../game/useIsMobile'
 
 const toDeckCard = (c: TacticsCardData): DeckCard => ({ id: c.cardId, name: c.name, faction: c.faction, signature: c.signature })
+const toTactics = (c: TacticsCardData): TacticsCard => ({
+  id: c.cardId, name: c.name, type: (c.type === 'attack' || c.type === 'response' ? c.type : 'command'),
+  faction: c.faction, signature: c.signature, effect: c.effect, effectData: null,
+  weapon: c.weapon ? { name: c.name, range: c.weapon.range, strength: c.weapon.strength, tlCost: c.weapon.tlCost, effectData: null, critData: null } : undefined,
+} as TacticsCard)
 
 interface SquadSelectionScreenProps {
   squadSize?: number
@@ -26,229 +30,216 @@ interface SquadSelectionScreenProps {
   onConfirm: (unitCardIds: string[], cardIds: string[]) => void
 }
 
+type TypeFilter = 'all' | 'attack' | 'command' | 'response'
+
+// Selección de escuadra (paso 1) y de mazo de Tactics (paso 2).
+// H6: panel de detalle con el modelo 3D, armas y habilidades de la unidad bajo el
+// ratón, filtros por set y resumen fijo de la escuadra.
+// H7: filtros por tipo, carta ampliada al pasar el ratón y contador bien visible.
 export function SquadSelectionScreen({
-  squadSize: MAX_SQUAD = DEFAULT_SQUAD_SIZE,
-  playerName, myPlayerId,
-  availableUnitCards, availableTacticsCards,
-  selectedSquad, onToggleUnit,
-  selectedDeck, onToggleCard,
-  squadStep, onSetSquadStep,
-  squadSubmitted, onConfirm,
+  squadSize: MAX_SQUAD = DEFAULT_SQUAD_SIZE, playerName,
+  availableUnitCards, availableTacticsCards, selectedSquad, onToggleUnit, selectedDeck, onToggleCard,
+  squadStep, onSetSquadStep, squadSubmitted, onConfirm,
 }: SquadSelectionScreenProps) {
+  const mobile = useIsMobile()
+  const [focusUnit, setFocusUnit] = useState<string | null>(null)
+  const [focusCard, setFocusCard] = useState<string | null>(null)
+  const [setFilter, setSetFilter] = useState<string>('Todas')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [onlyLegal, setOnlyLegal] = useState(true)
+
   const squadError = validateSquad(selectedSquad, availableUnitCards, MAX_SQUAD)
-  const canGoToDeck = squadError === null
   const squadCards = selectedSquad.map(id => availableUnitCards.find(u => u.cardId === id)).filter((u): u is UnitCardData => !!u)
   const deckCards = availableTacticsCards.map(toDeckCard)
   const deckSize = requiredDeckSize(selectedSquad, availableUnitCards, deckCards)
   const canConfirm = selectedDeck.length === deckSize && !squadSubmitted
-  const sets = [...new Set(availableUnitCards.map(c => c.set))]
-  // Primero lo que esta escuadra puede llevar, luego oficiales jugables; demo y sin implementar al final
-  const rank = (c: TacticsCardData) =>
-    (cardRestriction(toDeckCard(c), squadCards) ? 4 : 0) + (c.source === 'demo' ? 2 : 0) + (!c.effectData && !c.weapon ? 1 : 0)
-  const sortedCards = [...availableTacticsCards].sort((a, b) => rank(a) - rank(b))
-  const playerColor = myPlayerId === 'player1' ? '#ef5350' : '#4fc3f7'
+  const sets = ['Todas', ...new Set(availableUnitCards.map(c => c.set))]
+  const units = availableUnitCards.filter(c => setFilter === 'Todas' || c.set === setFilter)
+  const detail = availableUnitCards.find(c => c.cardId === (focusUnit ?? selectedSquad[selectedSquad.length - 1])) ?? availableUnitCards[0]
+
+  const rank = (c: TacticsCardData) => (cardRestriction(toDeckCard(c), squadCards) ? 4 : 0) + (c.source === 'demo' ? 2 : 0)
+  const cards = [...availableTacticsCards]
+    .filter(c => typeFilter === 'all' || c.type === typeFilter || (typeFilter === 'command' && c.type !== 'attack' && c.type !== 'response'))
+    .filter(c => !onlyLegal || !cardRestriction(toDeckCard(c), squadCards))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  const preview = availableTacticsCards.find(c => c.cardId === focusCard)
+
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div>
+        <h1 style={{ fontSize: 24, color: C.text }}>{squadStep === 'units' ? 'Elige tu escuadra' : 'Mazo de Tactics'}</h1>
+        <div style={{ ...eyebrow, color: C.ally }}>{playerName}</div>
+      </div>
+      <ol style={{ marginLeft: 'auto', display: 'flex', gap: 6, listStyle: 'none' }} aria-label="Pasos">
+        {(['units', 'deck'] as const).map((s, i) => (
+          <li key={s} style={{ ...chip(squadStep === s ? C.amber : C.textDim), padding: '3px 8px', fontSize: 10.5 }}>
+            {i + 1} · {s === 'units' ? 'Escuadra' : 'Mazo'}
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+
+  const counter = (n: number, total: number, label: string) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+      <span style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 26, color: n === total ? C.ok : C.text }}>{n}</span>
+      <span style={{ fontFamily: FONT.mono, fontSize: 14, color: C.textSoft }}>/ {total}</span>
+      <span style={{ ...eyebrow, marginLeft: 4 }}>{label}</span>
+    </div>
+  )
+
+  const filterChip = (active: boolean, label: string, onClick: () => void) => (
+    <button key={label} type="button" onClick={onClick} aria-pressed={active}
+      style={{ ...button(active ? 'primary' : 'subtle'), padding: '4px 10px', fontSize: 11.5 }}>{label}</button>
+  )
 
   return (
-    <div style={{
-      width: '100vw', height: '100vh', background: '#0d0d1a',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div style={{
-        background: '#1a1a2e', border: '1px solid #333', borderRadius: 12,
-        padding: '32px 40px', maxWidth: 1100, width: '100%', color: 'white',
-      }}>
-        {/* Cabecera */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 'bold', color: '#4fc3f7' }}>
-              {squadStep === 'units' ? 'Selección de Escuadra' : 'Mazo de Tácticas'}
+    <div style={{ width: '100vw', height: '100dvh', background: `radial-gradient(1200px 600px at 70% -10%, ${C.allyDeep}55, ${C.bg} 60%)`, color: C.text, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '18px max(16px, env(safe-area-inset-left, 0px)) 12px', borderBottom: `1px solid ${C.line}` }}>{header}</div>
+
+      {squadStep === 'units' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0, 1fr) 360px', overflow: mobile ? 'auto' : 'hidden' }}>
+          <div style={{ minHeight: 0, overflowY: mobile ? 'visible' : 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {sets.map(s => filterChip(setFilter === s, s === 'Todas' ? 'Todos los sets' : s, () => setSetFilter(s)))}
             </div>
-            <div style={{
-              fontSize: 11, marginTop: 2,
-              color: playerColor, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase',
-            }}>
-              {playerName}
-            </div>
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            {(['units', 'deck'] as const).map((step, i) => (
-              <div key={step} style={{
-                width: 28, height: 28, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 13, fontWeight: 'bold',
-                background: squadStep === step ? '#1565c0' : '#333',
-                color: squadStep === step ? 'white' : '#888',
-                border: `2px solid ${squadStep === step ? '#4fc3f7' : '#444'}`,
-              }}>{i + 1}</div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>
-          {squadStep === 'units'
-            ? `Elige ${MAX_SQUAD} unidades (${selectedSquad.length}/${MAX_SQUAD}). No se repiten salvo las Mass Produced: haz clic otra vez para añadir otra copia.`
-            : deckSize === 0
-              ? 'Ninguna carta del catálogo actual es compatible con esta escuadra: jugarás sin mazo de Tactics.'
-              : deckSize < 9
-              ? `Tu escuadra solo puede usar ${deckSize} cartas: inclúyelas todas (${selectedDeck.length}/${deckSize})`
-              : `Elige exactamente ${deckSize} cartas (${selectedDeck.length}/${deckSize}). Las cartas con rasgo exigen una unidad con ese rasgo.`}
-        </div>
-
-        {/* Paso 1: Unidades */}
-        {squadStep === 'units' && (
-          <>
-            <div style={{ maxHeight: '58vh', overflowY: 'auto', marginBottom: 24, paddingRight: 4 }}>
-              {sets.map(set => (
-                <div key={set} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, color: '#778', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{set}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-                    {availableUnitCards.filter(c => c.set === set).map(card => {
-                      const copies = selectedSquad.filter(id => id === card.cardId).length
-                      const canSelect = selectedSquad.length < MAX_SQUAD && (copies === 0 || card.traits.includes('Mass Produced'))
-                      return (
-                        <UnitCardPreview
-                          key={card.cardId}
-                          card={card}
-                          copies={copies}
-                          canSelect={canSelect}
-                          playerColor={playerColor}
-                          onClick={() => onToggleUnit(card.cardId)}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              disabled={!canGoToDeck}
-              onClick={() => onSetSquadStep('deck')}
-              style={{
-                padding: '12px 32px', background: canGoToDeck ? '#1565c0' : '#333',
-                color: 'white', border: 'none', borderRadius: 8,
-                cursor: canGoToDeck ? 'pointer' : 'not-allowed', fontSize: 15, fontWeight: 'bold',
-              }}
-            >
-              Siguiente →
-            </button>
-          </>
-        )}
-
-        {/* Paso 2: Mazo */}
-        {squadStep === 'deck' && (
-          <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
-              {sortedCards.map(card => {
-                const isSelected = selectedDeck.includes(card.cardId)
-                const restriction = cardRestriction(toDeckCard(card), squadCards)
-                const isFull = selectedDeck.length >= deckSize || restriction !== null
-                const isCommand = card.type !== 'response'
-                const isFed = card.faction === 'Earth Federation'
-                const artColor = isFed
-                  ? (isCommand ? 'linear-gradient(160deg, #0d47a1 0%, #1565c0 50%, #29b6f6 100%)'
-                               : 'linear-gradient(160deg, #004d40 0%, #00695c 50%, #4db6ac 100%)')
-                  : (isCommand ? 'linear-gradient(160deg, #b71c1c 0%, #c62828 50%, #ef9a9a 100%)'
-                               : 'linear-gradient(160deg, #4a148c 0%, #6a1b9a 50%, #ce93d8 100%)')
-                const borderColor = isSelected ? '#4fc3f7' : isFull && !isSelected ? '#222' : '#444'
-                const canToggle = !squadSubmitted && (isSelected || !isFull)
-
+            <p style={{ color: C.textSoft, fontSize: 13 }}>
+              Elige {MAX_SQUAD} unidades. No se repiten, salvo las Mass Produced (vuelve a pulsarla para añadir otra copia). Pulsa una elegida para quitarla.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 10 }}>
+              {units.map(card => {
+                const copies = selectedSquad.filter(id => id === card.cardId).length
+                const canSelect = selectedSquad.length < MAX_SQUAD && (copies === 0 || card.traits.includes('Mass Produced'))
                 return (
-                  <div
-                    key={card.cardId}
-                    title={restriction ?? card.effect}
-                    onClick={() => canToggle && onToggleCard(card.cardId)}
-                    style={{
-                      width: 118, borderRadius: 8, overflow: 'hidden',
-                      border: `2px solid ${borderColor}`,
-                      cursor: canToggle ? 'pointer' : 'default',
-                      opacity: isFull && !isSelected ? 0.35 : 1,
-                      position: 'relative',
-                      boxShadow: isSelected ? '0 0 10px rgba(79,195,247,0.4)' : 'none',
-                      transition: 'opacity 0.15s, box-shadow 0.15s',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div style={{
-                      height: 72, background: artColor,
-                      display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', justifyContent: 'center', gap: 4,
-                      position: 'relative',
-                    }}>
-                      <div style={{ fontSize: 22, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }}>
-                        {isCommand ? '⚔️' : '🛡️'}
-                      </div>
-                      {isSelected && (
-                        <div style={{
-                          position: 'absolute', top: 4, right: 6,
-                          width: 18, height: 18, borderRadius: '50%',
-                          background: '#4fc3f7', color: '#000',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 11, fontWeight: 'bold',
-                        }}>✓</div>
-                      )}
-                    </div>
-                    <div style={{ background: '#111827', padding: '7px 8px' }}>
-                      <div style={{
-                        fontSize: 11, fontWeight: 'bold', color: 'white',
-                        lineHeight: 1.3, marginBottom: 4,
-                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      }}>
-                        {card.name}
-                      </div>
-                      <div style={{
-                        display: 'inline-block', fontSize: 9, padding: '1px 5px', borderRadius: 3,
-                        background: isCommand ? 'rgba(21,101,192,0.5)' : 'rgba(123,31,162,0.5)',
-                        color: isCommand ? '#90caf9' : '#ce93d8',
-                        textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5,
-                      }}>
-                        {card.type === 'attack' ? 'Ataque' : isCommand ? 'Comando' : 'Respuesta'}
-                      </div>
-                      {card.source === 'demo' && <span style={badge('#555')}>demo</span>}
-                      {!card.effectData && !card.weapon && <span style={badge('#8d6e00')} title="Se puede llevar en el mazo pero aún no se puede jugar">sin implementar</span>}
-                      {card.signature && <div style={{ fontSize: 9, color: '#4fc3f7', marginBottom: 3 }}>{card.signature}</div>}
-                      <div style={{
-                        fontSize: 9.5, color: '#9ca3af', lineHeight: 1.35,
-                        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      }}>
-                        {restriction ?? card.effect}
-                      </div>
-                    </div>
-                  </div>
+                  <UnitCardPreview key={card.cardId} card={card} copies={copies} canSelect={canSelect}
+                    focused={detail?.cardId === card.cardId}
+                    onClick={() => onToggleUnit(card.cardId)} onFocus={() => setFocusUnit(card.cardId)} />
                 )
               })}
             </div>
+          </div>
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button
-                onClick={() => onSetSquadStep('units')}
-                disabled={squadSubmitted}
-                style={{
-                  padding: '12px 20px', background: '#333', color: '#aaa',
-                  border: 'none', borderRadius: 8,
-                  cursor: squadSubmitted ? 'not-allowed' : 'pointer', fontSize: 14,
-                }}
-              >
-                ← Volver
-              </button>
-              {squadSubmitted ? (
-                <div style={{ color: '#4caf50', flex: 1, textAlign: 'center' }}>
-                  Selección confirmada — esperando al oponente...
+          {/* Detalle de la unidad */}
+          {detail && (
+            <aside style={{ borderLeft: mobile ? 'none' : `1px solid ${C.line}`, borderTop: mobile ? `1px solid ${C.line}` : 'none', background: C.panelSolid, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ height: 220, flexShrink: 0, background: `radial-gradient(circle at 50% 60%, ${C.allyDeep}, ${C.bgDeep} 70%)` }}>
+                <UnitModelViewer key={detail.cardId} cardId={detail.cardId} />
+              </div>
+              <div style={{ padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <h2 style={{ fontSize: 20 }}>{detail.name}</h2>
+                  {detail.signature && <div style={{ color: C.textSoft, fontStyle: 'italic', fontSize: 12.5 }}>{detail.signature}</div>}
+                  <div style={{ color: C.textDim, fontSize: 12 }}>{detail.traits.join(' · ')}</div>
                 </div>
-              ) : (
-                <button
-                  disabled={!canConfirm}
-                  onClick={() => onConfirm(selectedSquad, selectedDeck)}
-                  style={{
-                    flex: 1, padding: '12px 32px',
-                    background: canConfirm ? '#1565c0' : '#333',
-                    color: 'white', border: 'none', borderRadius: 8,
-                    cursor: canConfirm ? 'pointer' : 'not-allowed', fontSize: 15, fontWeight: 'bold',
-                  }}
-                >
-                  Confirmar selección
-                </button>
-              )}
+                <div style={{ display: 'flex', gap: 14, fontFamily: FONT.mono, fontSize: 12.5 }}>
+                  <span>HP <b>{detail.hp}</b></span><span>VP <b style={{ color: C.amber }}>{detail.vp}</b></span><span>TL inicial <b>{detail.tl}</b></span>
+                </div>
+                <div style={eyebrow}>Armas</div>
+                {detail.weapons.map(w => (
+                  <div key={w.name} style={{ fontSize: 12.5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <b>{w.name}</b>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: C.textSoft }}>R{w.range} · S{w.strength} · TL{w.tlCost}</span>
+                    </div>
+                    {w.effect && <div style={{ color: C.textSoft }}>{w.effect}</div>}
+                    {w.crit && <div style={{ color: C.warn }}>★ Crit: {w.crit}</div>}
+                  </div>
+                ))}
+                <div style={eyebrow}>Habilidades</div>
+                {detail.abilities.map(a => (
+                  <div key={a.name} style={{ fontSize: 12.5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={chip(ABILITY_TYPE[a.type].color)}>{ABILITY_TYPE[a.type].label}</span>
+                      <b>{a.name}</b>
+                      {a.energyCost ? <span style={{ fontFamily: FONT.mono, color: C.amber, fontSize: 11 }}>{'◆'.repeat(a.energyCost)}</span> : null}
+                    </div>
+                    <div style={{ color: C.textSoft, marginTop: 2 }}>{a.effect}</div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          )}
+        </div>
+      )}
+
+      {squadStep === 'deck' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0, 1fr) 300px', overflow: mobile ? 'auto' : 'hidden' }}>
+          <div style={{ minHeight: 0, overflowY: mobile ? 'visible' : 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {([['all', 'Todas'], ['attack', 'Attack'], ['command', 'Command'], ['response', 'Response']] as [TypeFilter, string][])
+                .map(([t, l]) => filterChip(typeFilter === t, l, () => setTypeFilter(t)))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textSoft, marginLeft: 8 }}>
+                <input id="only-legal" type="checkbox" checked={onlyLegal} onChange={e => setOnlyLegal(e.target.checked)} />
+                Solo las que puede llevar tu escuadra
+              </label>
             </div>
+            <p style={{ color: C.textSoft, fontSize: 13 }}>
+              {deckSize === 0
+                ? 'Ninguna carta del catálogo es compatible con esta escuadra: jugarás sin mazo de Tactics.'
+                : deckSize < 9
+                  ? `Tu escuadra solo puede usar ${deckSize} cartas: inclúyelas todas.`
+                  : `Elige ${deckSize} cartas distintas. Las que tienen rasgo o firma exigen una unidad que lo tenga.`}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+              {cards.map(card => {
+                const isSelected = selectedDeck.includes(card.cardId)
+                const restriction = cardRestriction(toDeckCard(card), squadCards)
+                const blocked = restriction !== null || (!isSelected && selectedDeck.length >= deckSize)
+                const canToggle = !squadSubmitted && (isSelected || !blocked)
+                return (
+                  <button key={card.cardId} type="button" aria-pressed={isSelected}
+                    title={restriction ?? undefined}
+                    onClick={() => canToggle && onToggleCard(card.cardId)}
+                    onMouseEnter={() => setFocusCard(card.cardId)} onFocus={() => setFocusCard(card.cardId)}
+                    style={{ padding: 0, border: 'none', background: 'none', textAlign: 'left', cursor: canToggle ? 'pointer' : 'not-allowed', height: 176, position: 'relative', color: 'inherit' }}>
+                    <CardFace card={toTactics(card)} playable={!blocked || isSelected} selected={isSelected} fluid />
+                    {isSelected && <span style={{ ...chip(C.amber), position: 'absolute', bottom: 8, right: 8, background: C.amberDeep }}>En el mazo</span>}
+                    {restriction && <span style={{ ...chip(C.textDim), position: 'absolute', bottom: 8, left: 8, background: C.panelSolid }}>No disponible</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {!mobile && (
+            <aside style={{ borderLeft: `1px solid ${C.line}`, background: C.panelSolid, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+              <div style={eyebrow}>Carta</div>
+              {preview
+                ? <CardFace card={toTactics(preview)} playable large fluid />
+                : <p style={{ color: C.textDim, fontSize: 13 }}>Pasa el ratón por una carta para leerla entera.</p>}
+              {preview && cardRestriction(toDeckCard(preview), squadCards) && (
+                <p style={{ color: C.warn, fontSize: 12.5 }}>{cardRestriction(toDeckCard(preview), squadCards)}</p>
+              )}
+            </aside>
+          )}
+        </div>
+      )}
+
+      {/* Barra inferior fija: resumen y paso siguiente */}
+      <div style={{ borderTop: `1px solid ${C.line}`, background: C.panelSolid, padding: '10px max(16px, env(safe-area-inset-left, 0px))', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        {squadStep === 'units' ? (
+          <>
+            {counter(selectedSquad.length, MAX_SQUAD, 'unidades')}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+              {squadCards.map((u, i) => (
+                <button key={`${u.cardId}-${i}`} onClick={() => onToggleUnit(u.cardId)} title="Quitar de la escuadra"
+                  style={{ ...button('subtle'), borderColor: C.ally, color: C.text }}>{u.name} ✕</button>
+              ))}
+            </div>
+            {squadError && selectedSquad.length === MAX_SQUAD && <span style={{ color: C.warn, fontSize: 12.5 }}>{squadError}</span>}
+            <button disabled={squadError !== null} onClick={() => onSetSquadStep('deck')}
+              style={{ ...button('amber', squadError !== null), padding: '10px 22px', fontSize: 14, fontWeight: 600 }}>
+              Elegir mazo
+            </button>
+          </>
+        ) : (
+          <>
+            {counter(selectedDeck.length, deckSize, 'cartas')}
+            <span style={{ flex: 1 }} />
+            <button onClick={() => onSetSquadStep('units')} disabled={squadSubmitted} style={{ ...button('ghost', squadSubmitted), padding: '10px 18px' }}>Volver a la escuadra</button>
+            {squadSubmitted
+              ? <span style={{ color: C.ok, fontSize: 13.5 }}>Selección confirmada. Esperando al rival…</span>
+              : <button disabled={!canConfirm} onClick={() => onConfirm(selectedSquad, selectedDeck)}
+                  style={{ ...button('amber', !canConfirm), padding: '10px 22px', fontSize: 14, fontWeight: 600 }}>Confirmar y entrar</button>}
           </>
         )}
       </div>

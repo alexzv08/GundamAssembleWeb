@@ -75,7 +75,7 @@ export async function fetchCards(): Promise<{ cards: TacticsCardData[] }> {
     return res.json()
 }
 
-export async function fetchMapList(): Promise<{ maps: { id: string; name: string }[] }> {
+export async function fetchMapList(): Promise<{ maps: { id: string; name: string; description?: string }[] }> {
     const res = await fetch(`${API}/maps`)
     if (!res.ok) throw new Error('Error fetching maps')
     return res.json()
