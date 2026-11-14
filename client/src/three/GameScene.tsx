@@ -7,6 +7,7 @@ import type { GameState } from '../types/gameState'
 import { GameBoard } from './GameBoard'
 import { UnitMesh } from './UnitMesh'
 import { RwsMesh } from './RwsMesh'
+import { AttackTracer } from './AttackTracer'
 import { hexKey } from '../game/hexGrid'
 import { hexToWorld } from './hexUtils'
 import { C } from '../theme'
@@ -94,6 +95,8 @@ export function GameScene({
             onHover={onTokenHover}
           />
         ))}
+
+        <AttackTracer gameState={gameState} myPlayerId={myPlayerId} />
 
         {Object.values(gameState.units).map(unit => (
           <UnitMesh

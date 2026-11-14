@@ -17,9 +17,9 @@ export function TimelineBar({ gameState, myPlayerId, compact = false }: Timeline
     const rival: PlayerId = me === 'player1' ? 'player2' : 'player1'
     const current = timeline.slots.find(s => s.tokens.length > 0)?.round ?? 1
     // Ventana de rondas: la actual y las siguientes (las fichas nunca retroceden).
-    // En escritorio caben 12 columnas con el nombre corto entero; en móvil, 5.
-    const first = Math.max(1, Math.min(current, 21 - (compact ? 5 : 12)))
-    const slots = timeline.slots.filter(s => s.round >= first && s.round < first + (compact ? 5 : 12))
+    // En escritorio caben 12 columnas con el nombre corto entero; en móvil, 4.
+    const first = Math.max(1, Math.min(current, 21 - (compact ? 4 : 12)))
+    const slots = timeline.slots.filter(s => s.round >= first && s.round < first + (compact ? 4 : 12))
 
     const lane = (player: PlayerId) => (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))`, minHeight: compact ? 26 : 30 }}>
@@ -51,9 +51,9 @@ export function TimelineBar({ gameState, myPlayerId, compact = false }: Timeline
                                     color: active ? C.text : C.textSoft, flex: 1, minWidth: 0,
                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                 }}>{u.shortName ?? u.name}</span>
-                                <span style={{ width: 14, height: 3, background: C.line, borderRadius: 2, flexShrink: 0, overflow: 'hidden' }}>
+                                {!compact && <span style={{ width: 14, height: 3, background: C.line, borderRadius: 2, flexShrink: 0, overflow: 'hidden' }}>
                                     <span style={{ display: 'block', height: '100%', width: `${hp * 100}%`, background: hp > 0.5 ? C.ok : hp > 0.25 ? C.warn : C.danger }} />
-                                </span>
+                                </span>}
                             </div>
                         )
                     })}

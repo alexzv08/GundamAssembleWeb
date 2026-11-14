@@ -107,9 +107,14 @@ client/src/
   App.tsx                 — pantallas + socket + handlers de UI
   game/                   — copias compartidas + loaders/useGameData (datos de la API)
   screens/                — lobby, espera, selección de escuadra (usa deckRules), setup
-  components/ui/          — UnitPanel, TacticsHand, TimelineBar, ActionLog, ChoiceModal (elecciones), ChatPanel…
+  theme.ts                — sistema visual: colores (tú cian, rival rojo, ámbar = turno), tipografía, botones, chips
+  components/ui/          — UnitPanel, TimelineBar, SideRail (Objetivos + registro/chat/leyenda), TacticsHand (CardFace),
+                            DiceTray, ChoiceModal, MapThumb, UnitCardPreview (UnitModelViewer)…
   game/sound.ts           — efectos de sonido sintetizados (Web Audio) y silencio
-  three/                  — escena 3D; models.ts asocia cardId → modelo STL; RwsMesh.tsx dibuja las RWS
+  game/useIsMobile.ts     — HUD compacto en pantallas de ≤ 760 px
+  three/                  — escena 3D (GameScene: luz, niebla, cámara que sigue a la unidad activa; HexTile; UnitMesh con
+                            peana, etiqueta y daño flotante; AttackTracer); models.ts asocia cardId → modelo GLB
+public/models/            — modelos GLB comprimidos con meshopt (originales STL en assets-src/models, tools/stl-to-glb.mjs)
 tools/map-editor.html     — editor de mapas
 ```
 
@@ -148,6 +153,7 @@ Cada carta: `cardId, set, name, model, signature, traits[], hp, vp, tl, provisio
 - Los textos son los oficiales. `effectData` / `critData` / `abilityData` son la versión ejecutable (ver tipos en `types/units.ts`). Si `abilityData` falta, la habilidad se muestra pero no está implementada.
 - Los valores numéricos de las armas, el tipo de cada habilidad y los costes de Energy vienen de la wiki comunitaria (`statsSource`), porque la web oficial solo los muestra en la imagen de la carta.
 - `area: 'cone' | 'flower'` marca las armas con plantilla de área ("Range: SP"); la forma es una aproximación.
+- `shortName`: nombre corto para la Timeline y las etiquetas del tablero.
 
 ## Cartas de Tactics (`server/data/cards/card_library.json`, v2)
 
@@ -352,3 +358,13 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - Cliente: los hexes válidos se resaltan, aviso con "No mover" / "Parar aquí"; el rival ve "El rival está eligiendo…".
 - **Tests**: 106 (5 nuevos: pausa y elección paso a paso, 0 hexes, reutilización de los dados, rechazos y colisión sin pregunta); self-play 200/200 en tres semillas (~300-370 elecciones por tanda); smoke en verde.
 - Archivos: `server/src/game/{engine,damage,bot}.ts`, `server/src/types/gameState.ts` (+ copia), `server/src/socket/gameEvents.ts`, `server/scripts/{self-play,socket-smoke}.ts`, `server/src/game/__tests__/engine.test.ts`, `client/src/App.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
+
+### 2026-11-14 — Rediseño visual completo (revisión de UX y calidad visual)
+- **Sistema visual** (`client/src/theme.ts`): azul marino, tú siempre en cian y el rival en rojo (colores relativos a quien mira), ámbar para el turno; Chakra Petch / IBM Plex en toda la app (antes salía Times); grises con contraste suficiente.
+- **Partida**: la unidad activa propia queda seleccionada y la cámara va hacia ella; acciones siempre visibles con su coste en TL; aviso y botón desactivado si la unidad está sobre su Base. HUD por zonas: ficha a la izquierda, `SideRail` a la derecha (Objetivos + pestañas Registro / Chat / Leyenda / sonido), mano de cartas debajo del tablero. Timeline con `shortName`, ventana de 12 rondas y línea de la Fase 2. `DiceTray` con los dados de cada ataque. El registro ya no anota las ventanas de Response pasadas (servidor).
+- **Escena 3D**: terreno apagado con cara superior y laterales, resaltados cian / rojo / ámbar con borde que late, luz cálida con sombras, contraluz fría, niebla y mesa holográfica; Objetivos con haz de luz del color de quien los controla; peanas del color del bando, etiqueta con nombre y HP, número de daño flotante con destello y trazo de ataque (`AttackTracer`).
+- **Modelos**: STL → GLB con meshopt (143 MB → 1,6 MB), `useUnitModel`; los STL pasan a `assets-src/models`; conversor en `tools/stl-to-glb.mjs`.
+- **Pantallas previas**: lobby con portada 3D y mapas con miniatura (`MapThumb`) y descripción; escuadra con panel de detalle (modelo, armas, habilidades) y filtros; mazo con filtros, carta ampliada y contador; orden de la Timeline dibujado y arrastrable; espera, fin de partida (Victoria / Derrota), login y ventana de elecciones con el mismo estilo. Mapas renombrados ("Colina central").
+- **Móvil**: Timeline de 4 rondas, ficha como hoja inferior con detalles a petición, Objetivos y registro tras un botón.
+- Informe con capturas antes / después y análisis de atractivo visual: artifact "Revisión UX Gundam Assemble".
+- Archivos: casi todo `client/src` (theme, App, components/ui/*, screens/*, three/*), `client/public/models/*.glb`, `assets-src/models/*.stl`, `tools/stl-to-glb.mjs`, `server/data/units/unit_library.json` (`shortName`), `server/data/maps/*.json`, `server/src/game/{catalog,maps,actions}.ts`, `server/src/types/units.ts` (+ copia), `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.

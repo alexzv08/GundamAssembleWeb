@@ -9,13 +9,14 @@ Proyecto personal de Alejandro de la Torre Ruiz. Fan project sin ánimo de lucro
 - **Multijugador en tiempo real** con Socket.IO: salas privadas con código y emparejamiento aleatorio.
 - **Partida contra la máquina**: el servidor juega por el rival con una IA sencilla.
 - **Mapas y escuadras de 3 o 5 unidades** a elegir al crear la sala.
-- **Tablero hexagonal en 3D** con Three.js y React Three Fiber, con elevación, agua y modelos STL de las unidades.
+- **Tablero hexagonal en 3D** con Three.js y React Three Fiber, con elevación, agua y modelos 3D de las unidades (GLB comprimidos).
 - **Motor de reglas autoritativo en el servidor**: el cliente solo calcula ayudas visuales; el servidor valida cada acción y tira los dados (anti-trampas).
 - **Acciones de juego**: avanzar (pathfinding A*), atacar con línea de visión y modificadores, dash, energize, rescate de guarniciones, habilidades y cartas de táctica.
 - **Línea temporal** de activaciones en dos fases, con desempates por iniciativa.
 - **Selección de escuadra y mazo** antes de cada partida, validada con las reglas oficiales de construcción.
 - **Reconexión**: la sala se mantiene 5 minutos si un jugador se desconecta.
 - **Registro de acciones**, chat de partida, animación de movimiento y sonidos (con botón de silencio).
+- **Interfaz rediseñada**: tú siempre en cian y el rival en rojo, HUD que no tapa el tablero, bandeja de dados, daño flotante y versión compacta para móvil.
 - **Login con Google y Discord** mediante Supabase.
 
 ## Tecnologías

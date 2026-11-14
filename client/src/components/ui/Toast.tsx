@@ -15,7 +15,8 @@ export function ToastContainer({ toasts, tooltip }: { toasts: ToastItem[]; toolt
                     {tooltip}
                 </div>
             )}
-            {toasts.map(t => (
+            {/* Como mucho los dos más recientes: no deben tapar el tablero */}
+            {toasts.slice(-2).map(t => (
                 <div key={t.id} style={{
                     background: C.panel, border: `1px solid ${t.color}`, borderLeft: `3px solid ${t.color}`, borderRadius: 6,
                     padding: '6px 16px', color: C.text, fontFamily: FONT.display, fontSize: 13.5, fontWeight: 600,

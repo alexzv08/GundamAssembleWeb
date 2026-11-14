@@ -247,14 +247,15 @@ export default function App() {
         if (prevState.activeUnitId !== newState.activeUnitId && newState.activeUnitId) {
           if (newState.activePlayerId === myPlayerIdRef.current) sfx.myTurn()
           const unit = newState.units[newState.activeUnitId]
-          const player = newState.players[newState.activePlayerId]
-          const color = newState.activePlayerId === 'player1' ? '#4fc3f7' : '#ef9a9a'
-          addToast(`Turno: ${unit?.name ?? '?'} — ${player?.name}`, color)
+          const mine = newState.activePlayerId === myPlayerIdRef.current
+          setMessage('')
+          addToast(mine ? `Tu turno: ${unit?.name ?? '?'}` : `Turno de ${newState.players[newState.activePlayerId]?.name}: ${unit?.name ?? '?'}`,
+            mine ? C.amber : C.enemy, 2600)
         }
 
         Object.values(newState.units).forEach(unit => {
           const prev = prevState.units[unit.id]
-          if (prev?.position && !unit.position) { addToast(`¡${unit.name} derrotado!`, '#ef5350', 4000); sfx.defeat() }
+          if (prev?.position && !unit.position) { addToast(`¡${unit.name} derrotado!`, C.danger, 4000); sfx.defeat() }
         })
 
         Object.values(newState.board).forEach(hex => {
@@ -262,11 +263,11 @@ export default function App() {
           const prev = prevState.board[hexKey(hex.coord)]?.objectiveToken?.controlledBy
           const next = hex.objectiveToken.controlledBy
           if (prev === undefined || prev === next) return
-          addToast(next ? `¡Objetivo capturado por ${newState.players[next].name}!` : 'Objetivo neutralizado', '#f5c518', 4000)
+          addToast(next ? (next === myPlayerIdRef.current ? '¡Objetivo capturado!' : `${newState.players[next].name} captura un Objetivo`) : 'Objetivo neutralizado', C.amber, 3500)
         })
 
         Object.values(prevState.board).forEach(hex => {
-          if (hex.garrisonToken && !newState.board[hexKey(hex.coord)]?.garrisonToken) addToast('Garrison retirada del tablero (+2 VP)', '#81c784')
+          if (hex.garrisonToken && !newState.board[hexKey(hex.coord)]?.garrisonToken) addToast('Garrison retirada del tablero (+2 VP)', C.ok)
         })
 
         if (newState.activeUnitId && prevState.activeUnitId === newState.activeUnitId) {
@@ -276,11 +277,11 @@ export default function App() {
             if (newUnit.upgrades.length > prevUnit.upgrades.length) {
               const gained = newUnit.upgrades[newUnit.upgrades.length - 1]
               const labels: Record<string, string> = {
-                attack: '⚔ Strength Upgrade', shield: '🛡 Shield Upgrade', movement: '👟 Speed Upgrade',
+                attack: 'Strength Upgrade', shield: 'Shield Upgrade', movement: 'Speed Upgrade',
               }
-              addToast(labels[gained.type] ?? `Upgrade: ${gained.type}`, '#81c784')
+              addToast(`${labels[gained.type] ?? 'Upgrade'} conseguido`, C.ok)
             } else if (newUnit.energy > prevUnit.energy) {
-              addToast('⚡ Energy obtenida', '#f5c518')
+              addToast('+1 Energy', C.amber, 2000)
             }
           }
         }

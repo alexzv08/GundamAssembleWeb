@@ -128,6 +128,9 @@ Fuentes oficiales:
 
 ## 10. Pendiente (UI / 3D)
 
-- ✅ Animación de movimiento, sonidos (con botón de silencio), chat, selector de mapa
+- ✅ Animación de movimiento, sonidos (con botón de silencio), chat, selector de mapa con miniatura
+- ✅ Rediseño visual (revisión de UX): sistema de colores relativo (tú cian, rival rojo), tipografía, HUD por zonas, acciones visibles sin pulsar el modelo, cámara que sigue a la unidad activa, bandeja de dados, daño flotante, trazo de ataque, HUD para móvil
+- ✅ Modelos GLB comprimidos con meshopt (1,6 MB en lugar de 143 MB de STL)
+- ⚠️ 9 de las 15 unidades oficiales no tienen modelo 3D (se dibuja una pieza genérica) y los modelos no están pintados
 - ❌ Colocar a mano la plantilla de AoE (cono / flor)
-- ❌ Modelos STL ligeros (GLB + Draco) en lugar de 143 MB de STL
+- ❌ Postprocesado (bloom, oclusión ambiental), props de terreno y efectos distintos por arma

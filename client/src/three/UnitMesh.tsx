@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Group, Mesh, Vector3 } from 'three'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
@@ -22,6 +22,7 @@ interface UnitMeshProps {
 export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, isMine = false, onClick }: UnitMeshProps) {
   const [hovered, setHovered] = useState(false)
   const model = useUnitModel(modelUrlFor(unit.cardId))
+  const hits = useDamagePopups(unit.currentHp)
 
   if (!unit.position || unit.currentHp <= 0) return null
 
@@ -74,12 +75,39 @@ export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = f
         </group>
       )}
 
+      {/* Daño recibido: número que sube y se desvanece */}
+      {hits.map(h => (
+        <Html key={h.id} position={[0, 1.2, 0]} center zIndexRange={[20, 10]} style={{ pointerEvents: 'none' }}>
+          <span style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 26, color: C.danger, textShadow: '0 0 8px #000, 0 0 2px #000', animation: 'ga-float 1.1s ease-out forwards', display: 'block' }}>
+            −{h.amount}
+          </span>
+        </Html>
+      ))}
+      {hits.length > 0 && <pointLight position={[0, 0.8, 0]} color={C.danger} intensity={6} distance={2.5} />}
+
       {/* Etiqueta: nombre corto + HP */}
       <Html position={[0, 1.55, 0]} center distanceFactor={14} zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
         <UnitLabel unit={unit} side={side} active={isActive} />
       </Html>
     </MovingGroup>
   )
+}
+
+// Lleva la cuenta de las bajadas de HP para mostrar el daño un momento
+function useDamagePopups(hp: number) {
+  const prev = useRef(hp)
+  const [hits, setHits] = useState<{ id: number; amount: number }[]>([])
+  useEffect(() => {
+    const diff = prev.current - hp
+    prev.current = hp
+    if (diff <= 0) return
+    const id = Date.now() + Math.random()
+    // Se programa fuera del efecto para no encadenar renders síncronos
+    const add = setTimeout(() => setHits(h => [...h, { id, amount: diff }]), 0)
+    const del = setTimeout(() => setHits(h => h.filter(x => x.id !== id)), 1100)
+    return () => { clearTimeout(add); clearTimeout(del) }
+  }, [hp])
+  return hits
 }
 
 function UnitLabel({ unit, side, active }: { unit: Unit; side: string; active: boolean }) {

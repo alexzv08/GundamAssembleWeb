@@ -151,9 +151,9 @@ export function UnitPanel({
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                                 {unit.weapons.map((w, idx) => (hasUsedPrimary && !freeAttacks.includes(idx)) ? null : (
                                     <button key={idx} onClick={() => onAttack?.(idx)}
-                                        style={{ ...actionBtn(selectedWeaponIndex === idx && mode === 'attacking', true, 'danger'), display: 'flex', justifyContent: 'space-between', gap: 8, textAlign: 'left' }}>
-                                        <span>Atacar · {w.name}</span>
-                                        <span style={{ fontFamily: FONT.mono, color: C.textSoft }}>
+                                        style={{ ...actionBtn(selectedWeaponIndex === idx && mode === 'attacking', true, 'danger'), display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, textAlign: 'left', whiteSpace: 'normal' }}>
+                                        <span style={{ minWidth: 0 }}>Atacar · {w.name}</span>
+                                        <span style={{ fontFamily: FONT.mono, color: C.textSoft, whiteSpace: 'nowrap' }}>
                                             {w.area ? (w.area === 'cone' ? 'cono ' : 'flor ') : ''}R{w.range} S{w.strength} TL{hasUsedPrimary ? 0 : w.tlCost}
                                         </span>
                                     </button>
