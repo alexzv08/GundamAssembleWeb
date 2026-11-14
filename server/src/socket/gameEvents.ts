@@ -9,7 +9,7 @@ import type { GameAction } from '../types'
 
 const ACTION_TYPES = new Set<GameAction['type']>([
     'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON', 'ATTACK_RWS',
-    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY',
+    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY',
 ])
 
 function isGameAction(value: unknown): value is GameAction {
@@ -42,6 +42,8 @@ function publish(io: Server, room: Room, result: ProcessResult, action: GameActi
 
 // Si le toca al bot (actuar o responder), juega una acción tras una pausa
 // corta para que el humano vea lo que pasa, y repite mientras siga siendo su turno.
+// En partida real, quien empuja o atrae elige cada hex (Q&A 7)
+const PLAY_OPTS = { choosePushes: true }
 const BOT_DELAY_MS = Number(process.env.BOT_DELAY_MS ?? 700)
 function driveBot(io: Server, room: Room): void {
     const s = room.gameState
@@ -51,16 +53,16 @@ function driveBot(io: Server, room: Room): void {
         const cur = room.gameState
         if (!cur || cur !== s) return   // el estado cambió mientras esperaba
         let action = chooseBotAction(cur, 'player2')
-        let result = processAction(cur, action, 'player2')
+        let result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
         if (!result.success) {
             action = botFallback(cur)
-            result = processAction(cur, action, 'player2')
+            result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
         }
-        if (!result.success && cur.activeUnitId && !cur.pendingResponse) {
+        if (!result.success && cur.activeUnitId && !cur.pendingResponse && !cur.pendingForcedMove) {
             const reach = [...reachableFor(cur, cur.activeUnitId, { kind: 'advance' }).keys()]
             if (reach.length) {
                 action = { type: 'ADVANCE', unitId: cur.activeUnitId, to: keyToHex(reach[0]) }
-                result = processAction(cur, action, 'player2')
+                result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
             }
         }
         if (!result.success || !result.state) {
@@ -177,7 +179,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        const result = processAction(room.gameState, action, playerId)
+        const result = processAction(room.gameState, action, playerId, undefined, PLAY_OPTS)
         if (!result.success || !result.state) {
             socket.emit('ACTION_ERROR', { message: result.error })
             return

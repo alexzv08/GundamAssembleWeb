@@ -30,6 +30,7 @@ export function randomDeck(squad: string[], rand: () => number = Math.random): s
 
 // Acción segura si el motor rechaza la elegida.
 export function botFallback(s: GameState): GameAction {
+    if (s.pendingForcedMove) return { type: 'CHOOSE_FORCED_MOVE', to: s.pendingForcedMove.request.options[0] ?? null }
     if (s.pendingResponse) return { type: 'PASS_RESPONSE' }
     return s.hasUsedPrimaryAction
         ? { type: 'END_ACTIVATION', unitId: s.activeUnitId! }
@@ -38,7 +39,7 @@ export function botFallback(s: GameState): GameAction {
 
 // Jugador que debe actuar ahora (el que responde, si hay una ventana abierta).
 export function actingPlayer(s: GameState): PlayerId {
-    return s.pendingResponse?.forPlayerId ?? s.activePlayerId
+    return s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId ?? s.activePlayerId
 }
 
 // Bot sencillo: ataca si puede; si no, avanza hacia el enemigo más cercano y
@@ -46,6 +47,12 @@ export function actingPlayer(s: GameState): PlayerId {
 export function chooseBotAction(s: GameState, player: PlayerId, rand: () => number = Math.random): GameAction {
     const pickOne = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)]
     const shuffle = <T>(xs: T[]): T[] => shuffleWith(xs, rand)
+    // Push / Pull: casi siempre el máximo, a veces para antes
+    const pf = s.pendingForcedMove
+    if (pf) {
+        if (pf.forPlayerId !== player) return { type: 'PASS_RESPONSE' }
+        return { type: 'CHOOSE_FORCED_MOVE', to: rand() < 0.1 ? null : pickOne(pf.request.options) }
+    }
     if (s.pendingResponse?.forPlayerId === player) {
         const card = s.players[player].tactics.hand.find(c => canPlayResponseCard(s, player, c))
         return card && rand() < 0.7 ? { type: 'PLAY_RESPONSE', cardId: card.id } : { type: 'PASS_RESPONSE' }

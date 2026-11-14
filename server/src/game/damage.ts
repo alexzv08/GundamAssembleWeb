@@ -1,7 +1,7 @@
 // Daño, derrota y movimiento forzado (Push / Pull).
 // Todas las funciones MUTAN el estado que reciben: el llamador debe pasar una
 // copia (cloneState) — así una acción entera se aplica sobre una sola copia.
-import type { GameState, PlayerId } from '../types'
+import type { GameState, PlayerId, HexCoord, ForcedMoveRequest } from '../types'
 import { hexKey, keyToHex, getNeighbors, gridDistance } from './hexGrid'
 import { advanceToken, getCurrentRound } from './timeline'
 import { otherPlayer, upgradeCount, rwsAt } from './queries'
@@ -149,39 +149,77 @@ export function damageAt(state: GameState, key: string, amount: number, byPlayer
 //  • No se puede empujar a mayor elevación: choca con el terreno (2 de daño).
 //  • Si choca con otra unidad o Garrison, todos los implicados reciben 2.
 //  • Un enemigo ya adyacente a la misma elevación no puede ser atraído (Pull).
-// La elección de hex (que en mesa hace el jugador) se resuelve tomando el
-// primer hex libre válido; si no hay ninguno, se produce la colisión.
+//  • Q&A 7: quien empuja elige cada hex y puede mover menos (incluso 0).
+//
+// Elección del jugador: si hay un contexto activo (lo pone engine.processAction
+// con `choosePushes`), cada paso con hexes libres se toma de `plans`; si falta la
+// elección, se lanza NeedForcedChoice y el motor pregunta al jugador. Sin
+// contexto (tests, llamadas directas) se toma el primer hex libre a distancia máxima.
+
+export class NeedForcedChoice {
+    constructor(public request: ForcedMoveRequest, public forPlayerId: PlayerId, public planIndex: number) {}
+}
+
+interface ForcedCtx { plans: (HexCoord | null)[][]; index: number }
+let forcedCtx: ForcedCtx | null = null
+
+export function withForcedChoices<T>(plans: (HexCoord | null)[][] | null, fn: () => T): T {
+    const prev = forcedCtx
+    forcedCtx = plans ? { plans, index: 0 } : null
+    try { return fn() } finally { forcedCtx = prev }
+}
+
+function isFreeForForcedMove(state: GameState, k: string, fromElevation: number): boolean {
+    const h = state.board[k]
+    return !!h && !h.occupiedBy && !h.garrisonToken && !rwsAt(state, k) && h.terrain !== 'impassable' && h.elevation <= fromElevation
+}
+
+// Hexes a los que puede ir la unidad en el siguiente paso (vacío si no puede moverse)
+export function forcedMoveCandidates(state: GameState, sourceKey: string, unitId: string, mode: 'push' | 'pull'): { candidates: HexCoord[]; free: HexCoord[] } {
+    const unit = state.units[unitId]
+    if (!unit?.position) return { candidates: [], free: [] }
+    const curHex = state.board[hexKey(unit.position)]
+    const source = keyToHex(sourceKey)
+    const curDist = gridDistance(source, unit.position)
+    const srcHex = state.board[sourceKey]
+    if (mode === 'pull' && curDist <= 1 && srcHex && srcHex.elevation === curHex.elevation) return { candidates: [], free: [] }
+    // Q&A 16: nadie sale del tablero, y chocar con el borde no hace daño
+    const candidates = getNeighbors(unit.position).filter(n => {
+        if (!state.board[hexKey(n)]) return false
+        const d = gridDistance(source, n)
+        return mode === 'push' ? d > curDist : d < curDist && hexKey(n) !== sourceKey
+    })
+    return { candidates, free: candidates.filter(n => isFreeForForcedMove(state, hexKey(n), curHex.elevation)) }
+}
+
 export function forceMove(
     state: GameState, sourceKey: string, unitId: string, hexes: number, mode: 'push' | 'pull', byPlayer: PlayerId,
 ): void {
+    const ctx = forcedCtx
+    const planIndex = ctx ? ctx.index++ : -1
     for (let i = 0; i < hexes; i++) {
         const unit = state.units[unitId]
         if (!unit?.position) return
         const curKey = hexKey(unit.position)
         const curHex = state.board[curKey]
-        const source = keyToHex(sourceKey)
-        const curDist = gridDistance(source, unit.position)
-        const srcHex = state.board[sourceKey]
-        if (mode === 'pull' && curDist <= 1 && srcHex && srcHex.elevation === curHex.elevation) return
-
-        // Q&A 16: nadie sale del tablero, y chocar con el borde no hace daño
-        const candidates = getNeighbors(unit.position).filter(n => {
-            if (!state.board[hexKey(n)]) return false
-            const d = gridDistance(source, n)
-            return mode === 'push' ? d > curDist : d < curDist && hexKey(n) !== sourceKey
-        })
+        const { candidates, free } = forcedMoveCandidates(state, sourceKey, unitId, mode)
         if (candidates.length === 0) return
 
-        const isFree = (k: string) => {
-            const h = state.board[k]
-            return h && !h.occupiedBy && !h.garrisonToken && !rwsAt(state, k) && h.terrain !== 'impassable' && h.elevation <= curHex.elevation
-        }
-        const free = candidates.find(n => isFree(hexKey(n)))
-        if (free) {
-            const k = hexKey(free)
+        if (free.length) {
+            let to: HexCoord = free[0]
+            if (ctx) {
+                const plan = ctx.plans[planIndex] ?? []
+                if (plan.length <= i) {
+                    throw new NeedForcedChoice({ unitId, mode, sourceKey, step: i + 1, total: hexes, options: free }, byPlayer, planIndex)
+                }
+                const chosen = plan[i]
+                if (chosen === null) return   // el jugador decide parar aquí
+                to = free.find(n => n.q === chosen.q && n.r === chosen.r) ?? free[0]
+            }
+            const k = hexKey(to)
             curHex.occupiedBy = null
             state.board[k].occupiedBy = unitId
-            unit.position = free
+            unit.position = to
             continue
         }
 

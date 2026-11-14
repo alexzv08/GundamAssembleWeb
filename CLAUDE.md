@@ -79,7 +79,7 @@ server/src/
     timeline.ts           — (compartido) Timeline de 20 rondas, avance de fichas, desempates
     queries.ts            — (compartido) Engagement, presupuesto de movimiento, objetivos atacables, Accuracy por terreno
     deckRules.ts          — (compartido) validación de escuadra y mazo
-    engine.ts             — processAction(): punto de entrada (turno → acción → fin de activación si la unidad cae)
+    engine.ts             — processAction(): punto de entrada (turno → acción → fin de activación si la unidad cae); Push/Pull a elegir (pendingForcedMove)
     actions.ts            — apply* de cada acción + applyAction (dispatcher)
     activation.ts         — beginActivation (despliegue, Shields), endActivation, cambio de fase, fin de partida, startGame
     combat.ts             — resolveAttack: secuencia oficial de ataque (antes/después de la tirada, crits, daño)
@@ -343,3 +343,12 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **UI**: animación de movimiento (`MovingGroup` en `UnitMesh.tsx`), chat de partida (evento `CHAT`, 200 caracteres, 1 mensaje/s) y sonidos con botón de silencio, arriba a la izquierda.
 - **Tests**: 101; self-play 200/200; `npm run smoke` incluye una partida contra el bot.
 - Archivos: `server/src/game/{bot,maps,effects,combat,queries,actions,damage}.ts`, `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `server/src/routes/maps.ts`, `server/src/types/*`, `server/scripts/{self-play,socket-smoke}.ts`, tests, `client/src/App.tsx`, `client/src/screens/{LobbyScreen,SquadSelectionScreen}.tsx`, `client/src/components/ui/{ChoiceModal,ChatPanel,TacticsHand,UnitPanel}.tsx`, `client/src/components/ui/choiceOptions.ts`, `client/src/game/sound.ts`, `client/src/three/UnitMesh.tsx`, copias compartidas, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.
+
+### 2026-11-14 — Push / Pull a elegir (Q&A 7)
+- Quien empuja o atrae elige cada hex entre los válidos y puede parar antes (incluso 0 hexes). Si no hay hex libre, la colisión sigue siendo automática.
+- **Cómo funciona**: con `processAction(..., { choosePushes: true })` (lo usan `gameEvents` y el self-play), `forceMove` lanza `NeedForcedChoice` cuando falta la elección; el motor descarta esa resolución y guarda `GameState.pendingForcedMove` (acción original, quién la envió, dados ya tirados y elecciones). Cada `CHOOSE_FORCED_MOVE { to | null }` vuelve a resolver la acción desde el mismo estado con los mismos dados, hasta que no falte ninguna elección. Así sirve igual para los 6 sitios que empujan (efectos de arma, críticos, Toss Away, cartas y habilidades) sin partir la resolución del ataque.
+- Sin la opción (tests antiguos y llamadas directas) se mantiene la elección automática.
+- Bot: elige un hex al azar entre los válidos y a veces para antes; `actingPlayer` tiene en cuenta la elección pendiente.
+- Cliente: los hexes válidos se resaltan, aviso con "No mover" / "Parar aquí"; el rival ve "El rival está eligiendo…".
+- **Tests**: 106 (5 nuevos: pausa y elección paso a paso, 0 hexes, reutilización de los dados, rechazos y colisión sin pregunta); self-play 200/200 en tres semillas (~300-370 elecciones por tanda); smoke en verde.
+- Archivos: `server/src/game/{engine,damage,bot}.ts`, `server/src/types/gameState.ts` (+ copia), `server/src/socket/gameEvents.ts`, `server/scripts/{self-play,socket-smoke}.ts`, `server/src/game/__tests__/engine.test.ts`, `client/src/App.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.

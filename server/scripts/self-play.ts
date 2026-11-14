@@ -10,7 +10,7 @@
  *   npx tsx scripts/self-play.ts [--games 50] [--seed 42] [--verbose]
  */
 import { createServerGame } from '../src/game/createServerGame'
-import { chooseBotAction } from '../src/game/bot'
+import { chooseBotAction, actingPlayer, botFallback } from '../src/game/bot'
 import { processAction } from '../src/game/engine'
 import { startGame } from '../src/game/activation'
 import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes } from '../src/game/queries'
@@ -23,7 +23,10 @@ const arg = (name: string, def: number) => { const i = args.indexOf(name); retur
 const NUM_GAMES = arg('--games', 100)
 const VERBOSE = args.includes('--verbose')
 let seed = arg('--seed', Date.now() % 100000)
-const MAX_ACTIONS = 2000
+const MAX_ACTIONS = 3000
+// Como en una partida real: el bot elige cada hex de los Push / Pull
+const OPTS = { choosePushes: true }
+let forcedChoices = 0
 
 function rand(): number {
     seed = (seed * 1664525 + 1013904223) % 4294967296
@@ -62,11 +65,11 @@ function runGame(): Result {
     let errors = 0
     for (let n = 0; n < MAX_ACTIONS; n++) {
         if (s.phase === 'finished') return { ok: true, actions: n, winner: s.winner!, vp: [s.players.player1.vp, s.players.player2.vp] }
-        const player = s.pendingResponse?.forPlayerId ?? s.activePlayerId
+        const player = actingPlayer(s)
         const action = botAction(s, player)
         let r
         try {
-            r = processAction(s, action, player, d10)
+            r = processAction(s, action, player, d10, OPTS)
         } catch (e) {
             return { ok: false, actions: n, error: `Excepción en ${action.type}: ${(e as Error).stack}` }
         }
@@ -74,23 +77,20 @@ function runGame(): Result {
             // Un fallo de validación no es un bug si el bot puede seguir: forzamos una salida segura.
             // Solo cuenta como bloqueo una racha de rechazos seguidos
             if (++errors > 50) return { ok: false, actions: n, error: `50 rechazos seguidos; último: ${action.type} → ${r.error}` }
-            const fallback: GameAction = s.pendingResponse
-                ? { type: 'PASS_RESPONSE' }
-                : s.hasUsedPrimaryAction
-                ? { type: 'END_ACTIVATION', unitId: s.activeUnitId! }
-                : { type: 'ENERGIZE', unitId: s.activeUnitId! }
+            const fallback: GameAction = botFallback(s)
             if (VERBOSE) console.log(`  rechazado ${action.type}: ${r.error}`)
-            r = processAction(s, fallback, player, d10)
+            r = processAction(s, fallback, player, d10, OPTS)
             if (!r.success) {
                 // Sobre la Base sin haber avanzado: avanzar a cualquier hex
                 const reach = [...reachableFor(s, s.activeUnitId!, { kind: 'advance' }).keys()]
-                if (reach.length) r = processAction(s, { type: 'ADVANCE', unitId: s.activeUnitId!, to: keyToHex(reach[0]) }, player, d10)
+                if (reach.length) r = processAction(s, { type: 'ADVANCE', unitId: s.activeUnitId!, to: keyToHex(reach[0]) }, player, d10, OPTS)
             }
             if (!r.success) return { ok: false, actions: n, error: `Bloqueo: ${r.error}` }
         } else {
             errors = 0
         }
         s = r.state!
+        if (s.pendingForcedMove) forcedChoices++
         // Invariantes
         for (const r of Object.values(s.rws)) {
             if (r.position && (s.board[hexKey(r.position)]?.occupiedBy || s.board[hexKey(r.position)]?.garrisonToken)) return { ok: false, actions: n, error: `RWS ${r.id} comparte hex` }
@@ -113,5 +113,5 @@ for (let g = 0; g < NUM_GAMES; g++) {
     else console.log(`Partida ${g + 1}: ERROR tras ${r.actions} acciones — ${r.error}`)
 }
 console.log(`\nSemilla ${startSeed}: ${ok}/${NUM_GAMES} partidas completas, media ${Math.round(totalActions / Math.max(ok, 1))} acciones`)
-console.log(`Victorias: P1 ${wins.player1} · P2 ${wins.player2}`)
+console.log(`Victorias: P1 ${wins.player1} · P2 ${wins.player2} · elecciones de Push/Pull: ${forcedChoices}`)
 process.exit(ok === NUM_GAMES ? 0 : 1)

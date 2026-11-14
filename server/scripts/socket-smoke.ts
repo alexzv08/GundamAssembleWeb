@@ -127,7 +127,7 @@ http.listen(0, async () => {
     let botActions = 0
     for (let i = 0; i < 3000 && !botOver; i++) {
         const s: GameState = bs!
-        const mine = (s.pendingResponse?.forPlayerId ?? s.activePlayerId) === 'player1'
+        const mine = (s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId ?? s.activePlayerId) === 'player1'
         if (!mine) { await new Promise(r => setTimeout(r, 5)); botActions++; continue }
         const id = s.activeUnitId!
         let action: object

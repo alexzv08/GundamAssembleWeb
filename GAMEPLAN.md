@@ -75,7 +75,7 @@ Fuentes oficiales:
 - ✅ Derrota: VP al rival, Reserva, +2 TL, HP al máximo, sin estados, conserva Energy y Upgrades
 - ✅ **Ventanas de Response durante el ataque**: antes y después de la tirada (primero el atacante, luego el defensor); el ataque se pausa solo si alguien tiene una carta jugable
 - ⚠️ **Plantillas de área "SP"** (Twin Buster Rifle, Quadruple Bop Missile, 240mm Cannon, War Edge): cono = 60° hasta 3 hexes; flor = hex elegido + 6 vecinos. La forma exacta está en el diagrama de la carta (la hoja enlaza la imagen de War Edge)
-- ⚠️ **Elección del jugador** en Push/Pull: se toma automáticamente el primer hex válido y siempre la distancia máxima (el Q&A 7 permite elegir mover menos, incluso 0)
+- ✅ **Elección del jugador** en Push/Pull: quien empuja o atrae elige cada hex entre los válidos y puede parar antes, incluso sin mover (Q&A 7). Si no hay hex libre, la colisión es automática
 - ✅ Push/Pull hacia un hex más bajo: la unidad cae sin daño (Q&A 10)
 
 ## 6. Habilidades y cartas
@@ -99,8 +99,7 @@ Fuentes oficiales:
 
 ## 6b. Q&A oficial (130 preguntas revisadas)
 
-- ✅ Q1 movimiento no fraccionable · Q3 LoS entre dos hexes, elección por punto · Q4/Q24 derrota en mitad de la activación o del ataque · Q6 no terminar donde empezó · Q9 Command una vez · Q10 caer sin daño · Q13 dados extra · Q14 · **Q16 empujar contra el borde no hace daño** · Q18 las áreas no dañan aliados · Q19 · Q20 Push/Pull ignoran penalizaciones · Q29 Engagement · Q34 colisión con aliados al atraer · Q37 colisión no es daño de ataque · Q38 · Q39 · **Q43/Q44 Newtype Destroyer también bloquea las Response tras el daño** · Q87 hex vacío · Q100 Move afectado por terreno · Q110 RWS
-- ⚠️ Q7 Push/Pull de 0 hexes (no se puede elegir)
+- ✅ Q1 movimiento no fraccionable · Q3 LoS entre dos hexes, elección por punto · Q4/Q24 derrota en mitad de la activación o del ataque · Q6 no terminar donde empezó · **Q7 Push/Pull a elegir, también de 0 hexes** · Q9 Command una vez · Q10 caer sin daño · Q13 dados extra · Q14 · **Q16 empujar contra el borde no hace daño** · Q18 las áreas no dañan aliados · Q19 · Q20 Push/Pull ignoran penalizaciones · Q29 Engagement · Q34 colisión con aliados al atraer · Q37 colisión no es daño de ataque · Q38 · Q39 · **Q43/Q44 Newtype Destroyer también bloquea las Response tras el daño** · Q87 hex vacío · Q100 Move afectado por terreno · Q110 RWS
 - ❌ Q2/Q22/Q28 efectos que hacen retroceder fichas en el Timeline (ninguna carta actual)
 - Las preguntas sobre unidades y productos aún no publicados en la lista de unidades (Zeong, Strike, Buster, Deathscythe, Heavyarms, Carriers…) no aplican todavía
 
@@ -130,5 +129,5 @@ Fuentes oficiales:
 ## 10. Pendiente (UI / 3D)
 
 - ✅ Animación de movimiento, sonidos (con botón de silencio), chat, selector de mapa
-- ❌ Elegir manualmente el hex en Push/Pull y la plantilla de AoE
+- ❌ Colocar a mano la plantilla de AoE (cono / flor)
 - ❌ Modelos STL ligeros (GLB + Draco) en lugar de 143 MB de STL

@@ -69,6 +69,34 @@ export interface GameState {
   winReason?: string
   pendingResponse: PendingResponse | null
   pendingAttack: PendingAttack | null
+  /** Push / Pull esperando a que el jugador elija el siguiente hex (ver engine.ts) */
+  pendingForcedMove?: PendingForcedMove | null
+}
+
+/** Paso de un Push / Pull que elige el jugador que lo causa */
+export interface ForcedMoveRequest {
+  unitId: string
+  mode: 'push' | 'pull'
+  sourceKey: string
+  /** Paso actual (1-based) y total de hexes del efecto */
+  step: number
+  total: number
+  /** Hexes válidos para este paso; también se puede parar (Q&A 7) */
+  options: HexCoord[]
+}
+
+export interface PendingForcedMove {
+  forPlayerId: PlayerId
+  /** Acción que provocó el movimiento y quién la envió: se vuelve a resolver con las elecciones */
+  action: GameAction
+  actorId: PlayerId
+  /** Dados ya tirados en esa acción (se reutilizan al volver a resolverla) */
+  rolls: number[]
+  /** Elecciones por cada Push/Pull de la acción, en orden; null = parar */
+  plans: (HexCoord | null)[][]
+  /** Índice del Push/Pull (dentro de plans) al que corresponde la pregunta */
+  planIndex: number
+  request: ForcedMoveRequest
 }
 
 export interface PlayerState {
@@ -97,3 +125,4 @@ export type GameAction =
   | { type: 'END_ACTIVATION'; unitId: string }
   | { type: 'PLAY_RESPONSE'; cardId: string; targetId?: string }
   | { type: 'PASS_RESPONSE' }
+  | { type: 'CHOOSE_FORCED_MOVE'; to: HexCoord | null }

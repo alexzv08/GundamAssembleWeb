@@ -45,6 +45,8 @@ const socket: Socket = io(import.meta.env.VITE_SERVER_URL as string, {
   },
 })
 
+const EMPTY_SET: Set<string> = new Set()
+
 type SelectionMode = 'none' | 'moving' | 'attacking' | 'dashing' | 'using_ability' | 'ability_hex' | 'playing_card' | 'card_hex' | 'ally_target' | 'bit_assault'
 type AppScreen = 'auth' | 'lobby' | 'waiting' | 'squad_selection' | 'setup' | 'playing'
 
@@ -442,6 +444,13 @@ export default function App() {
   }, [gameState, myPlayerId, selectionMode, selectedUnitId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, calcReachable, clearSelection])
 
   const handleHexClick = useCallback((key: string) => {
+    // Push / Pull a elegir: el servidor espera el siguiente hex de quien empuja
+    const forced = gameState?.pendingForcedMove
+    if (forced && forced.forPlayerId === myPlayerId) {
+      const to = forced.request.options.find(o => `${o.q},${o.r}` === key)
+      if (to) socket.emit('GAME_ACTION', { action: { type: 'CHOOSE_FORCED_MOVE', to } })
+      return
+    }
     if (!gameState || !selectedUnitId) return
 
     if (selectionMode === 'attacking' && attackableHexes.has(key)) {
@@ -905,6 +914,15 @@ export default function App() {
   )
   const bottomOffset = hasHandStrip ? HAND_STRIP_H + 12 : 16
 
+  // Push / Pull pendiente de elegir hex (Q&A 7: se puede mover menos, incluso 0)
+  const forced = gameState.pendingForcedMove ?? null
+  const myForced = forced && forced.forPlayerId === myPlayerId ? forced : null
+  const forcedUnitName = forced ? gameState.units[forced.request.unitId]?.name ?? 'la unidad' : ''
+  const forcedHexes = myForced ? new Set(myForced.request.options.map(o => `${o.q},${o.r}`)) : null
+  const statusMessage = forced && !myForced
+    ? `El rival está eligiendo hacia dónde mover a ${forcedUnitName}…`
+    : gameState.pendingResponse && gameState.pendingResponse.forPlayerId !== myPlayerId ? 'Esperando la respuesta del rival…' : message
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
 
@@ -914,7 +932,7 @@ export default function App() {
         gameState={gameState}
         myPlayerId={myPlayerId}
         isMyTurn={isMyTurn}
-        message={gameState.pendingResponse && gameState.pendingResponse.forPlayerId !== myPlayerId ? 'Esperando la respuesta del rival…' : message}
+        message={statusMessage}
         diceResult={diceResult}
       />
 
@@ -923,8 +941,8 @@ export default function App() {
           gameState={gameState}
           myPlayerId={myPlayerId}
           selectedUnitId={selectedUnitId}
-          reachableHexes={reachableHexes}
-          attackableHexes={attackableHexes}
+          reachableHexes={forcedHexes ?? reachableHexes}
+          attackableHexes={forcedHexes ? EMPTY_SET : attackableHexes}
           onHexClick={handleHexClick}
           onUnitClick={handleUnitClick}
           onTokenHover={setTokenTooltip}
@@ -932,6 +950,25 @@ export default function App() {
         />
 
         <ToastContainer toasts={toasts} />
+        {myForced && (
+          <div role="dialog" aria-label="Elegir movimiento forzado" style={{
+            position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            background: 'rgba(10,10,20,0.95)', border: '1px solid #f5c518', borderRadius: 8,
+            padding: '8px 14px', color: 'white', fontSize: 13, display: 'flex', gap: 12, alignItems: 'center',
+            maxWidth: 'calc(100vw - 32px)', flexWrap: 'wrap', justifyContent: 'center',
+          }}>
+            <span>
+              <b style={{ color: '#f5c518' }}>{myForced.request.mode === 'push' ? 'Push' : 'Pull'}</b> de {forcedUnitName}
+              {' '}— hex {myForced.request.step} de {myForced.request.total}: elige un hex resaltado
+            </span>
+            <button
+              onClick={() => socket.emit('GAME_ACTION', { action: { type: 'CHOOSE_FORCED_MOVE', to: null } })}
+              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #f5c518', background: '#3a3000', color: 'white', cursor: 'pointer', fontSize: 12 }}
+            >
+              {myForced.request.step === 1 ? 'No mover' : 'Parar aquí'}
+            </button>
+          </div>
+        )}
         <ChatPanel messages={chat} myPlayerId={myPlayerId} onSend={text => socket.emit('CHAT', { text })} />
         <button
           onClick={() => { setMuted(!muted); setMutedState(!muted) }}

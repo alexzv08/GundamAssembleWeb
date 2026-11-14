@@ -380,6 +380,70 @@ describe('Ataque', () => {
   })
 })
 
+describe('Push / Pull a elegir (Q&A 7)', () => {
+  const PICK = { choosePushes: true }
+  const pushWeapon = weapon({ range: 1, effectData: { trigger: 'before_attack_roll', type: 'push', amount: 2 } })
+  const game = () => makeGame([makeUnit('a', 'player1', A, { weapons: [pushWeapon] }), makeUnit('e', 'player2', B)])
+  const attack = { type: 'ATTACK' as const, unitId: 'a', weaponIndex: 0, targetId: 'e' }
+
+  it('el ataque se pausa y quien empuja elige cada hex', () => {
+    const r1 = processAction(game(), attack, 'player1', dice(), PICK)
+    const pf = r1.state!.pendingForcedMove!
+    expect(pf.forPlayerId).toBe('player1')
+    expect(pf.request).toMatchObject({ unitId: 'e', mode: 'push', step: 1, total: 2 })
+    expect(r1.state!.units.e.position).toEqual(B)
+    pf.request.options.forEach(o => expect(hexDistance(o, A)).toBe(2))
+
+    const to = pf.request.options[pf.request.options.length - 1]
+    const r2 = processAction(r1.state!, { type: 'CHOOSE_FORCED_MOVE', to }, 'player1', dice(), PICK)
+    expect(r2.state!.pendingForcedMove!.request.step).toBe(2)
+
+    // Mover menos: parar tras el primer hex
+    const r3 = processAction(r2.state!, { type: 'CHOOSE_FORCED_MOVE', to: null }, 'player1', dice(), PICK)
+    expect(r3.state!.pendingForcedMove).toBeNull()
+    expect(r3.state!.units.e.position).toEqual(to)
+    expect(r3.state!.hasUsedPrimaryAction).toBe(true)
+  })
+
+  it('se puede no mover nada (0 hexes)', () => {
+    const r1 = processAction(game(), attack, 'player1', dice(), PICK)
+    const r2 = processAction(r1.state!, { type: 'CHOOSE_FORCED_MOVE', to: null }, 'player1', dice(), PICK)
+    expect(r2.state!.units.e.position).toEqual(B)
+    expect(r2.state!.pendingForcedMove).toBeNull()
+  })
+
+  it('reutiliza los dados ya tirados al volver a resolver el ataque', () => {
+    // El crítico (9) empuja tras la tirada; si se volviera a tirar saldría 1 y no habría crítico
+    const w = weapon({ range: 1, critData: { trigger: 'after_attack_roll', type: 'push', amount: 1 } })
+    const g = makeGame([makeUnit('a', 'player1', A, { weapons: [w] }), makeUnit('e', 'player2', B)])
+    const r1 = processAction(g, attack, 'player1', dice(9, 1, 1), PICK)
+    const pf = r1.state!.pendingForcedMove!
+    expect(pf).toBeTruthy()
+    const r2 = processAction(r1.state!, { type: 'CHOOSE_FORCED_MOVE', to: pf.request.options[0] }, 'player1', dice(), PICK)
+    expect(r2.state!.pendingForcedMove).toBeNull()
+    expect(r2.state!.units.e.position).toEqual(pf.request.options[0])
+    expect(r2.state!.lastAttack!.targets[0].crits).toBe(1)
+    expect(r2.state!.units.e.currentHp).toBe(9)
+  })
+
+  it('rechaza hexes no válidos, al rival y otras acciones mientras se elige', () => {
+    const s = processAction(game(), attack, 'player1', dice(), PICK).state!
+    expect(processAction(s, { type: 'CHOOSE_FORCED_MOVE', to: A }, 'player1', dice(), PICK).success).toBe(false)
+    expect(processAction(s, { type: 'CHOOSE_FORCED_MOVE', to: null }, 'player2', dice(), PICK).success).toBe(false)
+    expect(processAction(s, { type: 'ENERGIZE', unitId: 'a' }, 'player1', dice(), PICK).success).toBe(false)
+    expect(processAction(game(), { type: 'CHOOSE_FORCED_MOVE', to: null }, 'player1', dice(), PICK).success).toBe(false)
+  })
+
+  it('sin hexes libres no pregunta: hay colisión', () => {
+    const b = makeBoard(5, 1)
+    b['2,0'].elevation = 1
+    const g = makeGame([makeUnit('a', 'player1', { q: 0, r: 0 }, { weapons: [pushWeapon] }), makeUnit('e', 'player2', { q: 1, r: 0 })], b)
+    const r = processAction(g, attack, 'player1', dice(), PICK)
+    expect(r.state!.pendingForcedMove ?? null).toBeNull()
+    expect(r.state!.units.e.currentHp).toBe(8)
+  })
+})
+
 describe('Push / Pull', () => {
   it('Push aleja al objetivo', () => {
     const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', B)])
