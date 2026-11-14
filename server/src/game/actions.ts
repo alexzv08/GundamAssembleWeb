@@ -377,7 +377,7 @@ export function applyPlayResponse(state: GameState, cardId: string, playerId: Pl
 export function applyPassResponse(state: GameState, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
     if (!state.pendingResponse || state.pendingResponse.forPlayerId !== playerId) return fail('No hay ventana de respuesta para ti')
     const s = cloneState(state)
-    pushLog(s, playerId, `${s.players[playerId].name} no responde`, 'card')
+    // Pasar una ventana no se registra: llenaba el registro de líneas sin información (H16)
     closeResponseWindow(s, rng)
     return { success: true, newState: s }
 }

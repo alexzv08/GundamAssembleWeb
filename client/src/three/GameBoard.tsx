@@ -2,6 +2,8 @@ import type { BoardMap } from '../types/board'
 import { HexTile } from './HexTile'
 
 
+const EMPTY: Set<string> = new Set()
+
 interface GameBoardProps {
     board: BoardMap
     myPlayerId?: 'player1' | 'player2' | null
@@ -17,11 +19,11 @@ export function GameBoard({
     board,
     myPlayerId = null,
     selectedHex = null,
-    reachableHexes = new Set(),
-    attackableHexes = new Set(),
+    reachableHexes = EMPTY,
+    attackableHexes = EMPTY,
     onHexClick,
     onTokenHover,
-    logHighlightedHexes = new Set(),
+    logHighlightedHexes = EMPTY,
 }: GameBoardProps) {
     return (
         <group>

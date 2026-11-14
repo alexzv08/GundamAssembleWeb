@@ -1,21 +1,21 @@
 import { useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Group } from 'three'
-import { useSTLModel } from '../../three/useSTLModel'
+import { useUnitModel } from '../../three/useUnitModel'
 import { modelUrlFor, DEFAULT_MODEL_SCALE } from '../../three/models'
 import type { UnitCardData } from '../../api/gameData'
 
 function RotatingModel({ url, color }: { url: string | null; color: string }) {
   const groupRef = useRef<Group>(null)
-  const geometry = useSTLModel(url ?? '')
+  const geometry = useUnitModel(url)
   useFrame(() => {
     if (groupRef.current) groupRef.current.rotation.y += 0.012
   })
   return (
     <group ref={groupRef}>
       {geometry && url ? (
-        <mesh geometry={geometry} scale={DEFAULT_MODEL_SCALE} rotation={[-Math.PI / 2, 0, 0]}>
-          <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} />
+        <mesh geometry={geometry} scale={DEFAULT_MODEL_SCALE} position={[0, -0.6, 0]}>
+          <meshStandardMaterial color={color} roughness={0.5} metalness={0.3} flatShading />
         </mesh>
       ) : (
         <mesh>

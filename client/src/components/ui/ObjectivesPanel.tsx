@@ -1,38 +1,41 @@
-import type { GameState } from '../../types/gameState'
+import type { GameState, PlayerId } from '../../types/gameState'
 import type { Hex } from '../../types/board'
+import { C, FONT, eyebrow, sideColor } from '../../theme'
 
 interface ObjectivesPanelProps {
   objectiveHexes: Hex[]
   players: GameState['players']
+  myPlayerId: PlayerId | null
 }
 
-export function ObjectivesPanel({ objectiveHexes, players }: ObjectivesPanelProps) {
+// Objetivos: quién controla cada uno y cuántos VP darán al final de la fase.
+export function ObjectivesPanel({ objectiveHexes, players, myPlayerId }: ObjectivesPanelProps) {
   if (objectiveHexes.length === 0) return null
+  const sorted = [...objectiveHexes].sort((a, b) => a.objectiveToken!.id.localeCompare(b.objectiveToken!.id, undefined, { numeric: true }))
+  const mine = sorted.filter(h => h.objectiveToken!.controlledBy === myPlayerId).reduce((n, h) => n + h.objectiveToken!.vpValue, 0)
+  const theirs = sorted.filter(h => h.objectiveToken!.controlledBy && h.objectiveToken!.controlledBy !== myPlayerId).reduce((n, h) => n + h.objectiveToken!.vpValue, 0)
 
   return (
-    <div style={{
-      position: 'absolute', top: 12, right: 16,
-      background: 'rgba(10,10,20,0.92)', border: '1px solid #333',
-      borderRadius: 8, padding: '8px 12px', color: 'white',
-      fontSize: 11, zIndex: 15, minWidth: 160,
-    }}>
-      <div style={{ color: '#666', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-        Objetivos
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={eyebrow}>Objetivos</span>
+        <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: C.textDim }} title="VP que daría cada bando si la fase acabara ahora">
+          al cierre: <span style={{ color: C.ally }}>+{mine}</span> / <span style={{ color: C.enemy }}>+{theirs}</span>
+        </span>
       </div>
-      {objectiveHexes.map(hex => {
+      {sorted.map((hex, i) => {
         const obj = hex.objectiveToken!
-        const controlled = obj.controlledBy
-        const color = controlled === 'player1' ? '#4fc3f7' : controlled === 'player2' ? '#ef9a9a' : '#555'
-        const label = controlled ? players[controlled].name : 'Sin control'
+        const owner = obj.controlledBy
+        const color = owner ? sideColor(owner, myPlayerId) : C.textDim
         return (
-          <div key={obj.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
-              boxShadow: controlled ? `0 0 4px ${color}` : 'none',
+          <div key={obj.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span style={{
+              width: 10, height: 10, flexShrink: 0, background: owner ? color : 'transparent',
+              border: `1.5px solid ${owner ? color : C.amber}`, clipPath: 'polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%)',
             }} />
-            <span style={{ color: '#888', flex: 1 }}>{obj.id}</span>
-            <span style={{ color }}>{label}</span>
-            <span style={{ color: '#444', fontSize: 9 }}>+{obj.vpValue}VP</span>
+            <span style={{ flex: 1 }}>Objetivo {i + 1}</span>
+            <span style={{ color, fontSize: 11.5 }}>{owner ? (owner === myPlayerId ? 'Tuyo' : players[owner].name) : 'Libre'}</span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: C.textDim }}>{obj.vpValue} VP</span>
           </div>
         )
       })}

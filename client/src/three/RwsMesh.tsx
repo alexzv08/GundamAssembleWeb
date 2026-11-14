@@ -1,5 +1,6 @@
 import type { RemoteWeapon } from '../types'
 import { hexToWorld } from './hexUtils'
+import { C } from '../theme'
 
 const LABEL: Record<RemoteWeapon['kind'], string> = {
   bit_stave: 'BIT Stave — aliados adyacentes reciben −1 de daño',
@@ -19,16 +20,17 @@ interface RwsMeshProps {
 export function RwsMesh({ rws, elevation, isMine, onClick, onHover }: RwsMeshProps) {
   if (!rws.position) return null
   const [x, y, z] = hexToWorld(rws.position.q, rws.position.r, elevation)
-  const color = rws.owner === 'player1' ? '#ef5350' : '#4fc3f7'
+  const color = isMine ? C.ally : C.enemy
   return (
     <mesh
+      castShadow
       position={[x, y + 0.6, z]}
       onClick={e => { e.stopPropagation(); onClick() }}
       onPointerEnter={e => { e.stopPropagation(); onHover?.(`${isMine ? '' : 'Enemigo: '}${LABEL[rws.kind]} (1 HP, ${rws.vp} VP)`) }}
       onPointerLeave={() => onHover?.(null)}
     >
       <octahedronGeometry args={[0.32]} />
-      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} metalness={0.6} roughness={0.3} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} metalness={0.6} roughness={0.3} />
     </mesh>
   )
 }

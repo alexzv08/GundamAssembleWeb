@@ -7,6 +7,7 @@
       "cardId": "ST01-U01",
       "set": "Starter Set 01",
       "name": "GUNDAM",
+      "shortName": "RX-78-2",
       "model": "RX-78-2",
       "signature": "Legendary Hero",
       "traits": [
@@ -78,6 +79,7 @@
       "cardId": "ST01-U02",
       "set": "Starter Set 01",
       "name": "Wing Gundam Zero (EW)",
+      "shortName": "Wing Zero",
       "model": "XXXG-00W0",
       "signature": "Wing of Destruction",
       "traits": [
@@ -147,6 +149,7 @@
       "cardId": "ST01-U03",
       "set": "Starter Set 01",
       "name": "Gundam Barbatos Lupus Rex",
+      "shortName": "Barbatos",
       "model": "ASW-G-08",
       "signature": "Final Stand",
       "traits": [
@@ -236,6 +239,7 @@
       "cardId": "ST01-U04",
       "set": "Starter Set 01",
       "name": "Char's Zaku II",
+      "shortName": "Char's Zaku",
       "model": "MS-06S",
       "signature": "Fast Encounter",
       "traits": [
@@ -314,6 +318,7 @@
       "cardId": "ST01-U05",
       "set": "Starter Set 01",
       "name": "Gundam Epyon (EW)",
+      "shortName": "Epyon",
       "model": "OZ-13MS",
       "signature": "Crimson Cataclysm",
       "traits": [
@@ -393,6 +398,7 @@
       "cardId": "ST01-U06",
       "set": "Starter Set 01",
       "name": "Gundam Vidar",
+      "shortName": "Vidar",
       "model": "ASW-G-XX",
       "signature": "Cold Justice",
       "traits": [
@@ -459,6 +465,7 @@
       "cardId": "EX01-U01",
       "set": "Expansion Pack 01",
       "name": "Unicorn Gundam (Destroy Mode)",
+      "shortName": "Unicorn",
       "model": "RX-0",
       "signature": "Laplace's Guardian",
       "traits": [
@@ -526,6 +533,7 @@
       "cardId": "EX01-U02",
       "set": "Expansion Pack 01",
       "name": "Torohachi",
+      "shortName": "Torohachi",
       "model": "TOLRO-800",
       "signature": "Petite Mobile Suit",
       "traits": [
@@ -590,6 +598,7 @@
       "cardId": "EX01-U03",
       "set": "Expansion Pack 01",
       "name": "Delta Plus",
+      "shortName": "Delta Plus",
       "model": "MSN-001A1",
       "signature": "Rapid Response",
       "traits": [
@@ -661,6 +670,7 @@
       "cardId": "EX02-U01",
       "set": "Expansion Pack 02",
       "name": "Gundam Aerial",
+      "shortName": "Aerial",
       "model": "XVX-016",
       "signature": "Protective Heroine",
       "traits": [
@@ -740,6 +750,7 @@
       "cardId": "EX02-U02",
       "set": "Expansion Pack 02",
       "name": "Gundam Pharact",
+      "shortName": "Pharact",
       "model": "FP/A-77",
       "signature": "Silent Hunter",
       "traits": [
@@ -813,6 +824,7 @@
       "cardId": "EX02-U03",
       "set": "Expansion Pack 02",
       "name": "Darilbalde",
+      "shortName": "Darilbalde",
       "model": "MD-0064",
       "signature": "Frontline Duelist",
       "traits": [
@@ -885,6 +897,7 @@
       "cardId": "PA01-U01",
       "set": "Paint Pack 01",
       "name": "Gundam",
+      "shortName": "Gundam",
       "model": "RX-78-2",
       "signature": "Elite Mobile Suit",
       "traits": [
@@ -958,6 +971,7 @@
       "cardId": "PA01-U02",
       "set": "Paint Pack 01",
       "name": "Guncannon",
+      "shortName": "Guncannon",
       "model": "RX-77-2",
       "signature": "In Position",
       "traits": [
@@ -1037,6 +1051,7 @@
       "cardId": "PA01-U03",
       "set": "Paint Pack 01",
       "name": "Guntank",
+      "shortName": "Guntank",
       "model": "RX-75",
       "signature": "Battlefield Bombarder",
       "traits": [
@@ -1107,6 +1122,7 @@
       "cardId": "DM01-U01",
       "set": "Demo (pre-lanzamiento)",
       "name": "Gundam",
+      "shortName": "Gundam",
       "traits": [
         "Amuro Ray",
         "Earth Federation"
@@ -1176,6 +1192,7 @@
       "cardId": "DM01-U02",
       "set": "Demo (pre-lanzamiento)",
       "name": "Guncannon",
+      "shortName": "Guncannon",
       "traits": [
         "Kai Shiden",
         "Earth Federation"
@@ -1234,6 +1251,7 @@
       "cardId": "DM01-U03",
       "set": "Demo (pre-lanzamiento)",
       "name": "Guntank",
+      "shortName": "Guntank",
       "traits": [
         "Hayato Kobayashi",
         "Earth Federation"
@@ -1306,6 +1324,7 @@
       "cardId": "DM01-U04",
       "set": "Demo (pre-lanzamiento)",
       "name": "Char's Zaku II",
+      "shortName": "Char's Zaku",
       "traits": [
         "Char Aznable",
         "Zeon"
@@ -1375,6 +1394,7 @@
       "cardId": "DM01-U05",
       "set": "Demo (pre-lanzamiento)",
       "name": "Zaku II [Line Breaker]",
+      "shortName": "Zaku II LB",
       "traits": [
         "Zeon",
         "Mass Produced"
@@ -1437,6 +1457,7 @@
       "cardId": "DM01-U06",
       "set": "Demo (pre-lanzamiento)",
       "name": "Zaku II [Enforcer]",
+      "shortName": "Zaku II EN",
       "traits": [
         "Zeon",
         "Mass Produced"

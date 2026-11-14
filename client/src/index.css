@@ -9,3 +9,30 @@ html, body, #root {
   height: 100%;
   overflow: hidden;
 }
+
+/* Tipografía y colores base (ver src/theme.ts) */
+body {
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  background: #0a0f1e;
+  color: #e6ebf5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+h1, h2, h3 { font-family: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.02em; }
+
+:focus-visible { outline: 2px solid #4fc3f7; outline-offset: 2px; }
+
+button:not(:disabled):hover { filter: brightness(1.18); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #24304f; border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes ga-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } }
+@keyframes ga-rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

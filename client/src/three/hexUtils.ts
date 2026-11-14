@@ -15,13 +15,23 @@ export function hexToWorld(q: number, r: number, elevation: number = 0): [number
     return [x, y, z]
 }
 
+// Paleta del tablero: tonos apagados de "mesa al anochecer" para que los
+// resaltados (cian, rojo, ámbar) y las unidades destaquen. La altura se lee por
+// tono (más claro y más cálido cuanto más alto) y por la altura física del hex.
+export interface TerrainLook { top: string; side: string; emissive?: string; emissiveIntensity?: number; label: string }
+
+export function terrainLook(terrain: string, elevation: number): TerrainLook {
+    if (terrain === 'water') return { top: '#245d86', side: '#163a55', emissive: '#1d6fa8', emissiveIntensity: 0.25, label: 'Agua' }
+    if (terrain === 'debris') return { top: '#5a4c40', side: '#3a3029', label: 'Debris' }
+    if (terrain === 'impassable') return { top: '#25272e', side: '#17181d', label: 'Infranqueable' }
+    if (terrain === 'minovsky') return { top: '#4b3d78', side: '#2d2449', emissive: '#7e57c2', emissiveIntensity: 0.35, label: 'Partículas Minovsky' }
+    if (elevation >= 3) return { top: '#9a9a90', side: '#5d5d57', label: 'Elevación 3' }
+    if (elevation >= 2) return { top: '#8a7556', side: '#57492f', label: 'Elevación 2' }
+    if (elevation >= 1) return { top: '#6b8758', side: '#3e5233', label: 'Elevación 1' }
+    return { top: '#4a6844', side: '#2b3f28', label: 'Llano' }
+}
+
+/** @deprecated usar terrainLook */
 export function terrainColor(terrain: string, elevation: number): string {
-    if (terrain === 'water') return '#4a90d9'
-    if (terrain === 'debris') return '#6b5d4f'
-    if (terrain === 'impassable') return '#2b2b2b'
-    if (terrain === 'minovsky') return '#7e57c2'
-    if (elevation >= 3) return '#888888'
-    if (elevation >= 2) return '#a0856b'
-    if (elevation >= 1) return '#7a9e5a'
-    return '#5a8a3a'
+    return terrainLook(terrain, elevation).top
 }

@@ -1,267 +1,111 @@
-import type { GameState } from '../../types/gameState'
+import type { GameState, PlayerId } from '../../types/gameState'
+import { C, FONT, sideColor } from '../../theme'
 
 interface TimelineBarProps {
     gameState: GameState
-    myPlayerId: 'player1' | 'player2' | null
+    myPlayerId: PlayerId | null
+    compact?: boolean
 }
 
-export function TimelineBar({ gameState, myPlayerId }: TimelineBarProps) {
-    const { timeline, units, players, activeUnitId } = gameState
+// Timeline de 20 rondas (Fase 1 = 1-10, Fase 2 = 11-20). El rival arriba y tú
+// abajo, como en la mesa. Cada ficha lleva el nombre corto de la unidad; al pasar
+// el ratón se ve el nombre completo, HP y la ronda. Se muestran la ronda actual y
+// las siguientes (la línea ámbar marca el paso a la Fase 2).
+export function TimelineBar({ gameState, myPlayerId, compact = false }: TimelineBarProps) {
+    const { timeline, units, players, activeUnitId, phase } = gameState
+    const me: PlayerId = myPlayerId ?? 'player1'
+    const rival: PlayerId = me === 'player1' ? 'player2' : 'player1'
+    const current = timeline.slots.find(s => s.tokens.length > 0)?.round ?? 1
+    // Ventana de rondas: la actual y las siguientes (las fichas nunca retroceden).
+    // En escritorio caben 12 columnas con el nombre corto entero; en móvil, 5.
+    const first = Math.max(1, Math.min(current, 21 - (compact ? 5 : 12)))
+    const slots = timeline.slots.filter(s => s.round >= first && s.round < first + (compact ? 5 : 12))
 
-    const p1Color = '#c0393a'
-    const p2Color = '#3a6bc0'
-
-    const p1Tokens = timeline.slots.map(slot => ({
-        round: slot.round,
-        tokens: slot.tokens.filter(t => t.playerId === 'player1'),
-    }))
-    const p2Tokens = timeline.slots.map(slot => ({
-        round: slot.round,
-        tokens: slot.tokens.filter(t => t.playerId === 'player2'),
-    }))
-
-    const currentRound = timeline.slots.find(s => s.tokens.length > 0)?.round ?? null
-
-    const renderToken = (token: { unitId: string; playerId: 'player1' | 'player2' }, color: string) => {
-        const unit = units[token.unitId]
-        if (!unit) return null
-        const isActive = token.unitId === activeUnitId
-        const hpPercent = unit.currentHp / unit.maxHp
-        const shortName = unit.name.replace('Zaku II', 'Zaku').replace('Guncannon', 'G.Cannon').replace('Guntank', 'G.Tank')
-
-        return (
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                background: isActive ? `${color}33` : `${color}18`,
-                border: `1px solid ${isActive ? color : color + '66'}`,
-                borderRadius: 4,
-                padding: '2px 5px',
-                boxShadow: isActive ? `0 0 6px ${color}88` : 'none',
-                width: '100%',
-            }}>
-                <div style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: color, flexShrink: 0,
-                    boxShadow: isActive ? `0 0 4px ${color}` : 'none',
-                }} />
-                <span style={{
-                    fontSize: 9, color: isActive ? '#fff' : '#ccc',
-                    fontWeight: isActive ? 'bold' : 'normal',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    flex: 1,
+    const lane = (player: PlayerId) => (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))`, minHeight: compact ? 26 : 30 }}>
+            {slots.map(slot => (
+                <div key={slot.round} style={{
+                    display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 2px',
+                    borderLeft: slot.round === 11 ? `2px solid ${C.amber}88` : `1px solid ${C.line}55`,
+                    background: slot.round === current ? `${C.amber}0f` : 'transparent',
                 }}>
-                    {shortName.split(' ')[0]}
-                </span>
-                <div style={{
-                    width: 18, height: 3, background: '#111',
-                    borderRadius: 2, flexShrink: 0, overflow: 'hidden',
-                }}>
-                    <div style={{
-                        height: '100%',
-                        width: `${hpPercent * 100}%`,
-                        background: hpPercent > 0.5 ? '#4caf50' : hpPercent > 0.25 ? '#ff9800' : '#ef5350',
-                    }} />
-                </div>
-            </div>
-        )
-    }
-
-    const slotWidth = `${100 / 10}%`
-
-    return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'stretch',
-            background: 'rgba(5,5,10,0.95)',
-            borderBottom: '1px solid #1a1a1a',
-            flexShrink: 0,
-            height: 110,
-        }}>
-
-            {/* VP Player 1 — izquierda */}
-            <div style={{
-                width: 110,
-                background: `${p1Color}22`,
-                border: `1px solid ${p1Color}66`,
-                borderRight: `2px solid ${p1Color}`,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '6px 8px',
-                flexShrink: 0,
-                gap: 2,
-            }}>
-                <div style={{
-                    fontSize: 9, color: p1Color, textTransform: 'uppercase',
-                    letterSpacing: 1,
-                }}>
-                    {myPlayerId === 'player1' ? '▶ ' : ''}Victory Points
-                </div>
-                <div style={{
-                    fontSize: 28, fontWeight: 'bold', color: '#fff', lineHeight: 1,
-                }}>
-                    {players.player1.vp}
-                </div>
-                <div style={{
-                    fontSize: 9, color: p1Color, textTransform: 'uppercase',
-                    letterSpacing: 1, textAlign: 'center',
-                    maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                    {players.player1.name}
-                </div>
-                <div style={{
-                    fontSize: 9, color: '#f5c518', background: 'rgba(245,197,24,0.1)',
-                    border: '1px solid rgba(245,197,24,0.3)', borderRadius: 4,
-                    padding: '1px 6px', letterSpacing: 1, textTransform: 'uppercase',
-                }}>
-                    {gameState.phase === 'phase1' ? 'Fase 1'
-                        : gameState.phase === 'phase2' ? 'Fase 2'
-                        : gameState.phase === 'setup' ? 'Setup'
-                        : '—'}
-                </div>
-            </div>
-
-            {/* Timeline central */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-
-                {/* Carril Player 1 (rojo) — arriba */}
-                <div style={{
-                    flex: 1,
-                    background: `${p1Color}0d`,
-                    borderBottom: `1px solid #1a1a1a`,
-                    display: 'flex',
-                }}>
-                    {p1Tokens.map(({ round, tokens }) => (
-                        <div key={round} style={{
-                            width: slotWidth,
-                            borderRight: '1px solid #111',
-                            padding: '3px 2px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 2,
-                            background: round === currentRound ? `${p1Color}11` : 'transparent',
-                        }}>
-                            {tokens.map((token, i) => (
-                                <div key={i}>{renderToken(token, p1Color)}</div>
-                            ))}
-                        </div>
-                    ))}
-                </div>
-
-                {/* Números de round — centro */}
-                <div style={{
-                    height: 24,
-                    background: '#0d0d0d',
-                    borderTop: '1px solid #222',
-                    borderBottom: '1px solid #222',
-                    display: 'flex',
-                }}>
-                    {timeline.slots.map(slot => {
-                        const isCurrent = slot.round === currentRound
+                    {slot.tokens.filter(t => t.playerId === player).map(t => {
+                        const u = units[t.unitId]
+                        if (!u) return null
+                        const color = sideColor(player, myPlayerId)
+                        const active = t.unitId === activeUnitId
+                        const hp = u.currentHp / u.maxHp
                         return (
-                            <div key={slot.round} style={{
-                                width: slotWidth,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRight: '1px solid #1a1a1a',
-                                position: 'relative',
-                            }}>
-                                {/* Flecha de separación */}
-                                <div style={{
-                                    position: 'absolute',
-                                    right: -1,
-                                    top: 0,
-                                    bottom: 0,
-                                    width: 0,
-                                    borderLeft: '6px solid #0d0d0d',
-                                    borderTop: '12px solid transparent',
-                                    borderBottom: '12px solid transparent',
-                                    zIndex: 1,
-                                }} />
-                                <span style={{
-                                    fontSize: isCurrent ? 13 : 11,
-                                    fontWeight: isCurrent ? 'bold' : 'normal',
-                                    color: isCurrent ? '#f5c518' : '#555',
-                                    zIndex: 2,
+                            <div key={t.unitId}
+                                title={`${u.name} · HP ${u.currentHp}/${u.maxHp} · ronda ${slot.round}${u.position ? '' : ' · en la Reserva'}`}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 4, minWidth: 0,
+                                    background: active ? `${C.amber}26` : `${color}1a`,
+                                    border: `1px solid ${active ? C.amber : color + '88'}`,
+                                    borderRadius: 3, padding: '1px 4px',
+                                    boxShadow: active ? `0 0 8px ${C.amber}66` : 'none',
+                                    opacity: u.position || active ? 1 : 0.7,
                                 }}>
-                                    {slot.round}
+                                <span style={{
+                                    fontFamily: FONT.body, fontSize: 10.5, fontWeight: active ? 600 : 500,
+                                    color: active ? C.text : C.textSoft, flex: 1, minWidth: 0,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>{u.shortName ?? u.name}</span>
+                                <span style={{ width: 14, height: 3, background: C.line, borderRadius: 2, flexShrink: 0, overflow: 'hidden' }}>
+                                    <span style={{ display: 'block', height: '100%', width: `${hp * 100}%`, background: hp > 0.5 ? C.ok : hp > 0.25 ? C.warn : C.danger }} />
                                 </span>
-                                {isCurrent && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        bottom: 0,
-                                        left: '50%',
-                                        transform: 'translateX(-50%)',
-                                        width: 4,
-                                        height: 4,
-                                        borderRadius: '50%',
-                                        background: '#f5c518',
-                                    }} />
-                                )}
                             </div>
                         )
                     })}
                 </div>
+            ))}
+        </div>
+    )
 
-                {/* Carril Player 2 (azul) — abajo */}
-                <div style={{
-                    flex: 1,
-                    background: `${p2Color}0d`,
-                    display: 'flex',
-                }}>
-                    {p2Tokens.map(({ round, tokens }) => (
-                        <div key={round} style={{
-                            width: slotWidth,
-                            borderRight: '1px solid #111',
-                            padding: '3px 2px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 2,
-                            background: round === currentRound ? `${p2Color}11` : 'transparent',
+    const vpCard = (player: PlayerId) => {
+        const color = sideColor(player, myPlayerId)
+        return (
+            <div style={{
+                width: compact ? 54 : 104, flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                alignItems: 'center', gap: 1, padding: '4px 6px',
+                background: `linear-gradient(180deg, ${color}1c, transparent)`, borderBottom: `2px solid ${color}`,
+            }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: '0.12em', color, textTransform: 'uppercase', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {player === me ? 'Tú' : players[player].name}
+                </span>
+                <span style={{ fontFamily: FONT.display, fontSize: compact ? 22 : 28, fontWeight: 700, lineHeight: 1, color: C.text }}>{players[player].vp}</span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 9, color: C.textDim }}>VP</span>
+            </div>
+        )
+    }
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'stretch', background: C.panelSolid, borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
+            {vpCard(rival)}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4px 6px' }}>
+                {lane(rival)}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))`, borderBlock: `1px solid ${C.line}` }}>
+                    {slots.map(s => (
+                        <div key={s.round} style={{
+                            textAlign: 'center', fontFamily: FONT.mono, fontSize: 10.5, padding: '1px 0',
+                            color: s.round === current ? C.amber : s.round > 10 ? C.textDim : C.textSoft,
+                            fontWeight: s.round === current ? 600 : 400,
+                            borderLeft: s.round === 11 ? `2px solid ${C.amber}88` : 'none',
+                            background: s.round === current ? `${C.amber}1a` : 'transparent',
                         }}>
-                            {tokens.map((token, i) => (
-                                <div key={i}>{renderToken(token, p2Color)}</div>
-                            ))}
+                            {s.round === 11 ? 'F2 · 11' : s.round}
                         </div>
                     ))}
                 </div>
+                {lane(me)}
             </div>
-
-            {/* VP Player 2 — derecha */}
-            <div style={{
-                width: 110,
-                background: `${p2Color}22`,
-                border: `1px solid ${p2Color}66`,
-                borderLeft: `2px solid ${p2Color}`,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '6px 8px',
-                flexShrink: 0,
-            }}>
-                <div style={{
-                    fontSize: 9, color: p2Color, textTransform: 'uppercase',
-                    letterSpacing: 1, marginBottom: 4,
-                }}>
-                    {myPlayerId === 'player2' ? '▶ ' : ''}Victory Points
-                </div>
-                <div style={{
-                    fontSize: 28, fontWeight: 'bold', color: '#fff', lineHeight: 1,
-                }}>
-                    {players.player2.vp}
-                </div>
-                <div style={{
-                    fontSize: 9, color: p2Color, marginTop: 4, textTransform: 'uppercase',
-                    letterSpacing: 1, textAlign: 'center',
-                    maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                    {players.player2.name}
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {!compact && (
+                    <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: '0.12em', color: C.amber, textAlign: 'center', padding: '3px 0', textTransform: 'uppercase' }}>
+                        {phase === 'phase2' ? 'Fase 2' : phase === 'finished' ? 'Fin' : 'Fase 1'}
+                    </div>
+                )}
+                {vpCard(me)}
             </div>
         </div>
     )

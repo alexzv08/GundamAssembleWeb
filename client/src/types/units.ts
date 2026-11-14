@@ -167,6 +167,7 @@ export interface Unit {
     id: string
     cardId?: string
     name: string
+    shortName?: string           // nombre corto para la Timeline y el tablero
     signature?: string           // título de firma (p.ej. "Legendary Hero")
     unitType: string
     traits: string[]

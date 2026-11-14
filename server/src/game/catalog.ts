@@ -8,6 +8,8 @@ export interface UnitCardJSON {
     cardId: string
     set: string
     name: string
+    /** Nombre corto para la Timeline y las etiquetas del tablero */
+    shortName?: string
     model?: string
     signature?: string
     traits: string[]
@@ -51,6 +53,7 @@ export function buildUnit(card: UnitCardJSON, playerId: PlayerId, instance: numb
         id: `${card.cardId}_${playerId}_${instance}`,
         cardId: card.cardId,
         name: card.name,
+        shortName: card.shortName,
         signature: card.signature,
         unitType: 'Mobile Suit',
         traits: card.traits,

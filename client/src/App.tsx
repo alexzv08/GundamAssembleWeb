@@ -13,18 +13,19 @@ import { UnitPanel } from './components/ui/UnitPanel'
 import { TimelineBar } from './components/ui/TimelineBar'
 import { TacticsHand } from './components/ui/TacticsHand'
 import { ToastContainer } from './components/ui/Toast'
-import { ChatPanel, type ChatMessage } from './components/ui/ChatPanel'
+import type { ChatMessage } from './components/ui/ChatPanel'
+import { SideRail } from './components/ui/SideRail'
+import { DiceTray } from './components/ui/DiceTray'
+import { useIsMobile } from './game/useIsMobile'
+import { C, button } from './theme'
 import { sfx, isMuted, setMuted } from './game/sound'
 import { ChoiceModal, type ChoiceRequest } from './components/ui/ChoiceModal'
 import { UPGRADE_OPTIONS } from './components/ui/choiceOptions'
 import { useToasts } from './components/ui/useToasts'
-import { ActionLog } from './components/ui/ActionLog'
 import { AuthScreen } from './components/ui/AuthScreen'
 import { ProfileModal } from './components/ui/ProfileModal'
 import { UsernameSetupModal } from './components/ui/UsernameSetupModal'
 import { GameStatusBar } from './components/ui/GameStatusBar'
-import { ObjectivesPanel } from './components/ui/ObjectivesPanel'
-import { LegendPanel } from './components/ui/LegendPanel'
 import { GameOverModal } from './components/ui/GameOverModal'
 import { LobbyScreen } from './screens/LobbyScreen'
 import { WaitingScreen } from './screens/WaitingScreen'
@@ -70,13 +71,14 @@ export default function App() {
   const [reachableHexes, setReachableHexes] = useState<Set<string>>(new Set())
   const [attackableHexes, setAttackableHexes] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState('')
-  const [diceResult, setDiceResult] = useState<number[] | null>(null)
   const [selectedWeaponIndex, setSelectedWeaponIndex] = useState<number | null>(null)
   const [pendingAbilityIndex, setPendingAbilityIndex] = useState<number | null>(null)
   const [pendingCardId, setPendingCardId] = useState<string | null>(null)
   const [choice, setChoice] = useState<ChoiceRequest | null>(null)
   const [chat, setChat] = useState<ChatMessage[]>([])
   const [muted, setMutedState] = useState(isMuted())
+  const isMobile = useIsMobile()
+  const [mobileSheet, setMobileSheet] = useState<'info' | 'unit' | 'hidden' | null>(null)
   const allyPickRef = useRef<((allyId: string) => void) | null>(null)
   const [bitAssault, setBitAssault] = useState<{ unitId: string; cardId: string; queue: string[]; picks: string[] } | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
@@ -108,7 +110,6 @@ export default function App() {
     setSelectionMode('none')
     setReachableHexes(new Set())
     setAttackableHexes(new Set())
-    setDiceResult(null)
     setSelectedWeaponIndex(null)
     setPendingAbilityIndex(null)
     setPendingCardId(null)
@@ -292,7 +293,8 @@ export default function App() {
       }
 
       setGameState(newState)
-      if (diceRolls) setDiceResult(diceRolls)
+      // H1: al empezar la activación de una unidad tuya queda seleccionada
+      // (sus acciones aparecen sin tener que pulsar el modelo)
       setSelectedUnitId(prev => {
         if (newState.activeUnitId !== prev) {
           setReachableHexes(new Set())
@@ -300,7 +302,7 @@ export default function App() {
           setSelectionMode('none')
           setSelectedWeaponIndex(null)
           setPanelUnitId(null)
-          return null
+          return newState.activePlayerId === myPlayerIdRef.current ? newState.activeUnitId : null
         }
         return prev
       })
@@ -906,13 +908,11 @@ export default function App() {
   const isMyTurn = gameState.activePlayerId === myPlayerId
   const isFinished = gameState.phase === 'finished'
   const panelUnit = panelUnitId ? gameState.units[panelUnitId] : activeUnit ?? null
-  const objectiveHexes = Object.values(gameState.board).filter(h => h.objectiveToken)
 
   const hasHandStrip = !isFinished && myPlayerId && (
     gameState.players[myPlayerId].tactics.hand.length > 0 ||
     gameState.pendingResponse?.forPlayerId === myPlayerId
   )
-  const bottomOffset = hasHandStrip ? HAND_STRIP_H + 12 : 16
 
   // Push / Pull pendiente de elegir hex (Q&A 7: se puede mover menos, incluso 0)
   const forced = gameState.pendingForcedMove ?? null
@@ -923,164 +923,175 @@ export default function App() {
     ? `El rival está eligiendo hacia dónde mover a ${forcedUnitName}…`
     : gameState.pendingResponse && gameState.pendingResponse.forPlayerId !== myPlayerId ? 'Esperando la respuesta del rival…' : message
 
-  return (
-    <div style={{ width: '100vw', height: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column' }}>
-
-      <TimelineBar gameState={gameState} myPlayerId={myPlayerId} />
-
-      <GameStatusBar
-        gameState={gameState}
-        myPlayerId={myPlayerId}
+  const handStrip = hasHandStrip && myPlayerId && (
+    <div style={{ height: isMobile ? 132 : HAND_STRIP_H, flexShrink: 0, background: C.bgDeep, borderTop: `1px solid ${C.line}` }}>
+      <TacticsHand
+        hand={gameState.players[myPlayerId].tactics.hand}
         isMyTurn={isMyTurn}
-        message={statusMessage}
-        diceResult={diceResult}
+        selectedCardId={pendingCardId}
+        deckCount={gameState.players[myPlayerId].tactics.deck.length}
+        onPlayCard={handlePlayCard}
+        pendingResponseTrigger={gameState.pendingResponse?.forPlayerId === myPlayerId ? gameState.pendingResponse.trigger : null}
+        canRespond={c => canPlayResponseCard(gameState, myPlayerId, c)}
+        onPassResponse={handlePassResponse}
+        responseAbilities={responseAbilityOptions(gameState, myPlayerId).map(o => ({
+          key: `${o.unitId}:${o.abilityIndex}`,
+          label: `${gameState.units[o.unitId].abilities[o.abilityIndex].name} (${gameState.units[o.unitId].shortName ?? gameState.units[o.unitId].name})`,
+          onUse: () => socket.emit('GAME_ACTION', { action: { type: 'USE_RESPONSE_ABILITY', unitId: o.unitId, abilityIndex: o.abilityIndex } }),
+        }))}
+        cardPlayed={gameState.activation?.cardPlayed ?? false}
+        compact={isMobile}
       />
+    </div>
+  )
 
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-        <GameScene
-          gameState={gameState}
-          myPlayerId={myPlayerId}
-          selectedUnitId={selectedUnitId}
-          reachableHexes={forcedHexes ?? reachableHexes}
-          attackableHexes={forcedHexes ? EMPTY_SET : attackableHexes}
-          onHexClick={handleHexClick}
-          onUnitClick={handleUnitClick}
-          onTokenHover={setTokenTooltip}
-          logHighlightedHexes={logHoveredHexes}
-        />
+  const unitPanel = panelUnit && !isFinished && (
+    <UnitPanel
+      unit={panelUnit}
+      compact={isMobile}
+      mode={selectionMode}
+      isActive={gameState.activeUnitId === panelUnit.id}
+      isMyUnit={panelUnit.playerId === myPlayerId}
+      isMyTurn={isMyTurn}
+      isSelected={panelUnit.id === selectedUnitId}
+      advanced={gameState.activation?.advanced ?? false}
+      usedCommands={gameState.activation?.usedCommands ?? []}
+      freeDashes={gameState.activation?.freeDashes ?? 0}
+      freeAttacks={gameState.activation?.freeAttacks ?? []}
+      hasUsedPrimary={gameState.hasUsedPrimaryAction}
+      selectedWeaponIndex={selectedWeaponIndex}
+      currentTlRound={getUnitRound(gameState.timeline, panelUnit.id)}
+      canRescue={myPlayerId && gameState.activeUnitId ? calcCanRescue(gameState.activeUnitId, gameState, myPlayerId) : false}
+      onMove={() => {
+        const id = gameState.activeUnitId
+        if (!id) return
+        setSelectedUnitId(id)
+        setSelectionMode('moving')
+        setReachableHexes(calcReachable(id, gameState))
+        setAttackableHexes(new Set())
+        setMessage('Avanzar: elige un hex resaltado')
+      }}
+      onDash={() => {
+        const id = gameState.activeUnitId
+        if (!id) return
+        setSelectedUnitId(id)
+        setSelectionMode('dashing')
+        setReachableHexes(calcReachable(id, gameState, 'dash'))
+        setAttackableHexes(new Set())
+        setMessage('Dash: elige un hex resaltado')
+      }}
+      onAttack={handleAttackMode}
+      onUseAbility={handleUseAbility}
+      onEnergize={() => {
+        const id = gameState.activeUnitId
+        if (!id) return
+        socket.emit('GAME_ACTION', { action: { type: 'ENERGIZE', unitId: id } })
+        setMessage('Energize: +1 Energy')
+      }}
+      onRescue={handleRescue}
+      onEndTurn={handleEndTurn}
+      onToggleAutoResponses={enabled => socket.emit('GAME_ACTION', { action: { type: 'SET_AUTO_RESPONSES', unitId: panelUnit.id, enabled } })}
+      onCancel={() => {
+        setSelectionMode('none')
+        setReachableHexes(new Set())
+        setAttackableHexes(new Set())
+        setSelectedWeaponIndex(null)
+        setMessage('')
+      }}
+      onClose={panelUnitId && panelUnitId !== gameState.activeUnitId ? () => setPanelUnitId(null) : undefined}
+    />
+  )
 
-        <ToastContainer toasts={toasts} />
+  return (
+    <div style={{ width: '100vw', height: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', color: C.text }}>
+
+      <TimelineBar gameState={gameState} myPlayerId={myPlayerId} compact={isMobile} />
+
+      <GameStatusBar gameState={gameState} myPlayerId={myPlayerId} isMyTurn={isMyTurn} message={statusMessage} />
+
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <GameScene
+            gameState={gameState}
+            myPlayerId={myPlayerId}
+            selectedUnitId={selectedUnitId}
+            reachableHexes={forcedHexes ?? reachableHexes}
+            attackableHexes={forcedHexes ? EMPTY_SET : attackableHexes}
+            onHexClick={handleHexClick}
+            onUnitClick={handleUnitClick}
+            onTokenHover={setTokenTooltip}
+            logHighlightedHexes={logHoveredHexes}
+            focusKey={activeUnit?.position ? hexKey(activeUnit.position) : null}
+            compact={isMobile}
+          />
+        </div>
+
+        <DiceTray gameState={gameState} myPlayerId={myPlayerId} />
+        <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
+
         {myForced && (
           <div role="dialog" aria-label="Elegir movimiento forzado" style={{
-            position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
-            background: 'rgba(10,10,20,0.95)', border: '1px solid #f5c518', borderRadius: 8,
-            padding: '8px 14px', color: 'white', fontSize: 13, display: 'flex', gap: 12, alignItems: 'center',
-            maxWidth: 'calc(100vw - 32px)', flexWrap: 'wrap', justifyContent: 'center',
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            background: C.panel, border: `1px solid ${C.amber}`, borderRadius: 8,
+            padding: '8px 14px', fontSize: 13, display: 'flex', gap: 12, alignItems: 'center',
+            maxWidth: 'calc(100% - 32px)', flexWrap: 'wrap', justifyContent: 'center',
           }}>
             <span>
-              <b style={{ color: '#f5c518' }}>{myForced.request.mode === 'push' ? 'Push' : 'Pull'}</b> de {forcedUnitName}
-              {' '}— hex {myForced.request.step} de {myForced.request.total}: elige un hex resaltado
+              <b style={{ color: C.amber }}>{myForced.request.mode === 'push' ? 'Push' : 'Pull'}</b> de {forcedUnitName}:
+              {' '}hex {myForced.request.step} de {myForced.request.total}. Elige un hex resaltado
             </span>
-            <button
-              onClick={() => socket.emit('GAME_ACTION', { action: { type: 'CHOOSE_FORCED_MOVE', to: null } })}
-              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #f5c518', background: '#3a3000', color: 'white', cursor: 'pointer', fontSize: 12 }}
-            >
+            <button onClick={() => socket.emit('GAME_ACTION', { action: { type: 'CHOOSE_FORCED_MOVE', to: null } })} style={button('amber')}>
               {myForced.request.step === 1 ? 'No mover' : 'Parar aquí'}
             </button>
           </div>
         )}
-        <ChatPanel messages={chat} myPlayerId={myPlayerId} onSend={text => socket.emit('CHAT', { text })} />
-        <button
-          onClick={() => { setMuted(!muted); setMutedState(!muted) }}
-          aria-label={muted ? 'Activar sonido' : 'Silenciar'}
-          title={muted ? 'Activar sonido' : 'Silenciar'}
-          style={{ position: 'absolute', bottom: 16, right: 164, zIndex: 25, background: 'rgba(10,10,20,0.9)', border: '1px solid #444', borderRadius: 8, color: 'white', padding: '6px 10px', cursor: 'pointer', fontSize: 13 }}
-        >
-          {muted ? '🔇' : '🔊'}
-        </button>
+
         {choice && <ChoiceModal request={choice} onCancel={() => { setChoice(null); clearSelection() }} />}
 
-        <ObjectivesPanel objectiveHexes={objectiveHexes} players={gameState.players} />
-
-        <ActionLog
-          log={gameState.log}
-          myPlayerId={myPlayerId}
-          player1Name={gameState.players.player1.name}
-          player2Name={gameState.players.player2.name}
-          onHoverHexes={hexes => setLogHoveredHexes(hexes ? new Set(hexes) : new Set())}
-        />
-
-        {panelUnit && !isFinished && (
-          <div style={{ position: 'absolute', bottom: bottomOffset, left: 16, zIndex: 15 }}>
-            <UnitPanel
-              unit={panelUnit}
-              isActive={gameState.activeUnitId === panelUnit.id}
-              isMyUnit={panelUnit.playerId === myPlayerId}
-              isMyTurn={isMyTurn}
-              isSelected={panelUnit?.id === selectedUnitId}
-              advanced={gameState.activation?.advanced ?? false}
-              usedCommands={gameState.activation?.usedCommands ?? []}
-              freeDashes={gameState.activation?.freeDashes ?? 0}
-              freeAttacks={gameState.activation?.freeAttacks ?? []}
-              hasUsedPrimary={gameState.hasUsedPrimaryAction}
-              selectedWeaponIndex={selectedWeaponIndex}
-              currentTlRound={getUnitRound(gameState.timeline, panelUnit.id)}
-              canRescue={selectedUnitId && myPlayerId ? calcCanRescue(selectedUnitId, gameState, myPlayerId) : false}
-              onMove={() => {
-                if (!selectedUnitId) return
-                setSelectionMode('moving')
-                setReachableHexes(calcReachable(selectedUnitId, gameState))
-                setAttackableHexes(new Set())
-                setMessage('Elige hex para mover')
-              }}
-              onDash={() => {
-                if (!selectedUnitId) return
-                setSelectionMode('dashing')
-                setReachableHexes(calcReachable(selectedUnitId, gameState, 'dash'))
-                setAttackableHexes(new Set())
-                setMessage('Dash: elige hex de destino')
-              }}
-              onAttack={handleAttackMode}
-              onUseAbility={handleUseAbility}
-              onEnergize={() => {
-                if (!selectedUnitId) return
-                socket.emit('GAME_ACTION', { action: { type: 'ENERGIZE', unitId: selectedUnitId } })
-                setMessage('Energize: +1 Energy')
-              }}
-              onRescue={handleRescue}
-              onEndTurn={handleEndTurn}
-              onToggleAutoResponses={enabled => socket.emit('GAME_ACTION', { action: { type: 'SET_AUTO_RESPONSES', unitId: panelUnit.id, enabled } })}
-              onCancel={() => {
-                setSelectionMode('none')
-                setReachableHexes(new Set())
-                setAttackableHexes(new Set())
-                setSelectedUnitId(null)
-                setPanelUnitId(null)
-              }}
-            />
-          </div>
+        {!isMobile && (
+          <>
+            {unitPanel && <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 15, maxHeight: 'calc(100% - 24px)', display: 'flex' }}>{unitPanel}</div>}
+            <div style={{ position: 'absolute', top: 12, right: 12, bottom: 12, width: 300, zIndex: 15, display: 'flex', flexDirection: 'column' }}>
+              <SideRail gameState={gameState} myPlayerId={myPlayerId} chat={chat}
+                onSendChat={text => socket.emit('CHAT', { text })}
+                onHoverHexes={hexes => setLogHoveredHexes(hexes ? new Set(hexes) : new Set())}
+                muted={muted} onToggleMute={() => { setMuted(!muted); setMutedState(!muted) }} />
+            </div>
+          </>
         )}
 
-        <LegendPanel players={gameState.players} bottomOffset={bottomOffset} />
-
-        {tokenTooltip && (
-          <div style={{
-            position: 'absolute', bottom: bottomOffset, left: '50%', transform: 'translateX(-50%)',
-            background: 'rgba(10,10,20,0.95)', border: '1px solid #f5c518',
-            borderRadius: 8, padding: '8px 16px', color: '#f5c518',
-            fontSize: 13, zIndex: 20, whiteSpace: 'nowrap', pointerEvents: 'none',
-          }}>
-            {tokenTooltip}
-          </div>
-        )}
-
-        {hasHandStrip && myPlayerId && (
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            height: HAND_STRIP_H,
-            background: 'rgba(5,5,12,0.97)',
-            borderTop: '1px solid #1e1e2e',
-            zIndex: 15,
-          }}>
-            <TacticsHand
-              hand={gameState.players[myPlayerId].tactics.hand}
-              isMyTurn={isMyTurn}
-              selectedCardId={pendingCardId}
-              deckCount={gameState.players[myPlayerId].tactics.deck.length}
-              onPlayCard={handlePlayCard}
-              pendingResponseTrigger={gameState.pendingResponse?.forPlayerId === myPlayerId ? gameState.pendingResponse.trigger : null}
-              canRespond={c => canPlayResponseCard(gameState, myPlayerId, c)}
-              onPassResponse={handlePassResponse}
-              responseAbilities={responseAbilityOptions(gameState, myPlayerId).map(o => ({
-                key: `${o.unitId}:${o.abilityIndex}`,
-                label: `${gameState.units[o.unitId].abilities[o.abilityIndex].name} (${gameState.units[o.unitId].name})`,
-                onUse: () => socket.emit('GAME_ACTION', { action: { type: 'USE_RESPONSE_ABILITY', unitId: o.unitId, abilityIndex: o.abilityIndex } }),
-              }))}
-              cardPlayed={gameState.activation?.cardPlayed ?? false}
-            />
-          </div>
+        {isMobile && (
+          <>
+            <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 20, display: 'flex', gap: 6 }}>
+              <button onClick={() => setMobileSheet(s => s === 'info' ? null : 'info')} style={button(mobileSheet === 'info' ? 'primary' : 'subtle')}>
+                Objetivos · registro
+              </button>
+            </div>
+            {mobileSheet === 'info' && (
+              <div style={{ position: 'absolute', top: 50, left: 10, right: 10, bottom: 10, zIndex: 25, display: 'flex', flexDirection: 'column' }}>
+                <SideRail gameState={gameState} myPlayerId={myPlayerId} chat={chat}
+                  onSendChat={text => socket.emit('CHAT', { text })}
+                  onHoverHexes={hexes => setLogHoveredHexes(hexes ? new Set(hexes) : new Set())}
+                  muted={muted} onToggleMute={() => { setMuted(!muted); setMutedState(!muted) }} />
+              </div>
+            )}
+            {unitPanel && mobileSheet !== 'info' && (
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, padding: '0 8px 8px' }}>
+                {mobileSheet === 'unit' || (isMyTurn && mobileSheet !== 'hidden') ? unitPanel : (
+                  <button onClick={() => setMobileSheet('unit')} style={{ ...button('subtle'), width: '100%', padding: '9px 12px', textAlign: 'left' }}>
+                    {panelUnit!.name} · ver ficha
+                  </button>
+                )}
+                {(mobileSheet === 'unit' || (isMyTurn && mobileSheet !== 'hidden')) && (
+                  <button onClick={() => setMobileSheet('hidden')} style={{ ...button('subtle'), width: '100%', marginTop: 4 }}>Ocultar ficha</button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {handStrip}
 
       {isFinished && (
         <GameOverModal

@@ -1,69 +1,117 @@
 import { useRef, useState } from 'react'
-import { Mesh, Group, Vector3 } from 'three'
+import { Group, Mesh, Vector3 } from 'three'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import type { Unit } from '../types'
 import { hexToWorld } from './hexUtils'
-import { useSTLModel } from './useSTLModel'
+import { useUnitModel } from './useUnitModel'
 import { modelUrlFor, DEFAULT_MODEL_SCALE } from './models'
+import { C, FONT } from '../theme'
 
 interface UnitMeshProps {
   unit: Unit
   elevation?: number
   isActive?: boolean
   isSelected?: boolean
+  isMine?: boolean
   onClick?: () => void
 }
 
-export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, onClick }: UnitMeshProps) {
-  const meshRef = useRef<Mesh>(null)
+// Pieza de una unidad: peana del color del bando (tú cian, rival rojo), modelo
+// en gris "gunpla" con un toque del color del bando, y etiqueta con nombre y HP.
+export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, isMine = false, onClick }: UnitMeshProps) {
   const [hovered, setHovered] = useState(false)
-
-  const stlUrl = modelUrlFor(unit.cardId)
-  const stlScale = DEFAULT_MODEL_SCALE
-  const stlGeometry = useSTLModel(stlUrl ?? '')
+  const model = useUnitModel(modelUrlFor(unit.cardId))
 
   if (!unit.position || unit.currentHp <= 0) return null
 
-  const { q, r } = unit.position
-  const [x, y, z] = hexToWorld(q, r, elevation)
-
-  const baseColor = unit.playerId === 'player1' ? '#c0393a' : '#3a6bc0'
-  const color = isSelected ? '#f5c518' : hovered ? '#ffffff' : baseColor
+  const [x, y, z] = hexToWorld(unit.position.q, unit.position.r, elevation)
+  const side = isMine ? C.ally : C.enemy
+  const body = isSelected ? '#fff2c2' : hovered ? '#ffffff' : isMine ? '#cfd9e8' : '#e3d2d2'
 
   const handlers = {
     onClick: (e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onClick?.() },
-    onPointerEnter: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true) },
-    onPointerLeave: () => setHovered(false),
+    onPointerEnter: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer' },
+    onPointerLeave: () => { setHovered(false); document.body.style.cursor = '' },
   }
 
   return (
-    <MovingGroup target={[x, y + 0.6, z]}>
-      {stlUrl && stlGeometry ? (
-        <mesh
-          ref={meshRef}
-          geometry={stlGeometry}
-          scale={stlScale}
-          rotation={[-Math.PI / 2, 0, 0]}
-          {...handlers}
-        >
-          <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} />
-        </mesh>
+    <MovingGroup target={[x, y, z]}>
+      {/* Peana */}
+      <mesh position={[0, 0.04, 0]} castShadow receiveShadow {...handlers}>
+        <cylinderGeometry args={[0.5, 0.56, 0.08, 6, 1, false, 0]} />
+        <meshStandardMaterial color="#141a2c" metalness={0.5} roughness={0.45} />
+      </mesh>
+      <mesh position={[0, 0.085, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 6]}>
+        <ringGeometry args={[0.44, 0.53, 6]} />
+        <meshBasicMaterial color={side} toneMapped={false} />
+      </mesh>
+      {isActive && <ActiveRing />}
+
+      {/* Modelo o pieza genérica */}
+      {model ? (
+        <group position={[0, 0.09, 0]}>
+          <mesh geometry={model} scale={DEFAULT_MODEL_SCALE} castShadow {...handlers}>
+            <meshStandardMaterial color={body} roughness={0.5} metalness={0.3} flatShading emissive={side} emissiveIntensity={isSelected ? 0.18 : 0.05} />
+          </mesh>
+        </group>
       ) : (
-        <mesh ref={meshRef} {...handlers}>
-          <sphereGeometry args={[0.35, 16, 16]} />
-          <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} />
-        </mesh>
+        <group position={[0, 0.6, 0]}>
+          <group {...handlers}>
+            <mesh position={[0, -0.12, 0]} castShadow>
+              <capsuleGeometry args={[0.2, 0.42, 6, 12]} />
+              <meshStandardMaterial color={body} roughness={0.45} metalness={0.35} />
+            </mesh>
+            <mesh position={[0, 0.3, 0]} castShadow>
+              <boxGeometry args={[0.26, 0.16, 0.22]} />
+              <meshStandardMaterial color={body} roughness={0.45} metalness={0.35} />
+            </mesh>
+            <mesh position={[0, 0.3, 0.115]}>
+              <boxGeometry args={[0.18, 0.04, 0.01]} />
+              <meshBasicMaterial color={side} toneMapped={false} />
+            </mesh>
+          </group>
+        </group>
       )}
 
-      {isActive && (
-        <mesh position={[0, -0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.45, 0.05, 8, 32]} />
-          <meshStandardMaterial color="#f5c518" emissive="#f5c518" emissiveIntensity={0.5} />
-        </mesh>
-      )}
-
-      <HPBar current={unit.currentHp} max={unit.maxHp} />
+      {/* Etiqueta: nombre corto + HP */}
+      <Html position={[0, 1.55, 0]} center distanceFactor={14} zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+        <UnitLabel unit={unit} side={side} active={isActive} />
+      </Html>
     </MovingGroup>
+  )
+}
+
+function UnitLabel({ unit, side, active }: { unit: Unit; side: string; active: boolean }) {
+  const ratio = unit.currentHp / unit.maxHp
+  const hp = ratio > 0.5 ? C.ok : ratio > 0.25 ? C.warn : C.danger
+  return (
+    <div style={{
+      fontFamily: FONT.display, fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap',
+      background: 'rgba(8,12,24,0.82)', border: `1px solid ${active ? C.amber : side}`, borderRadius: 4,
+      padding: '2px 7px 3px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+      boxShadow: active ? `0 0 10px ${C.amber}66` : 'none', userSelect: 'none',
+    }}>
+      <span>{unit.shortName ?? unit.name}</span>
+      <span style={{ width: 54, height: 3, background: '#2a3350', borderRadius: 2, overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: '100%', width: `${ratio * 100}%`, background: hp }} />
+      </span>
+    </div>
+  )
+}
+
+function ActiveRing() {
+  const ref = useRef<Mesh>(null)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const s = 1 + Math.sin(clock.elapsedTime * 3) * 0.06
+    ref.current.scale.set(s, s, s)
+  })
+  return (
+    <mesh ref={ref} position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 6]}>
+      <ringGeometry args={[0.6, 0.68, 6]} />
+      <meshBasicMaterial color={C.amber} toneMapped={false} transparent opacity={0.9} />
+    </mesh>
   )
 }
 
@@ -78,31 +126,9 @@ function MovingGroup({ target, children }: { target: [number, number, number]; c
     if (!g) return
     goal.current.set(target[0], target[1], target[2])
     if (!placed.current) { g.position.copy(goal.current); placed.current = true; return }
-    // Arco suave: un pequeño salto mientras se desplaza
     const dist = g.position.distanceTo(goal.current)
     g.position.lerp(goal.current, 1 - Math.exp(-delta * 7))
     g.position.y += Math.min(dist, 2) * 0.08
   })
   return <group ref={ref}>{children}</group>
-}
-
-function HPBar({ current, max }: { current: number; max: number }) {
-  const ratio = current / max
-  const barWidth = 0.6
-  const filled = barWidth * ratio
-
-  return (
-    <group position={[0, 0.5, 0]}>
-      <mesh position={[0, 0, 0]}>
-        <boxGeometry args={[barWidth, 0.08, 0.05]} />
-        <meshStandardMaterial color="#333333" />
-      </mesh>
-      <mesh position={[(filled - barWidth) / 2, 0, 0.01]}>
-        <boxGeometry args={[filled, 0.08, 0.05]} />
-        <meshStandardMaterial
-          color={ratio > 0.5 ? '#4caf50' : ratio > 0.25 ? '#ff9800' : '#e53935'}
-        />
-      </mesh>
-    </group>
-  )
 }

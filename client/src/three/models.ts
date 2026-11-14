@@ -1,21 +1,23 @@
-// Modelo STL de cada carta de unidad (por cardId). Las que no tienen modelo
-// se dibujan con una forma genérica.
+// Modelo 3D (GLB comprimido) de cada carta de unidad, por cardId. Las que no
+// tienen modelo se dibujan con una pieza genérica. Los originales STL están en
+// assets-src/models y se convierten con tools/stl-to-glb.mjs.
 const MODELS: Record<string, string> = {
-  'ST01-U01': 'Gundam.stl',
-  'PA01-U01': 'Gundam.stl',
-  'DM01-U01': 'Gundam.stl',
-  'PA01-U02': 'Guncannon.stl',
-  'DM01-U02': 'Guncannon.stl',
-  'PA01-U03': 'GunTank.stl',
-  'DM01-U03': 'GunTank.stl',
-  'ST01-U04': "Char's Zaku.stl",
-  'DM01-U04': "Char's Zaku.stl",
-  'ST01-U03': 'Barbatos.stl',
-  'DM01-U05': 'Zaku II.stl',
-  'DM01-U06': 'Zaku.stl',
+  'ST01-U01': 'Gundam.glb',
+  'PA01-U01': 'Gundam.glb',
+  'DM01-U01': 'Gundam.glb',
+  'PA01-U02': 'Guncannon.glb',
+  'DM01-U02': 'Guncannon.glb',
+  'PA01-U03': 'GunTank.glb',
+  'DM01-U03': 'GunTank.glb',
+  'ST01-U04': "Char's Zaku.glb",
+  'DM01-U04': "Char's Zaku.glb",
+  'ST01-U03': 'Barbatos.glb',
+  'DM01-U05': 'Zaku II.glb',
+  'DM01-U06': 'Zaku.glb',
 }
 
-export const DEFAULT_MODEL_SCALE: [number, number, number] = [0.02, 0.02, 0.02]
+// Los GLB ya vienen a escala del tablero
+export const DEFAULT_MODEL_SCALE: [number, number, number] = [1, 1, 1]
 
 export function modelUrlFor(cardId: string | undefined): string | null {
   const file = cardId ? MODELS[cardId] : undefined
