@@ -115,6 +115,7 @@ client/src/
   three/                  — escena 3D (GameScene: luz, niebla, cámara que sigue a la unidad activa; HexTile; UnitMesh con
                             peana, etiqueta y daño flotante; AttackTracer); models.ts asocia cardId → modelo GLB
 public/models/            — modelos GLB comprimidos con meshopt (originales STL en assets-src/models, tools/stl-to-glb.mjs)
+public/cards/             — arte oficial: units/<cardId>.webp, tactics/<cardId>.webp, portraits/<cardId>.webp (cardArt.ts)
 tools/map-editor.html     — editor de mapas
 ```
 
@@ -368,3 +369,12 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **Móvil**: Timeline de 4 rondas, ficha como hoja inferior con detalles a petición, Objetivos y registro tras un botón.
 - Informe con capturas antes / después y análisis de atractivo visual: artifact "Revisión UX Gundam Assemble".
 - Archivos: casi todo `client/src` (theme, App, components/ui/*, screens/*, three/*), `client/public/models/*.glb`, `assets-src/models/*.stl`, `tools/stl-to-glb.mjs`, `server/data/units/unit_library.json` (`shortName`), `server/data/maps/*.json`, `server/src/game/{catalog,maps,actions}.ts`, `server/src/types/units.ts` (+ copia), `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.
+
+### 2026-11-14 — Arte de las cartas, mano en abanico, fichas con retrato y ambientación
+- **Arte oficial** (aportado por el autor): cartas de unidad en la selección de escuadra y en su panel de detalle; cartas de Tactics en el mazo y en la mano; retratos circulares recortados de cada carta de unidad (`public/cards/*`, `client/src/cardArt.ts`). Las cartas de la demo siguen con su diseño de texto.
+- **Mano en abanico** (`TacticsHand`): cartas rotadas y solapadas; al pasar el ratón la carta sube y se ve ampliada encima; en móvil, el primer toque la amplía y "Jugar" la juega.
+- **Timeline con fichas circulares** (`UnitToken`): retrato, aro del color del bando y arco con los HP; la ficha también aparece en la etiqueta de cada pieza del tablero y en la ficha de la unidad.
+- **Modelos**: los GLB cuantizados guardan escala y desplazamiento en el nodo; `useUnitModel` ahora los aplica (antes el modelo quedaba descolocado respecto a su peana). Se quita la peana negra: los modelos traen la suya; queda un aro del color del bando sobre el hex. Escala 1,3 en el tablero.
+- **Ambientación**: cielo con degradado y estrellas (`SkyDome`), rocas, chatarra y matas deterministas por hex (`TerrainProps`, instanciadas), bloom y viñeta con `@react-three/postprocessing` 3.0.4 (solo escritorio; la 3.2 obliga a subir React Three Fiber, y con la 9.8 las etiquetas `Html` de drei dejaban de verse).
+- **Lobby**: "Buscar partida" usa un mapa al azar (`randomMapId`, escuadras de 3); "Contra la máquina" y "Sala privada" abren su pantalla con el mapa y el tamaño de escuadra. Test nuevo.
+- Archivos: `client/public/cards/**`, `client/src/{cardArt.ts,theme.ts}`, `client/src/components/ui/{TacticsHand,UnitToken,UnitPanel,TimelineBar,UnitCardPreview}.tsx`, `client/src/screens/{LobbyScreen,SquadSelectionScreen}.tsx`, `client/src/three/{GameScene,UnitMesh,useUnitModel,models,TerrainProps,SkyDome}.ts(x)`, `client/package.json`, `server/src/game/maps.ts`, `server/src/rooms/roomManager.ts`, tests, `GAMEPLAN.md`, `CLAUDE.md`.

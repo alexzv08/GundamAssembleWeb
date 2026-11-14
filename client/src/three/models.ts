@@ -16,8 +16,9 @@ const MODELS: Record<string, string> = {
   'DM01-U06': 'Zaku.glb',
 }
 
-// Los GLB ya vienen a escala del tablero
-export const DEFAULT_MODEL_SCALE: [number, number, number] = [1, 1, 1]
+// Los GLB vienen a escala de miniatura (~1,1 de alto); en el tablero se
+// agrandan un poco para que se lean bien frente al hex.
+export const DEFAULT_MODEL_SCALE: [number, number, number] = [1.3, 1.3, 1.3]
 
 export function modelUrlFor(cardId: string | undefined): string | null {
   const file = cardId ? MODELS[cardId] : undefined

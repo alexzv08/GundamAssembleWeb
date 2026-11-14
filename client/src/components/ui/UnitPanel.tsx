@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Unit } from '../../types/units'
 import { C, FONT, eyebrow, button, ABILITY_TYPE, chip } from '../../theme'
+import { UnitToken } from './UnitToken'
 
 interface UnitPanelProps {
     unit: Unit
@@ -72,11 +73,12 @@ export function UnitPanel({
             {/* Cabecera */}
             <div style={{
                 padding: '10px 14px 9px', borderBottom: `1px solid ${C.line}`,
-                display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start',
+                display: 'flex', gap: 10, alignItems: 'center',
                 position: 'sticky', top: 0, zIndex: 1,
                 background: `linear-gradient(180deg, ${side}1f, ${C.panelSolid} 90%)`,
             }}>
-                <div style={{ minWidth: 0 }}>
+                <UnitToken unit={unit} color={side} size={compact ? 40 : 50} active={isActive} />
+                <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 17, color: side, lineHeight: 1.15 }}>{unit.name}</span>
                         {isActive && <span style={{ ...chip(C.amber), animation: 'ga-pulse 2s infinite' }}>Activa</span>}

@@ -15,6 +15,7 @@ import { forceMove } from '../damage'
 import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize } from '../catalog'
 import { createServerGame } from '../createServerGame'
 import { RoomManager } from '../../rooms/roomManager'
+import { listMaps, randomMapId } from '../maps'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1014,5 +1015,17 @@ describe('Mapas y tamaño de escuadra', () => {
     const three = ['ST01-U01', 'ST01-U02', 'ST01-U03']
     expect('error' in rm.submitSquad('s1', three, [])).toBe(true)
     expect(rm.createRoom('s3', 'X', 'u3', { mapId: '../../etc' }).mapId).toBe('DemoMap')
+  })
+
+  it('las partidas públicas usan un mapa al azar entre los oficiales', () => {
+    const ids = new Set(listMaps().map(m => m.id))
+    const seen = new Set<string>()
+    for (let i = 0; i < 40; i++) seen.add(randomMapId())
+    seen.forEach(id => expect(ids.has(id)).toBe(true))
+    expect(randomMapId(() => 0)).not.toBe(randomMapId(() => 0.99))
+    const rm = new RoomManager()
+    rm.joinQueue('a', 'A', 'ua')
+    const r = rm.joinQueue('b', 'B', 'ub') as { room?: { mapId: string } }
+    expect(ids.has(r.room!.mapId)).toBe(true)
   })
 })

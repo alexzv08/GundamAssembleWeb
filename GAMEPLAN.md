@@ -131,6 +131,9 @@ Fuentes oficiales:
 - ✅ Animación de movimiento, sonidos (con botón de silencio), chat, selector de mapa con miniatura
 - ✅ Rediseño visual (revisión de UX): sistema de colores relativo (tú cian, rival rojo), tipografía, HUD por zonas, acciones visibles sin pulsar el modelo, cámara que sigue a la unidad activa, bandeja de dados, daño flotante, trazo de ataque, HUD para móvil
 - ✅ Modelos GLB comprimidos con meshopt (1,6 MB en lugar de 143 MB de STL)
+- ✅ Arte oficial de las cartas de unidad y de Tactics (escuadra, mazo, mano en abanico) y retratos circulares en la Timeline, el tablero y la ficha
+- ✅ Bloom y viñeta, cielo estrellado y decorado de terreno (rocas, chatarra, matas)
+- ✅ Partida pública con mapa al azar; mapa a elegir en salas privadas y contra la máquina
 - ⚠️ 9 de las 15 unidades oficiales no tienen modelo 3D (se dibuja una pieza genérica) y los modelos no están pintados
 - ❌ Colocar a mano la plantilla de AoE (cono / flor)
-- ❌ Postprocesado (bloom, oclusión ambiental), props de terreno y efectos distintos por arma
+- ❌ Oclusión ambiental y efectos distintos por arma

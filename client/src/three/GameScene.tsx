@@ -8,6 +8,9 @@ import { GameBoard } from './GameBoard'
 import { UnitMesh } from './UnitMesh'
 import { RwsMesh } from './RwsMesh'
 import { AttackTracer } from './AttackTracer'
+import { TerrainProps } from './TerrainProps'
+import { SkyDome } from './SkyDome'
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
 import { hexKey } from '../game/hexGrid'
 import { hexToWorld } from './hexUtils'
 import { C } from '../theme'
@@ -54,7 +57,8 @@ export function GameScene({
     <Canvas style={{ width: '100%', height: '100%', background: C.bgDeep }} shadows dpr={[1, 2]}
       camera={{ position: [bounds.cx, camDist * 0.85, bounds.cz + camDist * 0.75], fov: 42 }}>
       <color attach="background" args={[C.bgDeep]} />
-      <fog attach="fog" args={[C.bgDeep, camDist * 1.1, camDist * 2.6]} />
+      <fog attach="fog" args={['#0b1729', camDist * 1.2, camDist * 3]} />
+      <SkyDome radius={Math.max(90, camDist * 4)} />
 
       <OrbitControlsWithFocus target={[bounds.cx, 0, bounds.cz]} focusKey={focusKey ?? null} gameState={gameState} maxDistance={camDist * 1.8} />
 
@@ -74,6 +78,7 @@ export function GameScene({
       <gridHelper args={[bounds.size * 2.2, Math.round(bounds.size * 1.1), '#1d4a66', '#11233a']} position={[bounds.cx, -0.41, bounds.cz]} />
 
       <Suspense fallback={null}>
+        <TerrainProps board={gameState.board} />
         <GameBoard
           board={gameState.board}
           myPlayerId={myPlayerId}
@@ -110,6 +115,15 @@ export function GameScene({
           />
         ))}
       </Suspense>
+
+      {/* Postprocesado: los brillos (resaltados, peanas, haces de los Objetivos)
+          irradian y una viñeta suave centra la mirada. Solo en escritorio. */}
+      {!compact && (
+        <EffectComposer multisampling={4}>
+          <Bloom mipmapBlur intensity={0.75} luminanceThreshold={0.62} luminanceSmoothing={0.2} />
+          <Vignette offset={0.32} darkness={0.62} />
+        </EffectComposer>
+      )}
     </Canvas>
   )
 }

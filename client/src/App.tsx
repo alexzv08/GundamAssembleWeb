@@ -925,7 +925,7 @@ export default function App() {
     : gameState.pendingResponse && gameState.pendingResponse.forPlayerId !== myPlayerId ? 'Esperando la respuesta del rival…' : message
 
   const handStrip = hasHandStrip && myPlayerId && (
-    <div style={{ height: isMobile ? 132 : HAND_STRIP_H, flexShrink: 0, background: C.bgDeep, borderTop: `1px solid ${C.line}` }}>
+    <div style={{ height: isMobile ? 132 : HAND_STRIP_H, flexShrink: 0, background: `linear-gradient(180deg, ${C.bg}, ${C.bgDeep})`, borderTop: `1px solid ${C.line}`, position: 'relative', zIndex: 20 }}>
       <TacticsHand
         hand={gameState.players[myPlayerId].tactics.hand}
         isMyTurn={isMyTurn}

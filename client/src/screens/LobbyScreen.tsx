@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { ProfileModal } from '../components/ui/ProfileModal'
 import { MapThumb } from '../components/ui/MapThumb'
@@ -46,6 +47,8 @@ export function LobbyScreen({
   onFindMatch, onCancelMatch, onCreateRoom, onJoinRoom, onPlayBot, maps, mapId, onMapIdChange, squadSize, onSquadSizeChange,
 }: LobbyScreenProps) {
   const mobile = useIsMobile()
+  // Contra la máquina también deja elegir mapa y tamaño antes de empezar
+  const [botSetup, setBotSetup] = useState(false)
   const canPlay = playerName.trim().length > 0 && connected
 
   return (
@@ -63,8 +66,8 @@ export function LobbyScreen({
         <h1 style={{ fontSize: mobile ? 44 : 76, lineHeight: 0.95, fontWeight: 700, letterSpacing: '0.04em' }}>ASSEMBLE</h1>
         <span style={{ fontFamily: FONT.mono, fontSize: 12, color: C.textSoft, letterSpacing: '0.18em', textTransform: 'uppercase' }}>Simulador táctico · Core Rulebook v1.2</span>
         {!mobile && (
-          <div style={{ width: '100%', maxWidth: 520, height: 340, marginTop: 8 }} aria-hidden>
-            <UnitModelViewer cardId="ST01-U01" />
+          <div style={{ width: '100%', maxWidth: 560, height: 420, marginTop: 8 }} aria-hidden>
+            <UnitModelViewer cardId="ST01-U01" distance={2.75} />
           </div>
         )}
       </div>
@@ -92,9 +95,12 @@ export function LobbyScreen({
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={eyebrow}>Mapa (contra la máquina y salas privadas)</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+            {lobbyMode === 'main' && botSetup ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Partida contra la máquina</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={eyebrow}>Mapa</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
                 {maps.map(m => (
                   <button key={m.id} type="button" onClick={() => onMapIdChange(m.id)} aria-pressed={mapId === m.id}
                     style={{
@@ -109,32 +115,60 @@ export function LobbyScreen({
                   </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Tamaño de escuadra">
+                  <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Tamaño de escuadra">
                 {[3, 5].map(n => (
                   <button key={n} type="button" role="radio" aria-checked={squadSize === n} onClick={() => onSquadSizeChange(n)}
                     style={{ ...button(squadSize === n ? 'primary' : 'subtle'), flex: 1 }}>Escuadras de {n}</button>
                 ))}
               </div>
             </div>
-
-            {lobbyMode === 'main' ? (
+                <button disabled={!canPlay} onClick={onPlayBot} style={{ ...button('amber', !canPlay), padding: 12, fontWeight: 600 }}>Empezar</button>
+                <button onClick={() => setBotSetup(false)} style={button('ghost')}>Volver</button>
+              </div>
+            ) : lobbyMode === 'main' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <button disabled={!canPlay} onClick={onFindMatch} style={{ ...button('amber', !canPlay), padding: 13, fontSize: 15, fontWeight: 600 }}>
                   Buscar partida
                 </button>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button disabled={!canPlay} onClick={onPlayBot} title="Partida de práctica contra la IA del servidor" style={{ ...button('primary', !canPlay), flex: 1, padding: 11 }}>
+                  <button disabled={!canPlay} onClick={() => setBotSetup(true)} title="Partida de práctica contra la IA del servidor" style={{ ...button('primary', !canPlay), flex: 1, padding: 11 }}>
                     Contra la máquina
                   </button>
                   <button disabled={!canPlay} onClick={() => onSetLobbyMode('private')} style={{ ...button('ghost', !canPlay), flex: 1, padding: 11 }}>
                     Sala privada
                   </button>
                 </div>
-                <span style={{ fontSize: 11.5, color: C.textDim }}>Buscar partida usa el mapa estándar y escuadras de 3.</span>
+                <span style={{ fontSize: 11.5, color: C.textDim }}>Buscar partida te empareja con otro jugador en un mapa al azar, con escuadras de 3. En una sala privada eliges tú el mapa.</span>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Sala privada</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={eyebrow}>Mapa</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                {maps.map(m => (
+                  <button key={m.id} type="button" onClick={() => onMapIdChange(m.id)} aria-pressed={mapId === m.id}
+                    style={{
+                      display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, cursor: 'pointer', color: C.text,
+                      background: mapId === m.id ? `${C.ally}14` : C.panelSolid, border: `1px solid ${mapId === m.id ? C.ally : C.line}`,
+                    }}>
+                    <MapThumb mapId={m.id} size={74} />
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <b style={{ fontFamily: FONT.display, fontSize: 14.5 }}>{m.name}</b>
+                      {m.description && <span style={{ fontSize: 12, color: C.textSoft, lineHeight: 1.35 }}>{m.description}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+                  <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Tamaño de escuadra">
+                {[3, 5].map(n => (
+                  <button key={n} type="button" role="radio" aria-checked={squadSize === n} onClick={() => onSquadSizeChange(n)}
+                    style={{ ...button(squadSize === n ? 'primary' : 'subtle'), flex: 1 }}>Escuadras de {n}</button>
+                ))}
+              </div>
+            </div>
                 <button onClick={onCreateRoom} disabled={!canPlay} style={{ ...button('amber', !canPlay), padding: 12, fontWeight: 600 }}>Crear sala con este mapa</button>
+                <span style={eyebrow}>O únete a la sala de otro jugador</span>
                 <form style={{ display: 'flex', gap: 8 }} onSubmit={e => { e.preventDefault(); onJoinRoom() }}>
                   <input id="room-code" value={roomInput} onChange={e => onRoomInputChange(e.target.value.toUpperCase())} placeholder="Código de sala" maxLength={6}
                     style={{ ...input, flex: 1, minWidth: 0, fontFamily: FONT.mono, letterSpacing: '0.2em' }} />

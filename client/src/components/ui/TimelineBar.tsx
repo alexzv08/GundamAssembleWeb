@@ -1,5 +1,6 @@
 import type { GameState, PlayerId } from '../../types/gameState'
 import { C, FONT, sideColor } from '../../theme'
+import { UnitToken } from './UnitToken'
 
 interface TimelineBarProps {
     gameState: GameState
@@ -17,44 +18,28 @@ export function TimelineBar({ gameState, myPlayerId, compact = false }: Timeline
     const rival: PlayerId = me === 'player1' ? 'player2' : 'player1'
     const current = timeline.slots.find(s => s.tokens.length > 0)?.round ?? 1
     // Ventana de rondas: la actual y las siguientes (las fichas nunca retroceden).
-    // En escritorio caben 12 columnas con el nombre corto entero; en móvil, 4.
-    const first = Math.max(1, Math.min(current, 21 - (compact ? 4 : 12)))
-    const slots = timeline.slots.filter(s => s.round >= first && s.round < first + (compact ? 4 : 12))
+    // Fichas circulares con el retrato de la unidad: 12 rondas en escritorio, 6 en móvil.
+    const first = Math.max(1, Math.min(current, 21 - (compact ? 6 : 12)))
+    const slots = timeline.slots.filter(s => s.round >= first && s.round < first + (compact ? 6 : 12))
 
+    const size = compact ? 28 : 38
     const lane = (player: PlayerId) => (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))`, minHeight: compact ? 26 : 30 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))`, minHeight: size + 6 }}>
             {slots.map(slot => (
                 <div key={slot.round} style={{
-                    display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 2px',
+                    display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3px 2px',
                     borderLeft: slot.round === 11 ? `2px solid ${C.amber}88` : `1px solid ${C.line}55`,
                     background: slot.round === current ? `${C.amber}0f` : 'transparent',
                 }}>
-                    {slot.tokens.filter(t => t.playerId === player).map(t => {
+                    {slot.tokens.filter(t => t.playerId === player).map((t, i) => {
                         const u = units[t.unitId]
                         if (!u) return null
-                        const color = sideColor(player, myPlayerId)
-                        const active = t.unitId === activeUnitId
-                        const hp = u.currentHp / u.maxHp
                         return (
-                            <div key={t.unitId}
-                                title={`${u.name} · HP ${u.currentHp}/${u.maxHp} · ronda ${slot.round}${u.position ? '' : ' · en la Reserva'}`}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: 4, minWidth: 0,
-                                    background: active ? `${C.amber}26` : `${color}1a`,
-                                    border: `1px solid ${active ? C.amber : color + '88'}`,
-                                    borderRadius: 3, padding: '1px 4px',
-                                    boxShadow: active ? `0 0 8px ${C.amber}66` : 'none',
-                                    opacity: u.position || active ? 1 : 0.7,
-                                }}>
-                                <span style={{
-                                    fontFamily: FONT.body, fontSize: 10.5, fontWeight: active ? 600 : 500,
-                                    color: active ? C.text : C.textSoft, flex: 1, minWidth: 0,
-                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                }}>{u.shortName ?? u.name}</span>
-                                {!compact && <span style={{ width: 14, height: 3, background: C.line, borderRadius: 2, flexShrink: 0, overflow: 'hidden' }}>
-                                    <span style={{ display: 'block', height: '100%', width: `${hp * 100}%`, background: hp > 0.5 ? C.ok : hp > 0.25 ? C.warn : C.danger }} />
-                                </span>}
-                            </div>
+                            <span key={t.unitId} style={{ marginLeft: i > 0 ? -size * 0.35 : 0 }}>
+                                <UnitToken unit={u} color={sideColor(player, myPlayerId)} size={size}
+                                    active={t.unitId === activeUnitId} dim={!u.position && t.unitId !== activeUnitId}
+                                    title={`${u.name} · HP ${u.currentHp}/${u.maxHp} · ronda ${slot.round}${u.position ? '' : ' · en la Reserva'}`} />
+                            </span>
                         )
                     })}
                 </div>

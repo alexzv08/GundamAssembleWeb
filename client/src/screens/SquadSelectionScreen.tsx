@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { UnitCardPreview, UnitModelViewer } from '../components/ui/UnitCardPreview'
-import { CardFace } from '../components/ui/TacticsHand'
+import { CardArt } from '../components/ui/TacticsHand'
+import { unitCardArt } from '../cardArt'
 import type { UnitCardData, TacticsCardData } from '../api/gameData'
 import type { TacticsCard } from '../types/tactics'
 import { DEFAULT_SQUAD_SIZE, requiredDeckSize, cardRestriction, validateSquad, type DeckCard } from '../game/deckRules'
@@ -98,7 +99,7 @@ export function SquadSelectionScreen({
       <div style={{ padding: '18px max(16px, env(safe-area-inset-left, 0px)) 12px', borderBottom: `1px solid ${C.line}` }}>{header}</div>
 
       {squadStep === 'units' && (
-        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0, 1fr) 360px', overflow: mobile ? 'auto' : 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0, 1fr) 380px', overflow: mobile ? 'auto' : 'hidden' }}>
           <div style={{ minHeight: 0, overflowY: mobile ? 'visible' : 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {sets.map(s => filterChip(setFilter === s, s === 'Todas' ? 'Todos los sets' : s, () => setSetFilter(s)))}
@@ -106,7 +107,7 @@ export function SquadSelectionScreen({
             <p style={{ color: C.textSoft, fontSize: 13 }}>
               Elige {MAX_SQUAD} unidades. No se repiten, salvo las Mass Produced (vuelve a pulsarla para añadir otra copia). Pulsa una elegida para quitarla.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
               {units.map(card => {
                 const copies = selectedSquad.filter(id => id === card.cardId).length
                 const canSelect = selectedSquad.length < MAX_SQUAD && (copies === 0 || card.traits.includes('Mass Produced'))
@@ -122,7 +123,10 @@ export function SquadSelectionScreen({
           {/* Detalle de la unidad */}
           {detail && (
             <aside style={{ borderLeft: mobile ? 'none' : `1px solid ${C.line}`, borderTop: mobile ? `1px solid ${C.line}` : 'none', background: C.panelSolid, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: 220, flexShrink: 0, background: `radial-gradient(circle at 50% 60%, ${C.allyDeep}, ${C.bgDeep} 70%)` }}>
+              {unitCardArt(detail.cardId) && (
+                <img src={unitCardArt(detail.cardId)!} alt={`Carta de ${detail.name}`} style={{ display: 'block', width: '100%', aspectRatio: '800 / 567', objectFit: 'cover', borderBottom: `1px solid ${C.line}` }} />
+              )}
+              <div style={{ height: 200, flexShrink: 0, background: `radial-gradient(circle at 50% 60%, ${C.allyDeep}, ${C.bgDeep} 70%)` }}>
                 <UnitModelViewer key={detail.cardId} cardId={detail.cardId} />
               </div>
               <div style={{ padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -163,7 +167,7 @@ export function SquadSelectionScreen({
       )}
 
       {squadStep === 'deck' && (
-        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0, 1fr) 300px', overflow: mobile ? 'auto' : 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'minmax(0, 1fr) 340px', overflow: mobile ? 'auto' : 'hidden' }}>
           <div style={{ minHeight: 0, overflowY: mobile ? 'visible' : 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {([['all', 'Todas'], ['attack', 'Attack'], ['command', 'Command'], ['response', 'Response']] as [TypeFilter, string][])
@@ -180,7 +184,7 @@ export function SquadSelectionScreen({
                   ? `Tu escuadra solo puede usar ${deckSize} cartas: inclúyelas todas.`
                   : `Elige ${deckSize} cartas distintas. Las que tienen rasgo o firma exigen una unidad que lo tenga.`}
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
               {cards.map(card => {
                 const isSelected = selectedDeck.includes(card.cardId)
                 const restriction = cardRestriction(toDeckCard(card), squadCards)
@@ -191,10 +195,10 @@ export function SquadSelectionScreen({
                     title={restriction ?? undefined}
                     onClick={() => canToggle && onToggleCard(card.cardId)}
                     onMouseEnter={() => setFocusCard(card.cardId)} onFocus={() => setFocusCard(card.cardId)}
-                    style={{ padding: 0, border: 'none', background: 'none', textAlign: 'left', cursor: canToggle ? 'pointer' : 'not-allowed', height: 176, position: 'relative', color: 'inherit' }}>
-                    <CardFace card={toTactics(card)} playable={!blocked || isSelected} selected={isSelected} fluid />
-                    {isSelected && <span style={{ ...chip(C.amber), position: 'absolute', bottom: 8, right: 8, background: C.amberDeep }}>En el mazo</span>}
-                    {restriction && <span style={{ ...chip(C.textDim), position: 'absolute', bottom: 8, left: 8, background: C.panelSolid }}>No disponible</span>}
+                    style={{ padding: 0, border: 'none', background: 'none', textAlign: 'left', cursor: canToggle ? 'pointer' : 'not-allowed', aspectRatio: '560 / 783', position: 'relative', color: 'inherit', opacity: blocked && !isSelected ? 0.4 : 1 }}>
+                    <CardArt card={toTactics(card)} playable={!blocked || isSelected} selected={isSelected} />
+                    {isSelected && <span style={{ ...chip(C.amber), position: 'absolute', top: 6, right: 6, background: C.amberDeep }}>En el mazo</span>}
+                    {restriction && <span style={{ ...chip(C.textSoft), position: 'absolute', top: 6, right: 6, background: C.panelSolid }}>No disponible</span>}
                   </button>
                 )
               })}
@@ -204,7 +208,7 @@ export function SquadSelectionScreen({
             <aside style={{ borderLeft: `1px solid ${C.line}`, background: C.panelSolid, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
               <div style={eyebrow}>Carta</div>
               {preview
-                ? <CardFace card={toTactics(preview)} playable large fluid />
+                ? <CardArt card={toTactics(preview)} playable large />
                 : <p style={{ color: C.textDim, fontSize: 13 }}>Pasa el ratón por una carta para leerla entera.</p>}
               {preview && cardRestriction(toDeckCard(preview), squadCards) && (
                 <p style={{ color: C.warn, fontSize: 12.5 }}>{cardRestriction(toDeckCard(preview), squadCards)}</p>

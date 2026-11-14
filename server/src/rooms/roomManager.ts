@@ -4,7 +4,7 @@ import { randomInt } from 'crypto'
 import { startGame } from '../game/activation'
 import { createServerGame } from '../game/createServerGame'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from '../game/catalog'
-import { mapExists } from '../game/maps'
+import { mapExists, randomMapId } from '../game/maps'
 import { randomSquad, randomDeck } from '../game/bot'
 
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
@@ -158,7 +158,8 @@ export class RoomManager {
 
         if (this.matchmakingQueue.length > 0) {
             const opponent = this.matchmakingQueue.shift()!
-            const room = this.createRoom(opponent.socketId, opponent.playerName, opponent.userId)
+            // Partida pública: mapa al azar entre los oficiales, escuadras de 3
+            const room = this.createRoom(opponent.socketId, opponent.playerName, opponent.userId, { mapId: randomMapId() })
             this.joinRoom(room.id, socketId, playerName, userId)
             return { matched: true, room, p1SocketId: opponent.socketId }
         }

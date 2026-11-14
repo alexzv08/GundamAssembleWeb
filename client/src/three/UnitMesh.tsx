@@ -7,6 +7,7 @@ import { hexToWorld } from './hexUtils'
 import { useUnitModel } from './useUnitModel'
 import { modelUrlFor, DEFAULT_MODEL_SCALE } from './models'
 import { C, FONT } from '../theme'
+import { UnitToken } from '../components/ui/UnitToken'
 
 interface UnitMeshProps {
   unit: Unit
@@ -38,20 +39,26 @@ export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = f
 
   return (
     <MovingGroup target={[x, y, z]}>
-      {/* Peana */}
-      <mesh position={[0, 0.04, 0]} castShadow receiveShadow {...handlers}>
-        <cylinderGeometry args={[0.5, 0.56, 0.08, 6, 1, false, 0]} />
-        <meshStandardMaterial color="#141a2c" metalness={0.5} roughness={0.45} />
+      {/* Aro del bando sobre el hex (los modelos traen su propia peana, como las miniaturas) */}
+      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 6]}>
+        <ringGeometry args={[0.6, 0.7, 6]} />
+        <meshBasicMaterial color={side} toneMapped={false} transparent opacity={0.95} />
       </mesh>
-      <mesh position={[0, 0.085, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 6]}>
-        <ringGeometry args={[0.44, 0.53, 6]} />
-        <meshBasicMaterial color={side} toneMapped={false} />
+      <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.6, 32]} />
+        <meshBasicMaterial color={side} transparent opacity={0.16} depthWrite={false} toneMapped={false} />
       </mesh>
+      {!model && (
+        <mesh position={[0, 0.04, 0]} castShadow receiveShadow {...handlers}>
+          <cylinderGeometry args={[0.42, 0.46, 0.08, 24]} />
+          <meshStandardMaterial color="#cfd6e3" metalness={0.2} roughness={0.6} />
+        </mesh>
+      )}
       {isActive && <ActiveRing />}
 
       {/* Modelo o pieza genérica */}
       {model ? (
-        <group position={[0, 0.09, 0]}>
+        <group position={[0, 0.005, 0]}>
           <mesh geometry={model} scale={DEFAULT_MODEL_SCALE} castShadow {...handlers}>
             <meshStandardMaterial color={body} roughness={0.5} metalness={0.3} flatShading emissive={side} emissiveIntensity={isSelected ? 0.18 : 0.05} />
           </mesh>
@@ -116,13 +123,16 @@ function UnitLabel({ unit, side, active }: { unit: Unit; side: string; active: b
   return (
     <div style={{
       fontFamily: FONT.display, fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap',
-      background: 'rgba(8,12,24,0.82)', border: `1px solid ${active ? C.amber : side}`, borderRadius: 4,
-      padding: '2px 7px 3px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+      background: 'rgba(8,12,24,0.85)', border: `1px solid ${active ? C.amber : side}`, borderRadius: 20,
+      padding: '2px 9px 2px 2px', display: 'flex', alignItems: 'center', gap: 6,
       boxShadow: active ? `0 0 10px ${C.amber}66` : 'none', userSelect: 'none',
     }}>
-      <span>{unit.shortName ?? unit.name}</span>
-      <span style={{ width: 54, height: 3, background: '#2a3350', borderRadius: 2, overflow: 'hidden' }}>
-        <span style={{ display: 'block', height: '100%', width: `${ratio * 100}%`, background: hp }} />
+      <UnitToken unit={unit} color={side} size={26} />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span>{unit.shortName ?? unit.name}</span>
+        <span style={{ width: 54, height: 3, background: '#2a3350', borderRadius: 2, overflow: 'hidden' }}>
+          <span style={{ display: 'block', height: '100%', width: `${ratio * 100}%`, background: hp }} />
+        </span>
       </span>
     </div>
   )
@@ -137,7 +147,7 @@ function ActiveRing() {
   })
   return (
     <mesh ref={ref} position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 6]}>
-      <ringGeometry args={[0.6, 0.68, 6]} />
+      <ringGeometry args={[0.74, 0.82, 6]} />
       <meshBasicMaterial color={C.amber} toneMapped={false} transparent opacity={0.9} />
     </mesh>
   )

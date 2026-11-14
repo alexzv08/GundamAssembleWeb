@@ -26,3 +26,9 @@ export function listMaps(): MapSummary[] {
 export function mapExists(id: string): boolean {
     return SAFE_ID.test(id) && fs.existsSync(path.join(MAPS_DIR, `${id}.json`))
 }
+
+// Mapa al azar para las partidas públicas (solo los de escuadras de 3)
+export function randomMapId(random: () => number = Math.random): string {
+    const maps = listMaps().filter(m => m.squadSize === 3)
+    return maps.length ? maps[Math.floor(random() * maps.length)].id : 'DemoMap'
+}
