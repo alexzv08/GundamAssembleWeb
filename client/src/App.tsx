@@ -974,7 +974,7 @@ export default function App() {
           onClick={() => { setMuted(!muted); setMutedState(!muted) }}
           aria-label={muted ? 'Activar sonido' : 'Silenciar'}
           title={muted ? 'Activar sonido' : 'Silenciar'}
-          style={{ position: 'absolute', top: 12, left: 66, zIndex: 25, background: 'rgba(10,10,20,0.9)', border: '1px solid #444', borderRadius: 8, color: 'white', padding: '6px 10px', cursor: 'pointer', fontSize: 13 }}
+          style={{ position: 'absolute', bottom: 16, right: 164, zIndex: 25, background: 'rgba(10,10,20,0.9)', border: '1px solid #444', borderRadius: 8, color: 'white', padding: '6px 10px', cursor: 'pointer', fontSize: 13 }}
         >
           {muted ? '🔇' : '🔊'}
         </button>

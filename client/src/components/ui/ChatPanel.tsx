@@ -28,7 +28,7 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
   }
 
   return (
-    <div style={{ position: 'absolute', top: 12, left: 16, zIndex: 25, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+    <div style={{ position: 'absolute', bottom: 16, right: 112, zIndex: 25, display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-end', gap: 6 }}>
       <button
         onClick={() => { setOpen(o => !o); setSeen(messages.length) }}
         aria-label="Chat"
