@@ -5,9 +5,13 @@ interface GameOverModalProps {
   gameState: GameState
   myPlayerId?: PlayerId | null
   onReturnToLobby: () => void
+  /** Revancha: 'none' sin pedir, 'sent' pedida por mí, 'rival' la pide el rival, 'unavailable' el rival se fue */
+  rematch?: 'none' | 'sent' | 'rival' | 'unavailable'
+  onRematch?: () => void
+  onWatchReplay?: () => void
 }
 
-export function GameOverModal({ gameState, myPlayerId = null, onReturnToLobby }: GameOverModalProps) {
+export function GameOverModal({ gameState, myPlayerId = null, onReturnToLobby, rematch = 'none', onRematch, onWatchReplay }: GameOverModalProps) {
   const w = gameState.winner
   const won = w && w === myPlayerId
   const title = !w ? 'Empate' : myPlayerId ? (won ? 'Victoria' : 'Derrota') : `Gana ${gameState.players[w].name}`
@@ -28,7 +32,17 @@ export function GameOverModal({ gameState, myPlayerId = null, onReturnToLobby }:
             </div>
           ))}
         </div>
-        <button onClick={onReturnToLobby} style={{ ...button('amber'), padding: '10px 24px', fontSize: 14.5 }}>Volver al lobby</button>
+        {rematch === 'rival' && <span style={{ color: C.amber, fontSize: 13 }}>Tu rival quiere la revancha</span>}
+        {rematch === 'unavailable' && <span style={{ color: C.textSoft, fontSize: 13 }}>Tu rival ha salido de la sala</span>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {onRematch && rematch !== 'unavailable' && (
+            <button onClick={onRematch} disabled={rematch === 'sent'} style={{ ...button('amber', rematch === 'sent'), padding: '10px 20px', fontSize: 14.5 }}>
+              {rematch === 'sent' ? 'Esperando al rival…' : rematch === 'rival' ? 'Aceptar la revancha' : 'Revancha'}
+            </button>
+          )}
+          {onWatchReplay && <button onClick={onWatchReplay} style={{ ...button('primary'), padding: '10px 20px', fontSize: 14.5 }}>Ver repetición</button>}
+          <button onClick={onReturnToLobby} style={{ ...button(onRematch ? 'ghost' : 'amber'), padding: '10px 20px', fontSize: 14.5 }}>Volver al lobby</button>
+        </div>
       </div>
     </div>
   )

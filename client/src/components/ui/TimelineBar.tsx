@@ -56,7 +56,7 @@ export function TimelineBar({ gameState, myPlayerId, compact = false }: Timeline
                 background: `linear-gradient(180deg, ${color}1c, transparent)`, borderBottom: `2px solid ${color}`,
             }}>
                 <span style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: '0.12em', color, textTransform: 'uppercase', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {player === me ? 'Tú' : players[player].name}
+                    {player === myPlayerId ? 'Tú' : players[player].name}
                 </span>
                 <span style={{ fontFamily: FONT.display, fontSize: compact ? 22 : 28, fontWeight: 700, lineHeight: 1, color: C.text }}>{players[player].vp}</span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 9, color: C.textDim }}>VP</span>

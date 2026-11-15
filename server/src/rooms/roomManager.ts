@@ -291,7 +291,7 @@ export class RoomManager {
     addSpectator(socketId: string, roomId: string): Room | { error: string } {
         const room = this.rooms.get(roomId)
         if (!room) return { error: 'Sala no encontrada' }
-        if (!room.gameState || room.status === 'waiting' || room.status === 'squad_selection') return { error: 'La partida aún no ha empezado' }
+        if (!room.gameState || room.gameState.phase === 'setup' || room.status === 'waiting' || room.status === 'squad_selection') return { error: 'La partida aún no ha empezado' }
         if (this.socketToRoom.has(socketId)) return { error: 'Ya estás jugando en una sala' }
         this.spectators.set(socketId, roomId)
         return room
@@ -362,7 +362,8 @@ export class RoomManager {
         const replay = {
             ...room.record,
             summary: summarize(id, room.record, final, room.mapId, !!room.vsBot),
-            userIds: room.players.map(p => p.userId).filter(u => u !== BOT_USER_ID),
+            // En orden de jugador (player1, player2): sirve para saber con qué bando jugó cada uno
+            userIds: [...room.players].sort((a, b) => a.playerId.localeCompare(b.playerId)).map(p => p.userId),
         }
         this.replays.save(replay).catch(e => console.error('[replays]', e))
         return id

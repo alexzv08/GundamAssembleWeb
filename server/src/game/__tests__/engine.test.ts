@@ -1315,6 +1315,7 @@ describe('Repeticiones', () => {
     await store.save({ initial: g, steps: [], summary, userIds: ['u1', 'u2'] })
     expect((await store.load('abc123'))?.summary.id).toBe('abc123')
     expect(await store.listFor('u1')).toHaveLength(1)
+    expect((await store.listFor('u2'))[0].mySide).toBe('player2')
     expect(await store.listFor('otro')).toHaveLength(0)
     expect(await store.load('../index')).toBeNull()
   })

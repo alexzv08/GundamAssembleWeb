@@ -3,7 +3,8 @@
 // acciones aceptadas, cada una con los dados que se tiraron al resolverla. Para
 // verla, el servidor vuelve a ejecutar el motor con esos mismos dados: así se
 // guarda poco (unos KB en vez de un estado por paso) y la repetición es exacta.
-import type { GameAction, GameState, PlayerId } from '../types'
+import type { GameAction, GameState, PlayerId, ReplaySummary } from '../types'
+export type { ReplaySummary }
 import { processAction, type ProcessOptions, type ProcessResult } from './engine'
 import { rollD10, type Rng } from './combat'
 import { cloneState } from './damage'
@@ -20,18 +21,6 @@ export interface ReplayStep {
 export interface ReplayRecord {
     initial: GameState
     steps: ReplayStep[]
-}
-
-export interface ReplaySummary {
-    id: string
-    createdAt: string
-    mapId: string
-    players: { player1: string; player2: string }
-    winner: PlayerId | null
-    winReason: string
-    vp: { player1: number; player2: number }
-    steps: number
-    vsBot: boolean
 }
 
 export interface Replay extends ReplayRecord {

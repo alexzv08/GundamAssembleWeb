@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReplaySummary } from '../types/gameState'
 import type { User } from '@supabase/supabase-js'
 import { ProfileModal } from '../components/ui/ProfileModal'
 import { MapThumb } from '../components/ui/MapThumb'
@@ -32,6 +33,9 @@ interface LobbyScreenProps {
   onMapIdChange: (id: string) => void
   squadSize: number
   onSquadSizeChange: (n: number) => void
+  onSpectate: () => void
+  onListReplays: () => Promise<ReplaySummary[]>
+  onOpenReplay: (id: string) => void
 }
 
 const input: React.CSSProperties = {
@@ -45,12 +49,19 @@ export function LobbyScreen({
   user, profile, connected, playerName, onPlayerNameChange, isSearching, lobbyMode, onSetLobbyMode,
   lobbyError, onClearLobbyError, roomInput, onRoomInputChange, showProfile, onShowProfile, onProfileUpdated,
   onFindMatch, onCancelMatch, onCreateRoom, onJoinRoom, onPlayBot, maps, mapId, onMapIdChange, squadSize, onSquadSizeChange,
+  onSpectate, onListReplays, onOpenReplay,
 }: LobbyScreenProps) {
   const mobile = useIsMobile()
   // Contra la máquina también deja elegir mapa y tamaño antes de empezar
   const [botSetup, setBotSetup] = useState(false)
   const [botLevel, setBotLevel] = useState<'facil' | 'normal' | 'dificil'>('normal')
   const canPlay = playerName.trim().length > 0 && connected
+  const [replays, setReplays] = useState<ReplaySummary[] | null>(null)
+  const [loadingReplays, setLoadingReplays] = useState(false)
+  const openReplays = () => {
+    setLoadingReplays(true)
+    onListReplays().then(setReplays).catch(() => setReplays([])).finally(() => setLoadingReplays(false))
+  }
 
   return (
     <div style={{
@@ -96,7 +107,34 @@ export function LobbyScreen({
           </div>
         ) : (
           <>
-            {lobbyMode === 'main' && botSetup ? (
+            {lobbyMode === 'main' && replays ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Tus repeticiones</span>
+                {replays.length === 0 && <span style={{ color: C.textSoft, fontSize: 13 }}>Aún no hay partidas terminadas. Al acabar una, aparecerá aquí.</span>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+                  {replays.map(r => {
+                    const me = r.mySide ?? null
+                    const result = !r.winner ? 'Empate' : me ? (r.winner === me ? 'Victoria' : 'Derrota') : `Gana ${r.players[r.winner]}`
+                    const color = !r.winner ? C.textSoft : me ? (r.winner === me ? C.amber : C.enemy) : C.text
+                    return (
+                      <button key={r.id} type="button" onClick={() => onOpenReplay(r.id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: C.text, background: C.panelSolid, border: `1px solid ${C.line}` }}>
+                        <MapThumb mapId={r.mapId} size={44} />
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                          <b style={{ fontFamily: FONT.display, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.players.player1} vs {r.players.player2}</b>
+                          <span style={{ fontSize: 11.5, color: C.textSoft }}>{new Date(r.createdAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })} · {r.steps} {r.steps === 1 ? 'paso' : 'pasos'}{r.vsBot ? ' · contra la máquina' : ''}</span>
+                        </span>
+                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                          <span style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 13, color, textTransform: 'uppercase' }}>{result}</span>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: C.textSoft }}>{r.vp.player1}–{r.vp.player2} VP</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <button onClick={() => setReplays(null)} style={button('ghost')}>Volver</button>
+              </div>
+            ) : lobbyMode === 'main' && botSetup ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Partida contra la máquina</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -145,6 +183,9 @@ export function LobbyScreen({
                     Sala privada
                   </button>
                 </div>
+                <button disabled={!connected || loadingReplays} onClick={openReplays} style={{ ...button('subtle', !connected || loadingReplays), padding: 9 }}>
+                  {loadingReplays ? 'Cargando…' : 'Repeticiones'}
+                </button>
                 <span style={{ fontSize: 11.5, color: C.textDim }}>Buscar partida te empareja con otro jugador en un mapa al azar, con escuadras de 3. En una sala privada eliges tú el mapa.</span>
               </div>
             ) : (
@@ -181,6 +222,8 @@ export function LobbyScreen({
                     style={{ ...input, flex: 1, minWidth: 0, fontFamily: FONT.mono, letterSpacing: '0.2em' }} />
                   <button type="submit" disabled={!canPlay || !roomInput.trim()} style={{ ...button('primary', !canPlay || !roomInput.trim()), padding: '0 16px' }}>Unirse</button>
                 </form>
+                <button type="button" disabled={!connected || !roomInput.trim()} onClick={onSpectate} style={button('subtle', !connected || !roomInput.trim())}
+                  title="Mira una partida en curso sin jugar">Ver como espectador</button>
                 <button onClick={() => { onSetLobbyMode('main'); onClearLobbyError() }} style={button('ghost')}>Volver</button>
                 {lobbyError && <div role="alert" style={{ color: C.danger, fontSize: 13 }}>{lobbyError}</div>}
               </div>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
-import type { GameState, AttackPreview } from './types/gameState'
+import type { GameState, AttackPreview, ReplaySummary } from './types/gameState'
 import type { Unit } from './types/units'
 import { hexKey, gridDistance } from './game/hexGrid'
 import { baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
@@ -29,6 +29,8 @@ import { ProfileModal } from './components/ui/ProfileModal'
 import { UsernameSetupModal } from './components/ui/UsernameSetupModal'
 import { GameStatusBar } from './components/ui/GameStatusBar'
 import { GameOverModal } from './components/ui/GameOverModal'
+import { ReplayBar } from './components/ui/ReplayBar'
+import { readLink, clearLink, shareUrl, copyText } from './game/links'
 import { LobbyScreen } from './screens/LobbyScreen'
 import { WaitingScreen } from './screens/WaitingScreen'
 import { SquadSelectionScreen } from './screens/SquadSelectionScreen'
@@ -102,6 +104,19 @@ export default function App() {
   const [squadSize, setSquadSize] = useState(3)
   useEffect(() => { fetchMapList().then(r => setMaps(r.maps)).catch(() => {}) }, [])
   const [showProfile, setShowProfile] = useState(false)
+  // Espectador, revancha y repeticiones
+  const [spectating, setSpectating] = useState(false)
+  const [spectators, setSpectators] = useState(0)
+  const [replayId, setReplayId] = useState<string | null>(null)
+  const [rematch, setRematch] = useState<'none' | 'sent' | 'rival' | 'unavailable'>('none')
+  const [replay, setReplay] = useState<{ id: string; summary: ReplaySummary; total: number; index: number } | null>(null)
+  const [replayPlaying, setReplayPlaying] = useState(false)
+  const [replaySpeed, setReplaySpeed] = useState(1)
+  const [replayLoading, setReplayLoading] = useState(false)
+  const replayReq = useRef(0)
+  const spectatingRef = useRef(false)
+  useEffect(() => { spectatingRef.current = spectating }, [spectating])
+  const pendingLink = useRef(readLink())
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false)
   const [usernameSuggestion, setUsernameSuggestion] = useState('')
 
@@ -210,7 +225,31 @@ export default function App() {
       setScreen('waiting')
     })
 
-    socket.on('JOIN_ERROR', ({ message }: { message: string }) => setLobbyError(message))
+    socket.on('JOIN_ERROR', ({ message }: { message: string }) => { setLobbyError(message); setLobbyMode('private') })
+    socket.on('SPECTATE_ERROR', ({ message }: { message: string }) => { setLobbyError(message); setLobbyMode('private') })
+    socket.on('SPECTATE_STARTED', ({ roomId: rId, gameState: gs, replayId: rid }: { roomId: string; gameState: GameState; replayId: string | null }) => {
+      setSpectating(true)
+      setMyPlayerId(null)
+      setRoomId(rId)
+      setGameState(gs)
+      setReplayId(rid)
+      setChat([])
+      setScreen('playing')
+      setMessage('Viendo la partida como espectador')
+    })
+    socket.on('SPECTATE_ENDED', ({ message: msg }: { message: string }) => {
+      if (myPlayerIdRef.current) return
+      setSpectating(false)
+      setGameState(null)
+      setScreen('lobby')
+      addToast(msg, C.amber, 4000)
+    })
+    socket.on('SPECTATORS', ({ count }: { count: number }) => setSpectators(count))
+    socket.on('REMATCH_REQUESTED', ({ playerId }: { playerId: string }) => {
+      if (!myPlayerIdRef.current) return
+      setRematch(playerId === myPlayerIdRef.current ? 'sent' : 'rival')
+    })
+    socket.on('REMATCH_UNAVAILABLE', () => { if (myPlayerIdRef.current) setRematch('unavailable') })
     socket.on('MATCH_SEARCHING', () => setIsSearching(true))
     socket.on('MATCH_CANCELLED', () => setIsSearching(false))
 
@@ -224,6 +263,11 @@ export default function App() {
       setSquadSubmitted(false)
       setIsSearching(false)
       setLobbyMode('main')
+      setRematch('none')
+      setReplayId(null)
+      setGameState(null)
+      setSpectating(false)
+      setSpectators(0)
       sessionStorage.setItem('reconnectData', JSON.stringify({ roomId: rId, playerId }))
       setScreen('squad_selection')
     })
@@ -316,8 +360,9 @@ export default function App() {
       })
     })
 
-    socket.on('GAME_OVER', ({ gameState, winner, reason }: { gameState: GameState; winner: string | null; reason: string }) => {
+    socket.on('GAME_OVER', ({ gameState, winner, reason, replayId: rid }: { gameState: GameState; winner: string | null; reason: string; replayId?: string | null }) => {
       setGameState(gameState)
+      setReplayId(rid ?? null)
       setMessage(winner
         ? `¡Gana ${gameState.players[winner as 'player1' | 'player2'].name}! — ${reason}`
         : `Empate — ${reason}`)
@@ -338,10 +383,11 @@ export default function App() {
       sessionStorage.removeItem('reconnectData')
     })
 
-    socket.on('RECONNECT_SUCCESS', ({ playerId, roomId: rId, roomStatus, gameState: gs, squadSubmitted: submitted, squadSize: size }: {
+    socket.on('RECONNECT_SUCCESS', ({ playerId, roomId: rId, roomStatus, gameState: gs, squadSubmitted: submitted, squadSize: size, replayId: rid }: {
       playerId: 'player1' | 'player2'; roomId: string; roomStatus: string
-      gameState?: GameState; squadSubmitted: boolean; squadSize?: number
+      gameState?: GameState; squadSubmitted: boolean; squadSize?: number; replayId?: string | null
     }) => {
+      setReplayId(rid ?? null)
       if (size) setSquadSize(size)
       setMyPlayerId(playerId)
       setRoomId(rId)
@@ -382,8 +428,75 @@ export default function App() {
       socket.off('GAME_STATE_UPDATE'); socket.off('GAME_OVER'); socket.off('ACTION_ERROR')
       socket.off('OPPONENT_DISCONNECTED'); socket.off('OPPONENT_RECONNECTED'); socket.off('OPPONENT_ABANDONED')
       socket.off('RECONNECT_SUCCESS'); socket.off('RECONNECT_FAILED'); socket.off('PHASE_TRANSITION')
+      socket.off('SPECTATE_ERROR'); socket.off('SPECTATE_STARTED'); socket.off('SPECTATE_ENDED'); socket.off('SPECTATORS')
+      socket.off('REMATCH_REQUESTED'); socket.off('REMATCH_UNAVAILABLE')
     }
   }, [clearSelection, addToast])
+
+  // ─── REPETICIONES ─────────────────────────────────────────────────────────
+  // El servidor reconstruye la partida; aquí se pide cada paso al moverse por ella.
+  const seekReplay = useCallback((id: string, index: number) => {
+    const req = ++replayReq.current
+    setReplay(r => r && r.id === id ? { ...r, index: Math.max(0, Math.min(r.total - 1, index)) } : r)
+    setReplayLoading(true)
+    socket.emit('REPLAY_FRAME', { id, index }, (frame: GameState | null) => {
+      if (req !== replayReq.current) return   // ya se pidió otro paso
+      setReplayLoading(false)
+      if (frame) setGameState(frame)
+    })
+  }, [])
+
+  const openReplay = useCallback((id: string) => {
+    setReplayLoading(true)
+    socket.emit('REPLAY_OPEN', { id }, (r: { summary: ReplaySummary; frames: number } | null) => {
+      setReplayLoading(false)
+      if (!r) { addToast('No se encontró la repetición', C.danger, 4000); return }
+      sessionStorage.removeItem('reconnectData')
+      if (spectatingRef.current) socket.emit('STOP_SPECTATING')
+      setSpectating(false)
+      setMyPlayerId(null)
+      setPanelUnitId(null)
+      clearSelection()
+      setReplay({ id, summary: r.summary, total: r.frames, index: 0 })
+      setReplayPlaying(false)
+      setMessage('')
+      setScreen('playing')
+      seekReplay(id, 0)
+    })
+  }, [addToast, clearSelection, seekReplay])
+
+  const exitReplay = () => {
+    setReplay(null)
+    setReplayPlaying(false)
+    setGameState(null)
+    setScreen('lobby')
+  }
+
+  // Reproducción automática
+  useEffect(() => {
+    if (!replay || !replayPlaying || replayLoading) return
+    if (replay.index >= replay.total - 1) { const t = setTimeout(() => setReplayPlaying(false), 0); return () => clearTimeout(t) }
+    const t = setTimeout(() => seekReplay(replay.id, replay.index + 1), 1100 / replaySpeed)
+    return () => clearTimeout(t)
+  }, [replay, replayPlaying, replayLoading, replaySpeed, seekReplay])
+
+  // Enlaces compartidos (?sala=, ?ver=, ?repeticion=): se usan al llegar al lobby
+  useEffect(() => {
+    const link = pendingLink.current
+    if (!link || !connected || screen !== 'lobby') return
+    pendingLink.current = null
+    clearLink()
+    if (link.kind === 'sala') socket.emit('JOIN_ROOM', { roomId: link.id, playerName: playerName.trim() })
+    else if (link.kind === 'ver') socket.emit('SPECTATE', { roomId: link.id })
+    else openReplay(link.id)
+  }, [connected, screen, playerName, openReplay])
+
+  const leaveSpectating = () => {
+    socket.emit('STOP_SPECTATING')
+    setSpectating(false)
+    setGameState(null)
+    setScreen('lobby')
+  }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
   // Los resaltados usan las mismas consultas que valida el servidor (game/queries.ts)
@@ -892,6 +1005,9 @@ export default function App() {
         squadSize={squadSize}
         onSquadSizeChange={setSquadSize}
         onJoinRoom={() => { setLobbyError(''); socket.emit('JOIN_ROOM', { roomId: roomInput.trim(), playerName: playerName.trim() }) }}
+        onSpectate={() => { setLobbyError(''); socket.emit('SPECTATE', { roomId: roomInput.trim() }) }}
+        onListReplays={() => new Promise<ReplaySummary[]>(res => socket.emit('REPLAY_LIST', {}, res))}
+        onOpenReplay={openReplay}
       />
       {showProfile && (
         <ProfileModal
@@ -1004,7 +1120,8 @@ export default function App() {
       compact={isMobile}
       mode={selectionMode}
       isActive={gameState.activeUnitId === panelUnit.id}
-      isMyUnit={panelUnit.playerId === myPlayerId}
+      // Sin bando propio (espectador, repetición) los colores siguen la vista del jugador 1, como sideColor
+      isMyUnit={panelUnit.playerId === (myPlayerId ?? 'player1')}
       isMyTurn={isMyTurn}
       isSelected={panelUnit.id === selectedUnitId}
       advanced={gameState.activation?.advanced ?? false}
@@ -1045,7 +1162,7 @@ export default function App() {
       }}
       onRescue={handleRescue}
       onEndTurn={handleEndTurn}
-      onToggleAutoResponses={enabled => socket.emit('GAME_ACTION', { action: { type: 'SET_AUTO_RESPONSES', unitId: panelUnit.id, enabled } })}
+      onToggleAutoResponses={myPlayerId ? enabled => socket.emit('GAME_ACTION', { action: { type: 'SET_AUTO_RESPONSES', unitId: panelUnit.id, enabled } }) : undefined}
       onCancel={() => {
         setSelectionMode('none')
         setReachableHexes(new Set())
@@ -1062,8 +1179,13 @@ export default function App() {
 
       <TimelineBar gameState={gameState} myPlayerId={myPlayerId} compact={isMobile} />
 
-      <GameStatusBar gameState={gameState} myPlayerId={myPlayerId} isMyTurn={isMyTurn} message={statusMessage}
-        onSurrender={() => socket.emit('GAME_ACTION', { action: { type: 'SURRENDER' } })} />
+      <GameStatusBar gameState={gameState} myPlayerId={myPlayerId} isMyTurn={isMyTurn}
+        message={replay ? gameState.log[gameState.log.length - 1]?.message ?? '' : statusMessage}
+        badge={replay ? 'Repetición' : spectating ? 'Espectador' : undefined}
+        spectators={replay ? 0 : spectators}
+        onShareSpectate={myPlayerId && roomId ? () => { copyText(shareUrl('ver', roomId)) } : undefined}
+        onLeave={spectating ? leaveSpectating : undefined}
+        onSurrender={myPlayerId ? () => socket.emit('GAME_ACTION', { action: { type: 'SURRENDER' } }) : undefined} />
 
       <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0 }}>
@@ -1173,13 +1295,30 @@ export default function App() {
         )}
       </div>
 
-      {handStrip}
+      {!replay && handStrip}
 
-      {isFinished && (
+      {replay && (
+        <ReplayBar summary={replay.summary} index={replay.index} total={replay.total} playing={replayPlaying} speed={replaySpeed}
+          loading={replayLoading} compact={isMobile}
+          onSeek={i => { setReplayPlaying(false); seekReplay(replay.id, i) }}
+          onTogglePlay={() => {
+            if (!replayPlaying && replay.index >= replay.total - 1) seekReplay(replay.id, 0)
+            setReplayPlaying(p => !p)
+          }}
+          onSpeed={setReplaySpeed}
+          onExit={exitReplay} />
+      )}
+
+      {isFinished && !replay && (
         <GameOverModal
           gameState={gameState}
           myPlayerId={myPlayerId}
+          rematch={rematch}
+          onRematch={myPlayerId ? () => { setRematch('sent'); socket.emit('REMATCH') } : undefined}
+          onWatchReplay={replayId ? () => openReplay(replayId) : undefined}
           onReturnToLobby={() => {
+            if (spectating) socket.emit('STOP_SPECTATING')
+            setSpectating(false)
             sessionStorage.removeItem('reconnectData')
             setScreen('lobby')
             setGameState(null)

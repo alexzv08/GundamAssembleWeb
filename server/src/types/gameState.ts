@@ -164,3 +164,18 @@ export type GameAction =
   | { type: 'CHOOSE_FORCED_MOVE'; to: HexCoord | null }
   | { type: 'SURRENDER' }
   | { type: 'FOLLOW_UP'; to: HexCoord | null; targetId: string | null }
+
+// Resumen de una partida terminada (lista de repeticiones)
+export interface ReplaySummary {
+  id: string
+  createdAt: string
+  mapId: string
+  players: { player1: string; player2: string }
+  winner: PlayerId | null
+  winReason: string
+  vp: { player1: number; player2: number }
+  steps: number
+  vsBot: boolean
+  /** Solo en la lista del propio jugador: con qué bando jugó */
+  mySide?: PlayerId
+}

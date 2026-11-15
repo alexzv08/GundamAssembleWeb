@@ -97,7 +97,7 @@ export function GameScene({
             key={rws.id}
             rws={rws}
             elevation={gameState.board[hexKey(rws.position)]?.elevation ?? 0}
-            isMine={rws.owner === myPlayerId}
+            isMine={rws.owner === (myPlayerId ?? 'player1')}
             onClick={() => onHexClick(hexKey(rws.position!))}
             onHover={onTokenHover}
           />
@@ -112,7 +112,7 @@ export function GameScene({
             elevation={unit.position ? (gameState.board[hexKey(unit.position)]?.elevation ?? 0) : 0}
             isActive={gameState.activeUnitId === unit.id}
             isSelected={selectedUnitId === unit.id}
-            isMine={unit.playerId === myPlayerId}
+            isMine={unit.playerId === (myPlayerId ?? 'player1')}
             onClick={() => onUnitClick(unit.id)}
             onHover={onHexHover ? on => onHexHover(on && unit.position ? hexKey(unit.position) : null) : undefined}
           />

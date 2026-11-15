@@ -87,7 +87,7 @@ export class MemoryReplayStore implements ReplayStore {
     }
     async load(id: string) { return this.items.get(id) ?? null }
     async listFor(userId: string, limit = 20) {
-        return [...this.items.values()].filter(r => r.userIds.includes(userId)).map(r => r.summary).reverse().slice(0, limit)
+        return [...this.items.values()].filter(r => r.userIds.includes(userId)).map(r => withSide(r.summary, r.userIds, userId)).reverse().slice(0, limit)
     }
 }
 
@@ -112,7 +112,7 @@ export class FileReplayStore implements ReplayStore {
         try { return JSON.parse(await fs.promises.readFile(this.file(id), 'utf-8')) as Replay } catch { return null }
     }
     async listFor(userId: string, limit = 20) {
-        return (await this.index()).filter(e => e.userIds.includes(userId)).map(e => e.summary).reverse().slice(0, limit)
+        return (await this.index()).filter(e => e.userIds.includes(userId)).map(e => withSide(e.summary, e.userIds, userId)).reverse().slice(0, limit)
     }
 }
 
@@ -129,11 +129,17 @@ export class SupabaseReplayStore implements ReplayStore {
         return (data?.data as Replay) ?? null
     }
     async listFor(userId: string, limit = 20) {
-        const { data, error } = await this.client.from('replays').select('summary').contains('user_ids', [userId])
+        const { data, error } = await this.client.from('replays').select('summary, user_ids').contains('user_ids', [userId])
             .order('created_at', { ascending: false }).limit(limit)
         if (error) { console.error('[replays]', error.message); return [] }
-        return (data ?? []).map((r: { summary: ReplaySummary }) => r.summary)
+        return (data ?? []).map((r: { summary: ReplaySummary; user_ids: string[] }) => withSide(r.summary, r.user_ids, userId))
     }
+}
+
+// userIds va en orden de jugador: [player1, player2]
+function withSide(summary: ReplaySummary, userIds: string[], userId: string): ReplaySummary {
+    const i = userIds.indexOf(userId)
+    return i === 0 ? { ...summary, mySide: 'player1' } : i === 1 ? { ...summary, mySide: 'player2' } : summary
 }
 
 export async function createReplayStore(kind = process.env.GAME_STORE ?? 'file'): Promise<ReplayStore> {

@@ -8,12 +8,20 @@ interface GameStatusBarProps {
   isMyTurn: boolean
   message: string
   onSurrender?: () => void
+  /** Etiqueta de modo (espectador, repetición) */
+  badge?: string
+  spectators?: number
+  /** Copia el enlace para que otros vean la partida */
+  onShareSpectate?: () => void
+  /** Espectador: volver al lobby */
+  onLeave?: () => void
 }
 
 // Barra de estado: solo responde a "¿a quién le toca y qué está pasando ahora?"
 // (los dados se muestran en DiceTray).
-export function GameStatusBar({ gameState, myPlayerId, isMyTurn, message, onSurrender }: GameStatusBarProps) {
+export function GameStatusBar({ gameState, myPlayerId, isMyTurn, message, onSurrender, badge, spectators = 0, onShareSpectate, onLeave }: GameStatusBarProps) {
   const [confirm, setConfirm] = useState(false)
+  const [copied, setCopied] = useState(false)
   const activeUnit = gameState.activeUnitId ? gameState.units[gameState.activeUnitId] : null
   const activePlayer = gameState.players[gameState.activePlayerId]
   const isFinished = gameState.phase === 'finished'
@@ -35,11 +43,26 @@ export function GameStatusBar({ gameState, myPlayerId, isMyTurn, message, onSurr
       {activeUnit && !isFinished && (
         <span style={{ color, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeUnit.name}</span>
       )}
+      {badge && (
+        <span style={{ fontFamily: FONT.mono, fontSize: 11, padding: '1px 7px', borderRadius: 4, border: `1px solid ${C.amber}`, color: C.amber, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{badge}</span>
+      )}
+      {spectators > 0 && (
+        <span title="Personas viendo la partida" style={{ fontFamily: FONT.mono, fontSize: 11.5, color: C.textSoft, whiteSpace: 'nowrap' }}>👁 {spectators}</span>
+      )}
+      {onShareSpectate && !isFinished && (
+        <button onClick={() => { onShareSpectate(); setCopied(true); setTimeout(() => setCopied(false), 1600) }}
+          title="Copia un enlace para que otros vean la partida en directo" style={{ ...button('ghost'), padding: '2px 9px', whiteSpace: 'nowrap' }}>
+          {copied ? 'Enlace copiado' : 'Invitar a ver'}
+        </button>
+      )}
       {message && (
         <span style={{ color: C.textSoft, marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{message}</span>
       )}
       {!isFinished && gameState.turnClock && (
         <ClockBadge clock={gameState.turnClock} mine={gameState.turnClock.playerId === myPlayerId} style={{ marginLeft: message ? 0 : 'auto' }} />
+      )}
+      {onLeave && (
+        <button onClick={onLeave} style={{ ...button('ghost'), padding: '2px 9px', marginLeft: message || gameState.turnClock ? 0 : 'auto' }}>Salir</button>
       )}
       {!isFinished && onSurrender && (confirm ? (
         <span style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: message || gameState.turnClock ? 0 : 'auto' }}>
