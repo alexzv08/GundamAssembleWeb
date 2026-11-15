@@ -2,11 +2,11 @@
 // del Core Rulebook v1.2 que comprueba.
 import { describe, it, expect } from 'vitest'
 import type { BoardMap, GameState, Unit, Weapon, Ability } from '../../types'
-import { hexDistance, getNeighbors, hexKey, checkLineOfSight, getReachableHexes, coneHexes, gridDistance } from '../hexGrid'
+import { hexDistance, getNeighbors, hexKey, checkLineOfSight, getReachableHexes, coneHexes, patternHexes, gridDistance } from '../hexGrid'
 import {
   createEmptyTimeline, placeInitialToken, getNextActivation, advanceToken, getUnitRound, reorderSlotForTie, retreatToken,
 } from '../timeline'
-import { reachableFor, checkAttackTarget, isEngaged } from '../queries'
+import { reachableFor, checkAttackTarget, checkAttackTargetWith, isEngaged } from '../queries'
 import { applyAction, applyAdvance, applyAttack, applyAttackGarrison, applyEndActivation, applyUseAbility, applyDash } from '../actions'
 import { processAction } from '../engine'
 import { beginActivation, newActivation, startGame } from '../activation'
@@ -1468,26 +1468,55 @@ describe('Plantillas de área colocadas a mano', () => {
   })
 })
 
-describe('Quadruple Bop Missile', () => {
-  const bop = weapon({ name: 'Quadruple Bop Missile', range: 3, strength: 3, area: 'flower', areaOnTarget: true })
-  const units = () => [
-    makeUnit('a', 'player1', { q: 1, r: 3 }, { weapons: [bop] }),
-    makeUnit('e1', 'player2', { q: 3, r: 2 }),
-    makeUnit('e2', 'player2', { q: 3, r: 4 }),
-    makeUnit('e3', 'player2', { q: 4, r: 2 }),   // adyacente a e1
-  ]
-  it('alcanza al objetivo y a los enemigos adyacentes a él', () => {
-    const s = applyAttack(makeGame(units()), 'a', 0, 'e1', 'player1', dice(5, 5, 5, 5, 5, 5)).newState!
-    expect(s.units.e1.currentHp).toBe(7)
-    expect(s.units.e3.currentHp).toBe(7)
-    expect(s.units.e2.currentHp).toBe(10)   // no es adyacente a e1
+describe('Plantillas fijas del 240mm Low-Recoil Cannon y el Quadruple Bop Missile', () => {
+  const units = loadUnitCatalog()
+  const cells = (cardId: string, name: string) => units.find(u => u.cardId === cardId)!.weapons.find(w => w.name === name)!
+  const o = { q: 4, r: 4 }
+
+  it('240mm: un hex adyacente y los 3 que tiene detrás (diagrama de la carta), en 6 orientaciones', () => {
+    const w = cells('PA01-U02', '240mm Low-Recoil Cannon')
+    expect(w.area).toBe('pattern')
+    for (let f = 0; f < 6; f++) {
+      const hexes = patternHexes(o, f, w.areaCells!)
+      const near = hexes.filter(h => gridDistance(o, h) === 1)
+      const far = hexes.filter(h => gridDistance(o, h) === 2)
+      expect(near).toHaveLength(1)
+      expect(far).toHaveLength(3)
+      for (const h of far) expect(gridDistance(near[0], h)).toBe(1)
+    }
   })
-  it('no se puede centrar en un hex vacío', () => {
-    const r = applyAction(makeGame(units()), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { center: { q: 3, r: 3 } } }, 'player1', dice())
-    expect(r.error).toBe('Esta plantilla se centra en el objetivo')
+
+  it('Bop Missile: flor de 7 con el centro a 2 hexes, dos pétalos tocando a la unidad', () => {
+    const w = cells('PA01-U03', 'Quadruple Bop Missile')
+    expect(w).toMatchObject({ area: 'pattern', tlCost: 3, strength: 5 })
+    expect(w.effectData ?? null).toBeNull()   // la carta no tiene "also targets…" (eso es el Beam Rifle del Guncannon)
+    for (let f = 0; f < 6; f++) {
+      const hexes = patternHexes(o, f, w.areaCells!)
+      expect(new Set(hexes.map(hexKey)).size).toBe(7)
+      const center = hexes.find(c => hexes.every(h => h === c || gridDistance(c, h) === 1))!
+      expect(center).toBeDefined()
+      expect(gridDistance(o, center)).toBe(2)
+      expect(hexes.filter(h => gridDistance(o, h) === 1)).toHaveLength(2)
+    }
   })
-  it('los datos de la carta lo marcan así', () => {
-    const w = loadUnitCatalog().find(u => u.cardId === 'PA01-U03')!.weapons.find(w => w.name === 'Quadruple Bop Missile')!
-    expect(w).toMatchObject({ area: 'flower', areaOnTarget: true, tlCost: 3, strength: 5 })
+
+  it('el 240mm alcanza a los dos enemigos de su forma y no a uno a distancia 3', () => {
+    const cannon = cells('PA01-U02', '240mm Low-Recoil Cannon')
+    const make = () => {
+      const a = makeUnit('a', 'player1', o, { weapons: [{ ...cannon, strength: 3 }] })
+      const [, d0] = patternHexes(o, 0, cannon.areaCells!)          // [2, 0]: detrás del adyacente
+      const side = patternHexes(o, 0, cannon.areaCells!)[2]         // [1, 1]
+      return makeGame([a, makeUnit('e1', 'player2', d0), makeUnit('e2', 'player2', side), makeUnit('far', 'player2', { q: 4, r: 1 })])
+    }
+    const s = applyAction(make(), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { facing: 0 } }, 'player1', dice(5, 5, 5, 5, 5, 5))
+    expect(s.success).toBe(true)
+    expect(s.newState!.units.e1.currentHp).toBe(7)
+    expect(s.newState!.units.e2.currentHp).toBe(7)
+    expect(gridDistance(o, { q: 4, r: 1 })).toBe(3)
+    expect(checkAttackTargetWith(make(), 'a', cannon, '4,1').reason).toBe('El objetivo no está dentro de la plantilla')
+  })
+
+  it('el Beam Rifle del Guncannon sí alcanza a los enemigos adyacentes al objetivo', () => {
+    expect(cells('PA01-U02', 'Beam Rifle')).toMatchObject({ tlCost: 4, range: 4, strength: 7, effectData: { type: 'also_target_adjacent' } })
   })
 })

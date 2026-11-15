@@ -156,7 +156,7 @@ export function UnitPanel({
                                         style={{ ...actionBtn(selectedWeaponIndex === idx && mode === 'attacking', true, 'danger'), display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, textAlign: 'left', whiteSpace: 'normal' }}>
                                         <span style={{ minWidth: 0 }}>Atacar · {w.name}</span>
                                         <span style={{ fontFamily: FONT.mono, color: C.textSoft, whiteSpace: 'nowrap' }}>
-                                            {w.area ? (w.area === 'cone' ? 'cono ' : 'flor ') : ''}R{w.range} S{w.strength} TL{hasUsedPrimary ? 0 : w.tlCost}
+                                            {w.area ? (w.area === 'cone' ? 'cono ' : w.area === 'flower' ? 'flor ' : 'área ') : ''}{w.area && w.area !== 'flower' ? 'SP' : `R${w.range}`} S{w.strength} TL{hasUsedPrimary ? 0 : w.tlCost}
                                         </span>
                                     </button>
                                 ))}
@@ -193,7 +193,7 @@ export function UnitPanel({
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
                                     <span style={{ fontWeight: 600 }}>{w.name}</span>
                                     <span style={{ fontFamily: FONT.mono, fontSize: 11, display: 'flex', gap: 7 }}>
-                                        {w.area && <span style={{ color: C.response }} title="Plantilla de área (forma aproximada)">{w.area === 'cone' ? 'Cono' : 'Flor'}</span>}
+                                        {w.area && <span style={{ color: C.response }} title="Plantilla de área con la forma del diagrama de la carta">{w.area === 'cone' ? 'Cono' : w.area === 'flower' ? 'Flor' : 'Área'}</span>}
                                         <span style={{ color: C.ally }} title="Range">R{w.range}</span>
                                         <span style={{ color: C.amber }} title="Strength">S{w.strength}</span>
                                         <span style={{ color: C.textSoft }} title="Coste de Timeline">TL{w.tlCost}</span>

@@ -994,7 +994,8 @@
             "trigger": "after_combat_damage",
             "type": "fracture"
           },
-          "area": "flower"
+          "area": "pattern",
+          "areaCells": [[1, 0], [2, 0], [1, 1], [2, -1]]
         },
         {
           "name": "Beam Rifle",
@@ -1082,8 +1083,8 @@
             "type": "bonus_damage",
             "amount": 1
           },
-          "area": "flower",
-          "areaOnTarget": true
+          "area": "pattern",
+          "areaCells": [[1, 1], [2, 1], [1, 2], [0, 2], [0, 1], [1, 0], [2, 0]]
         }
       ],
       "abilities": [

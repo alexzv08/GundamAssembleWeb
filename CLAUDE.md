@@ -159,7 +159,7 @@ Cada carta: `cardId, set, name, model, signature, traits[], hp, vp, tl, provisio
 
 - Los textos son los oficiales. `effectData` / `critData` / `abilityData` son la versión ejecutable (ver tipos en `types/units.ts`). Si `abilityData` falta, la habilidad se muestra pero no está implementada.
 - Los valores numéricos de las armas, el tipo de cada habilidad y los costes de Energy vienen de la wiki comunitaria (`statsSource`), porque la web oficial solo los muestra en la imagen de la carta.
-- `area: 'cone' | 'flower'` marca las armas con plantilla de área ("Range: SP"); la forma es una aproximación.
+- `area` marca las armas con plantilla de área ("Range: SP"), con la forma del diagrama de la carta: `cone` (cuña de `range` de fondo), `pattern` (forma fija `areaCells`, celdas `[a, b]` = a·dir(f) + b·dir(f+1)) o `flower` (centro libre a alcance; sin uso oficial).
 - `shortName`: nombre corto para la Timeline y las etiquetas del tablero.
 
 ## Cartas de Tactics (`server/data/cards/card_library.json`, v2)
@@ -402,3 +402,9 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - El 240mm Low-Recoil Cannon sigue como flor libre a alcance 3, pendiente de su diagrama.
 - Archivos: `server/data/units/unit_library.json`, `server/src/types/units.ts` (+ copia), `server/src/game/queries.ts` (+ copia), `server/src/game/__tests__/engine.test.ts`, `client/src/game/areaAim.ts`, `client/src/App.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
 
+### 2026-11-15 — Plantillas del 240mm y del Quadruple Bop Missile según sus cartas
+- Con las cartas completas aportadas por el autor: el texto "also targets each enemy adjacent to the target" es del **Beam Rifle** del Guncannon (ya estaba así), no del Bop Missile; se deshace el cambio anterior (`areaOnTarget`).
+- Nueva plantilla fija `area: 'pattern'` con `areaCells` y `patternHexes` (hexGrid, compartido). 240mm = hex adyacente + sus 3 de detrás; Bop Missile = flor de 7 con centro a 2 hexes. Se giran como la cuña; el objetivo tiene que quedar dentro y no hay otro alcance.
+- `checkAttackTargetWith` comprueba siempre que el objetivo esté dentro de la plantilla (también sin `aim`). Cliente: giro y aviso para todas las plantillas que no son flor; la ficha muestra "SP".
+- Tests: 152 (formas de los dos diagramas en las 6 orientaciones, ataque del 240mm a dos enemigos, rechazo a distancia 3, Beam Rifle con also_target_adjacent).
+- Archivos: `server/data/units/unit_library.json`, `server/src/types/units.ts`, `server/src/game/{hexGrid,queries}.ts` (+ copias), tests, `client/src/game/areaAim.ts`, `client/src/App.tsx`, `client/src/components/ui/UnitPanel.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.

@@ -147,11 +147,13 @@ export interface Weapon {
     effectData?: WeaponEffect | null
     critData?: WeaponEffect | null
     energyCost?: number
-    // Plantilla de área ("Range: SP"): cono o "flor" (hex elegido + sus 6 vecinos).
-    // La forma exacta sale de un diagrama de la carta; aquí es una aproximación.
-    area?: 'cone' | 'flower'
-    /** Flor centrada siempre en el objetivo ("also targets each enemy adjacent to the target") */
-    areaOnTarget?: boolean
+    // Plantilla de área ("Range: SP"), con la forma del diagrama de la carta:
+    //  cone:    cuña de 60° con `range` hexes de fondo (War Edge, Twin Buster Rifle)
+    //  pattern: forma fija respecto a la unidad (areaCells), girable en 6 orientaciones
+    //  flower:  hex central a alcance + sus 6 vecinos (sin uso en las cartas oficiales)
+    area?: 'cone' | 'flower' | 'pattern'
+    /** Celdas de la plantilla `pattern` como [a, b] = a·dir(f) + b·dir(f+1) desde la unidad */
+    areaCells?: [number, number][]
 }
 
 // ─── ABILITY ──────────────────────────────────────────────────────────────────

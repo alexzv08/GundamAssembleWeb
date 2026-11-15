@@ -97,6 +97,13 @@ const CUBE_DIRS = [[1, -1, 0], [1, 0, -1], [0, 1, -1], [-1, 1, 0], [-1, 0, 1], [
 // Cuña de 60° entre las direcciones `facing` y `facing + 1` (0-5), de `depth` hexes
 // de fondo: 2 hexes a distancia 1, 3 a distancia 2, 4 a distancia 3… Es la forma
 // del diagrama de las cartas (War Edge: fondo 2; Twin Buster Rifle: fondo 3).
+// Plantilla fija: cada celda [a, b] es a·dir(facing) + b·dir(facing + 1) desde el origen.
+export function patternHexes(origin: HexCoord, facing: number, cells: [number, number][]): HexCoord[] {
+  const o = offsetToCube(origin.q, origin.r)
+  const d1 = CUBE_DIRS[((facing % 6) + 6) % 6], d2 = CUBE_DIRS[(((facing + 1) % 6) + 6) % 6]
+  return cells.map(([a, b]) => cubeToOffset(o.x + a * d1[0] + b * d2[0], o.z + a * d1[2] + b * d2[2]))
+}
+
 export function coneHexes(origin: HexCoord, facing: number, depth: number): HexCoord[] {
   const o = offsetToCube(origin.q, origin.r)
   const d1 = CUBE_DIRS[((facing % 6) + 6) % 6], d2 = CUBE_DIRS[(((facing + 1) % 6) + 6) % 6]

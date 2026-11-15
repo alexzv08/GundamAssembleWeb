@@ -4,7 +4,7 @@
 // que el servidor acepta.
 import type { GameState, PlayerId, Unit, HexCoord, BoardMap, Weapon, TacticsCard, ResponseTrigger, RemoteWeapon, RwsKind, AreaAim } from '../types'
 import {
-  hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, getReachableHexes, coneHexes,
+  hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, getReachableHexes, coneHexes, patternHexes,
   type MoveOptions,
 } from './hexGrid'
 
@@ -229,6 +229,7 @@ export interface TargetCheck { ok: boolean; reason?: string }
 //  flower: el hex central (aim.center, o el objetivo) y sus 6 vecinos.
 export function templateHexes(state: GameState, from: HexCoord, weapon: Weapon, aim: AreaAim): string[] {
   if (weapon.area === 'cone') return coneHexes(from, aim.facing ?? 0, weapon.range).map(hexKey).filter(k => state.board[k])
+  if (weapon.area === 'pattern') return patternHexes(from, aim.facing ?? 0, weapon.areaCells ?? []).map(hexKey).filter(k => state.board[k])
   if (weapon.area === 'flower' && aim.center) {
     const c = aim.center
     return [hexKey(c), ...getNeighbors(c).map(hexKey)].filter(k => state.board[k])
@@ -239,8 +240,8 @@ export function templateHexes(state: GameState, from: HexCoord, weapon: Weapon, 
 // Colocación usada: la indicada o, si falta (bot, contraataques, llamadas
 // antiguas), la que incluye el objetivo y alcanza más enemigos.
 export function resolveAim(state: GameState, from: HexCoord, weapon: Weapon, targetKey: string, aim?: AreaAim): AreaAim {
-  if (weapon.area === 'flower') return { center: weapon.areaOnTarget ? keyToHex(targetKey) : aim?.center ?? keyToHex(targetKey) }
-  if (weapon.area !== 'cone') return {}
+  if (weapon.area === 'flower') return { center: aim?.center ?? keyToHex(targetKey) }
+  if (weapon.area !== 'cone' && weapon.area !== 'pattern') return {}
   if (aim?.facing !== undefined) return { facing: ((aim.facing % 6) + 6) % 6 }
   const player = state.units[state.board[targetKey]?.occupiedBy ?? '']?.playerId
   let best = 0, bestCount = -1
@@ -290,16 +291,16 @@ export function checkAttackTargetWith(state: GameState, unitId: string, weapon: 
   if (!target) return { ok: false, reason: 'No hay un enemigo en ese hex' }
 
   const from = unit.position
-  // Plantilla colocada a mano: el objetivo debe quedar dentro; la flor se centra
-  // en un hex a alcance y con línea de visión, que es lo que se comprueba
-  if (weapon.area && aim) {
-    if (aim.facing !== undefined && (!Number.isInteger(aim.facing) || aim.facing < 0 || aim.facing > 5)) return { ok: false, reason: 'Orientación de la plantilla no válida' }
-    if (aim.center && !state.board[hexKey(aim.center)]) return { ok: false, reason: 'Centro de la plantilla fuera del tablero' }
-    if (aim.center && weapon.areaOnTarget && hexKey(aim.center) !== targetKey) return { ok: false, reason: 'Esta plantilla se centra en el objetivo' }
+  // Plantilla de área: el objetivo debe quedar dentro (la colocada a mano o, sin
+  // ella, la mejor). La cuña y las plantillas fijas no tienen otro alcance; la flor
+  // se centra en un hex a alcance y con línea de visión.
+  if (weapon.area) {
+    if (aim?.facing !== undefined && (!Number.isInteger(aim.facing) || aim.facing < 0 || aim.facing > 5)) return { ok: false, reason: 'Orientación de la plantilla no válida' }
+    if (aim?.center && !state.board[hexKey(aim.center)]) return { ok: false, reason: 'Centro de la plantilla fuera del tablero' }
     if (!areaHexes(state, from, weapon, targetKey, aim).includes(targetKey)) return { ok: false, reason: 'El objetivo no está dentro de la plantilla' }
   }
   const to = weapon.area === 'flower' && aim?.center ? aim.center : keyToHex(targetKey)
-  if (gridDistance(from, to) > weapon.range) return { ok: false, reason: 'Objetivo fuera de alcance' }
+  if (weapon.area !== 'cone' && weapon.area !== 'pattern' && gridDistance(from, to) > weapon.range) return { ok: false, reason: 'Objetivo fuera de alcance' }
 
   if (weapon.effectData?.type !== 'ignore_los') {
     // Las áreas de efecto ignoran unidades y Garrisons para la línea de visión

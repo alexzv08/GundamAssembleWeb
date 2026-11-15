@@ -758,7 +758,7 @@ export default function App() {
     setAimLock(null)
     const weapon = gameState.units[selectedUnitId]?.weapons[weaponIndex]
     setMessage(weapon?.area
-      ? `${weapon.name} — ${weapon.area === 'cone' ? 'orienta la plantilla con el ratón (o gírala)' : 'centra la plantilla en un hex a alcance'} y haz clic para atacar`
+      ? `${weapon.name} — ${weapon.area !== 'flower' ? 'orienta la plantilla con el ratón (o gírala)' : 'centra la plantilla en un hex a alcance'} y haz clic para atacar`
       : `${weapon?.name} — Selecciona un enemigo (rango ${weapon?.range})`)
   }, [gameState, selectedUnitId, calcAttackable])
 
@@ -1291,12 +1291,12 @@ export default function App() {
           }}>
             <span>
               <b style={{ color: C.enemy }}>{areaWeapon.name}</b>: {!currentAim
-                ? (areaWeapon.area === 'cone' ? 'apunta la plantilla hacia los enemigos' : areaWeapon.areaOnTarget ? 'elige el enemigo objetivo: también alcanza a sus enemigos adyacentes' : 'elige el hex central (a alcance)')
+                ? (areaWeapon.area !== 'flower' ? 'apunta la plantilla hacia los enemigos' : 'elige el hex central (a alcance)')
                 : aimInfo?.primary
                   ? `${aimInfo.hexes.filter(k => myPlayerId && targetAt(gameState, k, myPlayerId)).length} objetivo(s) dentro · clic dentro para atacar`
                   : 'ningún objetivo válido dentro'}
             </span>
-            {areaWeapon.area === 'cone' && (
+            {areaWeapon.area !== 'flower' && (
               <>
                 <button type="button" aria-label="Girar a la izquierda" title="Girar a la izquierda" style={button('subtle')}
                   onClick={() => setAimLock(rotateAim(currentAim ?? { facing: 0 }, 1))}>⟲</button>
