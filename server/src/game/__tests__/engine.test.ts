@@ -15,6 +15,10 @@ import { forceMove } from '../damage'
 import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize, eligibleCards } from '../catalog'
 import { createServerGame } from '../createServerGame'
 import { RoomManager } from '../../rooms/roomManager'
+import { FileGameStore } from '../../rooms/gameStore'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { listMaps, randomMapId } from '../maps'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1100,5 +1104,48 @@ describe('Abandono', () => {
     await new Promise(r => setTimeout(r, 80))
     expect(sent.find(e => e.ev === 'GAME_OVER')).toBeUndefined()
     expect(room.gameState!.phase).not.toBe('finished')
+  })
+})
+
+describe('Partidas guardadas', () => {
+  const units = loadUnitCatalog(), tactics = loadTacticsCatalog()
+  const squad = ['ST01-U01', 'ST01-U02', 'ST01-U03']
+  const deck = eligibleCards(squad, units, tactics).slice(0, requiredDeckSize(squad, units, tactics)).map(c => c.id)
+  const io = { to: () => ({ emit: () => {} }) } as unknown as import('socket.io').Server
+
+  it('una partida en curso sobrevive a un reinicio del servidor', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-rooms-'))
+    const a = new RoomManager(10_000)
+    a.useStore(new FileGameStore(dir))
+    const room = a.createBotRoom('h', 'Humano', 'u1')
+    a.submitSquad('h', squad, deck)
+    a.confirmSetup('h')
+    await a.persistNow(room)
+
+    // "Reinicio": otro RoomManager lee el mismo almacén
+    const b = new RoomManager(10_000)
+    b.useStore(new FileGameStore(dir))
+    expect(await b.restore(io)).toBe(1)
+    const back = b.reconnect(room.id, 'player1', 'h2', 'u1')
+    expect(back?.gameState?.gameId).toBe(room.gameState!.gameId)
+    expect(back?.status).toBe('playing')
+    // Otro usuario no puede quedarse la plaza
+    expect(b.reconnect(room.id, 'player1', 'x', 'intruso')).toBeNull()
+  })
+
+  it('las partidas terminadas no se recuperan y se borran del almacén', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-rooms-'))
+    const store = new FileGameStore(dir)
+    const a = new RoomManager(10_000)
+    a.useStore(store)
+    const room = a.createBotRoom('h', 'Humano', 'u1')
+    a.submitSquad('h', squad, deck)
+    a.confirmSetup('h')
+    room.status = 'finished'
+    await a.persistNow(room)
+    const b = new RoomManager(10_000)
+    b.useStore(store)
+    expect(await b.restore(io)).toBe(0)
+    expect((await store.loadAll()).length).toBe(0)
   })
 })

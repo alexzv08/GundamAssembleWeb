@@ -29,6 +29,7 @@ function publish(io: Server, room: Room, result: ProcessResult, action: GameActi
     const gameState = result.state!
     room.gameState = gameState
     armClock(io, room)
+    persistRoom(room)
     // Dados del ataque recién resuelto (para el popup)
     const diceRolls = gameState.lastAttack !== before.lastAttack ? gameState.lastAttack?.rolls ?? null : null
     if (result.gameOver) {
@@ -42,6 +43,9 @@ function publish(io: Server, room: Room, result: ProcessResult, action: GameActi
     }
     io.to(room.id).emit('GAME_STATE_UPDATE', { gameState, action, actionType: action.type, diceRolls })
 }
+
+// Guardado de la sala tras cada cambio (lo conecta registerGameEvents)
+let persistRoom: (room: Room) => void = () => {}
 
 // ─── RELOJ DE TURNO ──────────────────────────────────────────────────────────
 // Que una partida no se quede colgada: cada situación en la que debe actuar un
@@ -162,6 +166,7 @@ function driveBot(io: Server, room: Room): void {
 }
 
 export function registerGameEvents(io: Server, socket: Socket, roomManager: RoomManager) {
+    persistRoom = room => roomManager.persist(room)
     const userId = socket.data.userId as string
     const defaultName = (socket.data.userName as string) ?? 'Jugador'
 
@@ -246,6 +251,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         const result = roomManager.confirmSetup(socket.id)
         if (result?.bothConfirmed) {
             armClock(io, result.room)
+            roomManager.persist(result.room)
             io.to(result.room.id).emit('GAME_STATE_UPDATE', {
                 gameState: result.room.gameState, action: null, actionType: 'CONFIRM_SETUP',
             })
@@ -300,6 +306,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
         socket.join(room.id)
+        armClock(io, room)
         socket.emit('RECONNECT_SUCCESS', {
             playerId,
             roomId: room.id,

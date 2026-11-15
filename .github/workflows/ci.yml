@@ -1,0 +1,61 @@
+# Verificación de CLAUDE.md en cada push y pull request.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          npm ci --prefix server
+          npm ci --prefix client
+
+      - name: Código compartido sincronizado
+        run: |
+          node scripts/sync-shared.mjs
+          git diff --exit-code -- client/src
+
+      - name: Servidor · tipos
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Servidor · tests del motor
+        working-directory: server
+        run: npm test
+
+      - name: Servidor · partidas bot contra bot
+        working-directory: server
+        run: npm run selfplay -- --games 100 --seed 1
+
+      - name: Servidor · prueba de Socket.IO (incluye bot y reloj de turno)
+        working-directory: server
+        run: npm run smoke
+
+      - name: Cliente · tipos y lint
+        working-directory: client
+        run: |
+          npx tsc --noEmit -p tsconfig.app.json
+          npm run lint
+
+      - name: Cliente · build
+        working-directory: client
+        run: npm run build
+        env:
+          VITE_SERVER_URL: http://localhost:3001
+          VITE_SUPABASE_URL: http://localhost:54321
+          VITE_SUPABASE_ANON_KEY: ci

@@ -6,6 +6,7 @@ import { createServerGame } from '../game/createServerGame'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from '../game/catalog'
 import { mapExists, randomMapId } from '../game/maps'
 import { forfeit } from '../game/victory'
+import type { GameStore } from './gameStore'
 import { randomSquad, randomDeck } from '../game/bot'
 
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
@@ -199,11 +200,16 @@ export class RoomManager {
             message: 'El oponente se ha desconectado. Esperando reconexión...'
         })
 
-        // Timer de limpieza: si no reconecta en 5 min, destruir la sala
+        this.startAbandonTimer(io, room, disconnectedPlayer)
+        this.persist(room)
+    }
+
+    // Si el jugador no vuelve a tiempo: en mitad de una partida gana el otro;
+    // antes de empezar, la sala se cierra.
+    private startAbandonTimer(io: Server, room: Room, disconnectedPlayer: Room['players'][number]) {
         const timerKey = `${room.id}:${disconnectedPlayer.playerId}`
         const timer = setTimeout(() => {
             this.cleanupTimers.delete(timerKey)
-            // En mitad de una partida, quien se queda gana por abandono
             const gs = room.gameState
             if (room.status === 'playing' && gs && gs.phase !== 'finished' && gs.phase !== 'setup') {
                 forfeit(gs, disconnectedPlayer.playerId, `${gs.players[disconnectedPlayer.playerId].name} abandona la partida`)
@@ -250,6 +256,49 @@ export class RoomManager {
             if (p.socketId) this.socketToRoom.delete(p.socketId)
         }
         this.rooms.delete(roomId)
+        const pending = this.pendingSaves.get(roomId)
+        if (pending) clearTimeout(pending)
+        this.pendingSaves.delete(roomId)
+        this.store?.remove(roomId).catch(e => console.error('[gameStore]', e))
+    }
+
+    // ─── PERSISTENCIA ─────────────────────────────────────────────────────────
+    private store: GameStore | null = null
+    private pendingSaves = new Map<string, ReturnType<typeof setTimeout>>()
+
+    useStore(store: GameStore | null) { this.store = store }
+
+    // Guarda la sala (agrupando los cambios de 200 ms) si ya hay partida
+    persist(room: Room) {
+        if (!this.store || !room.gameState || !this.rooms.has(room.id)) return
+        if (this.pendingSaves.has(room.id)) return
+        this.pendingSaves.set(room.id, setTimeout(() => {
+            this.pendingSaves.delete(room.id)
+            if (this.rooms.has(room.id)) this.store?.save(room).catch(e => console.error('[gameStore]', e))
+        }, 200))
+    }
+
+    async persistNow(room: Room) {
+        const t = this.pendingSaves.get(room.id)
+        if (t) clearTimeout(t)
+        this.pendingSaves.delete(room.id)
+        if (this.store && room.gameState) await this.store.save(room)
+    }
+
+    // Recupera las salas guardadas al arrancar. Todos los jugadores vuelven como
+    // desconectados y tienen el plazo normal para reconectarse.
+    async restore(io: Server): Promise<number> {
+        if (!this.store) return 0
+        let n = 0
+        for (const room of await this.store.loadAll()) {
+            if (!room?.id || this.rooms.has(room.id)) continue
+            if (room.status === 'finished' || !room.gameState) { await this.store.remove(room.id); continue }
+            for (const p of room.players) p.socketId = ''
+            this.rooms.set(room.id, room)
+            for (const p of room.players) if (p.userId !== BOT_USER_ID) this.startAbandonTimer(io, room, p)
+            n++
+        }
+        return n
     }
 }
 
