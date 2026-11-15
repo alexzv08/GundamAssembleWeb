@@ -108,6 +108,10 @@ export type AbilityEffectType =
     | 'psycho_frame'               // Psycho-Frame Synchrony
     | 'inspiring_presence'         // Inspiring Presence: repetir hasta 3 fallos
     | 'fracture_enemy' | 'saturated_fire' | 'capture_objective'  // legado
+    // ── Setup (al empezar la partida; ninguna unidad publicada las usa aún) ──
+    | 'setup_upgrade'              // empieza con `amount` Upgrades de `upgradeType`
+    | 'setup_energy'               // empieza con `amount` Energy
+    | 'setup_timeline'             // su ficha empieza `amount` rondas antes (negativo) o después
 
 export interface AbilityEffect {
     type: AbilityEffectType
@@ -189,6 +193,9 @@ export interface Unit {
     activated: boolean
     provisionalStats?: boolean   // stats de armas aún sin confirmar con la carta física
     autoResponses?: boolean      // false = no usar sus Response con coste de Energy (por defecto sí)
+    /** Reservado para los Carriers del Q&A (naves que transportan unidades). Aún no hay
+     *  ninguno publicado en la lista oficial, así que no tiene reglas: solo los datos. */
+    carrier?: { capacity: number }
 }
 
 export interface StatusEffect {

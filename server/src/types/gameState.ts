@@ -71,8 +71,19 @@ export interface GameState {
   pendingAttack: PendingAttack | null
   /** Push / Pull esperando a que el jugador elija el siguiente hex (ver engine.ts) */
   pendingForcedMove?: PendingForcedMove | null
+  /** Acción que una unidad hace fuera de turno al acabar el ataque en curso (Iron-Blooded Tenacity) */
+  pendingFollowUp?: PendingFollowUp | null
   /** Reloj del jugador que debe actuar (lo pone el servidor de salas, no el motor) */
   turnClock?: TurnClock | null
+}
+
+export interface PendingFollowUp {
+  unitId: string
+  playerId: PlayerId
+  /** Hexes que puede moverse ("Moves 2") y arma del ataque a Timeline 0 */
+  move: number
+  weaponName: string
+  source: string
 }
 
 export interface TurnClock {
@@ -137,3 +148,4 @@ export type GameAction =
   | { type: 'PASS_RESPONSE' }
   | { type: 'CHOOSE_FORCED_MOVE'; to: HexCoord | null }
   | { type: 'SURRENDER' }
+  | { type: 'FOLLOW_UP'; to: HexCoord | null; targetId: string | null }

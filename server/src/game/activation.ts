@@ -5,7 +5,7 @@ import type { GameState, ActivationState, PlayerId } from '../types'
 import { hexKey, getNeighbors } from './hexGrid'
 import { advanceToken, getNextActivation, getCurrentRound, reorderSlotForTie } from './timeline'
 import { reactivateShields, pushLog } from './damage'
-import { collectTokens } from './effects'
+import { collectTokens, applySetupAbilities } from './effects'
 import { scoreObjectives, decideWinner } from './victory'
 
 export function newActivation(unitId: string): ActivationState {
@@ -108,6 +108,7 @@ function advanceToNext(state: GameState): GameState {
 // Al confirmar el setup: empieza la Fase 1 con la primera activación.
 export function startGame(state: GameState): GameState {
     state.phase = 'phase1'
+    applySetupAbilities(state)
     const first = getNextActivation(state.timeline)
     if (!first) return finishGame(state)
     state.activeUnitId = first.unitId

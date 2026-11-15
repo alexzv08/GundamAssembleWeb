@@ -5,7 +5,7 @@ import type { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
 import { upgradeCount, enemyHexes, moveOptionsFor, rwsDeployHexes, alliedRws, rwsAdjacentTo, isEmptyHex, targetAt } from './queries'
 import { damageUnit, damageAt, destroyGarrison, forceMove, pushLog } from './damage'
-import { advanceToken } from './timeline'
+import { advanceToken, retreatToken } from './timeline'
 import { captureObjective } from './victory'
 
 export interface EffectResult {
@@ -162,6 +162,24 @@ export function triggerAfterRescue(state: GameState, unitId: string): void {
     }
 }
 
+// Habilidades de Setup: se aplican una vez al empezar la partida, antes de la
+// primera activación. MUTA el estado.
+export function applySetupAbilities(state: GameState): void {
+    for (const unit of Object.values(state.units)) {
+        for (const ab of unit.abilities) {
+            const d = ab.type === 'SETUP' ? ab.abilityData : null
+            if (!d) continue
+            if (d.type === 'setup_upgrade') gainUpgrade(state, unit.id, d.upgradeType ?? 'attack', d.amount ?? 1)
+            else if (d.type === 'setup_energy') unit.energy += d.amount ?? 1
+            else if (d.type === 'setup_timeline') {
+                const n = d.amount ?? 0
+                state.timeline = n > 0 ? advanceToken(state.timeline, unit.id, n) : retreatToken(state.timeline, unit.id, -n, 1)
+            } else continue
+            pushLog(state, unit.playerId, `${unit.name}: ${ab.name} (Setup)`, 'ability')
+        }
+    }
+}
+
 export function gainUpgrade(state: GameState, unitId: string, type: string, amount = 1): void {
     const unit = state.units[unitId]
     if (!unit) return
@@ -228,7 +246,7 @@ export function collectTokens(state: GameState, unitId: string): void {
     pushLog(state, unit.playerId, `${unit.name} recoge un Upgrade (${token.type})`, 'move', [hexKey(unit.position)])
 }
 
-function abilityMove(state: GameState, unitId: string, amount: number, to: HexCoord | undefined, ignoreEngagement = false): EffectResult {
+export function abilityMove(state: GameState, unitId: string, amount: number, to: HexCoord | undefined, ignoreEngagement = false): EffectResult {
     const unit = state.units[unitId]
     if (!unit.position) return fail('La unidad no está en el tablero')
     if (!to) return fail('Elige el hex de destino')

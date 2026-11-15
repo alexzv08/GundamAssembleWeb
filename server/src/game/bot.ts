@@ -25,11 +25,16 @@ export function randomSquad(size = 3, rand: () => number = Math.random): string[
 export function randomDeck(squad: string[], rand: () => number = Math.random): string[] {
     const units = loadUnitCatalog()
     const tactics = loadTacticsCatalog()
-    return shuffleWith(eligibleCards(squad, units, tactics), rand).slice(0, requiredDeckSize(squad, units, tactics)).map(c => c.id)
+    // Solo cartas oficiales (las de la demo se quedan fuera); si no llegan, se completa con la demo
+    const all = eligibleCards(squad, units, tactics)
+    const official = all.filter(c => c.source !== 'demo')
+    const size = requiredDeckSize(squad, units, tactics)
+    return [...shuffleWith(official, rand), ...shuffleWith(all.filter(c => c.source === 'demo'), rand)].slice(0, size).map(c => c.id)
 }
 
 // Acción segura si el motor rechaza la elegida.
 export function botFallback(s: GameState): GameAction {
+    if (followUpReady(s)) return { type: 'FOLLOW_UP', to: null, targetId: null }
     if (s.pendingForcedMove) return { type: 'CHOOSE_FORCED_MOVE', to: s.pendingForcedMove.request.options[0] ?? null }
     if (s.pendingResponse) return { type: 'PASS_RESPONSE' }
     return s.hasUsedPrimaryAction
@@ -39,7 +44,13 @@ export function botFallback(s: GameState): GameAction {
 
 // Jugador que debe actuar ahora (el que responde, si hay una ventana abierta).
 export function actingPlayer(s: GameState): PlayerId {
-    return s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId ?? s.activePlayerId
+    return s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId
+        ?? (followUpReady(s) ? s.pendingFollowUp!.playerId : null) ?? s.activePlayerId
+}
+
+// Hay un movimiento y ataque pendientes listos para resolverse (ya no hay ataque en curso)
+export function followUpReady(s: GameState): boolean {
+    return !!s.pendingFollowUp && !s.pendingAttack && !s.pendingResponse && !s.pendingForcedMove
 }
 
 // Bot sencillo: ataca si puede; si no, avanza hacia el enemigo más cercano y
@@ -52,6 +63,15 @@ export function chooseBotAction(s: GameState, player: PlayerId, rand: () => numb
     if (pf) {
         if (pf.forPlayerId !== player) return { type: 'PASS_RESPONSE' }
         return { type: 'CHOOSE_FORCED_MOVE', to: rand() < 0.1 ? null : pickOne(pf.request.options) }
+    }
+    // Iron-Blooded Tenacity: quedarse donde está y atacar si tiene a quién
+    if (followUpReady(s)) {
+        const fu = s.pendingFollowUp!
+        const unit = s.units[fu.unitId]
+        const weapon = unit?.weapons.find(w => w.name === fu.weaponName)
+        const hexes = unit?.position && weapon ? attackableHexesWith(s, unit.id, weapon) : []
+        const target = hexes.map(k => targetAt(s, k, player)).find(t => t?.kind === 'unit')
+        return { type: 'FOLLOW_UP', to: null, targetId: target?.id ?? null }
     }
     if (s.pendingResponse?.forPlayerId === player) {
         const card = s.players[player].tactics.hand.find(c => canPlayResponseCard(s, player, c))

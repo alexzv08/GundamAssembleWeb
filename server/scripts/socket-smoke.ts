@@ -127,11 +127,12 @@ http.listen(0, async () => {
     let botActions = 0
     for (let i = 0; i < 3000 && !botOver; i++) {
         const s: GameState = bs!
-        const mine = (s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId ?? s.activePlayerId) === 'player1'
+        const mine = (s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId ?? (s.pendingFollowUp && !s.pendingAttack ? s.pendingFollowUp.playerId : null) ?? s.activePlayerId) === 'player1'
         if (!mine) { await new Promise(r => setTimeout(r, 5)); botActions++; continue }
         const id = s.activeUnitId!
         let action: object
-        if (s.pendingResponse) action = { type: 'PASS_RESPONSE' }
+        if (s.pendingFollowUp && !s.pendingAttack && !s.pendingResponse) action = { type: 'FOLLOW_UP', to: null, targetId: null }
+        else if (s.pendingResponse) action = { type: 'PASS_RESPONSE' }
         else if (!s.activation!.advanced) {
             const reach = [...reachableFor(s, id, { kind: 'advance' }).keys()]
             action = reach.length ? { type: 'ADVANCE', unitId: id, to: keyToHex(reach[0]) } : { type: 'ENERGIZE', unitId: id }

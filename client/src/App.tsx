@@ -17,6 +17,7 @@ import type { ChatMessage } from './components/ui/ChatPanel'
 import { SideRail } from './components/ui/SideRail'
 import { DiceTray } from './components/ui/DiceTray'
 import { useIsMobile } from './game/useIsMobile'
+import { myFollowUp, followUpMoveHexes, followUpAttackHexes } from './game/followUp'
 import { C, button } from './theme'
 import { sfx, isMuted, setMuted } from './game/sound'
 import { ChoiceModal, type ChoiceRequest } from './components/ui/ChoiceModal'
@@ -78,6 +79,8 @@ export default function App() {
   const [chat, setChat] = useState<ChatMessage[]>([])
   const [muted, setMutedState] = useState(isMuted())
   const isMobile = useIsMobile()
+  // Iron-Blooded Tenacity: hex elegido para moverse (paso 1) antes de elegir objetivo (paso 2)
+  const [followTo, setFollowTo] = useState<{ id: string; to: { q: number; r: number } | null } | null>(null)
   const [mobileSheet, setMobileSheet] = useState<'info' | 'unit' | 'hidden' | null>(null)
   const allyPickRef = useRef<((allyId: string) => void) | null>(null)
   const [bitAssault, setBitAssault] = useState<{ unitId: string; cardId: string; queue: string[]; picks: string[] } | null>(null)
@@ -403,6 +406,16 @@ export default function App() {
     if (!unit) return
 
     setPanelUnitId(unitId)
+    // Iron-Blooded Tenacity (paso 2): pulsar al enemigo lo ataca
+    const fu = myFollowUp(gameState, myPlayerId)
+    if (fu) {
+      const step = followTo?.id === `${fu.unitId}:${gameState.log.length}` ? followTo : null
+      if (step && unit.position && followUpAttackHexes(gameState, fu, step.to).has(hexKey(unit.position))) {
+        socket.emit('GAME_ACTION', { action: { type: 'FOLLOW_UP', to: step.to, targetId: unit.id } })
+        setFollowTo(null)
+      }
+      return
+    }
 
     if (selectionMode === 'ally_target' && unit.playerId === myPlayerId && unitId !== selectedUnitId && allyPickRef.current) {
       const pick = allyPickRef.current
@@ -444,9 +457,23 @@ export default function App() {
     setAttackableHexes(new Set())
     setSelectedWeaponIndex(null)
     setMessage(`${unit.name} seleccionado`)
-  }, [gameState, myPlayerId, selectionMode, selectedUnitId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, calcReachable, clearSelection])
+  }, [gameState, myPlayerId, selectionMode, selectedUnitId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, calcReachable, clearSelection, followTo])
 
   const handleHexClick = useCallback((key: string) => {
+    // Iron-Blooded Tenacity: primero el hex al que moverse, luego el enemigo
+    const fu = gameState ? myFollowUp(gameState, myPlayerId) : null
+    if (fu && gameState) {
+      const id = `${fu.unitId}:${gameState.log.length}`
+      const step = followTo?.id === id ? followTo : null
+      if (!step) {
+        if (followUpMoveHexes(gameState, fu).has(key)) setFollowTo({ id, to: keyToHex(key) })
+      } else if (followUpAttackHexes(gameState, fu, step.to).has(key)) {
+        const target = gameState.board[key]?.occupiedBy
+        socket.emit('GAME_ACTION', { action: { type: 'FOLLOW_UP', to: step.to, targetId: target } })
+        setFollowTo(null)
+      }
+      return
+    }
     // Push / Pull a elegir: el servidor espera el siguiente hex de quien empuja
     const forced = gameState?.pendingForcedMove
     if (forced && forced.forPlayerId === myPlayerId) {
@@ -527,7 +554,7 @@ export default function App() {
       setReachableHexes(new Set())
       setSelectionMode('none')
     }
-  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, bitAssault, clearSelection])
+  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, bitAssault, clearSelection, followTo])
 
   const handleAttackMode = useCallback((weaponIndex: number) => {
     if (!gameState || !selectedUnitId) return
@@ -920,7 +947,16 @@ export default function App() {
   const myForced = forced && forced.forPlayerId === myPlayerId ? forced : null
   const forcedUnitName = forced ? gameState.units[forced.request.unitId]?.name ?? 'la unidad' : ''
   const forcedHexes = myForced ? new Set(myForced.request.options.map(o => `${o.q},${o.r}`)) : null
-  const statusMessage = forced && !myForced
+  const myFU = myFollowUp(gameState, myPlayerId)
+  const fuStep = myFU && followTo?.id === `${myFU.unitId}:${gameState.log.length}` ? followTo : null
+  const fuMove = myFU && !fuStep ? followUpMoveHexes(gameState, myFU) : null
+  const fuAttack = myFU && fuStep ? followUpAttackHexes(gameState, myFU, fuStep.to) : null
+  const sendFollowUp = (targetId: string | null) => {
+    socket.emit('GAME_ACTION', { action: { type: 'FOLLOW_UP', to: fuStep?.to ?? null, targetId } })
+    setFollowTo(null)
+  }
+  const rivalFU = gameState.pendingFollowUp && !myFU && !gameState.pendingAttack && !gameState.pendingResponse ? gameState.pendingFollowUp : null
+  const statusMessage = rivalFU ? `El rival resuelve ${rivalFU.source}…` : forced && !myForced
     ? `El rival está eligiendo hacia dónde mover a ${forcedUnitName}…`
     : gameState.pendingResponse && gameState.pendingResponse.forPlayerId !== myPlayerId ? 'Esperando la respuesta del rival…' : message
 
@@ -1019,8 +1055,8 @@ export default function App() {
             gameState={gameState}
             myPlayerId={myPlayerId}
             selectedUnitId={selectedUnitId}
-            reachableHexes={forcedHexes ?? reachableHexes}
-            attackableHexes={forcedHexes ? EMPTY_SET : attackableHexes}
+            reachableHexes={forcedHexes ?? fuMove ?? (myFU ? EMPTY_SET : reachableHexes)}
+            attackableHexes={forcedHexes ? EMPTY_SET : fuAttack ?? (myFU ? EMPTY_SET : attackableHexes)}
             onHexClick={handleHexClick}
             onUnitClick={handleUnitClick}
             onTokenHover={setTokenTooltip}
@@ -1032,6 +1068,27 @@ export default function App() {
 
         <DiceTray gameState={gameState} myPlayerId={myPlayerId} />
         <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
+
+        {myFU && (
+          <div role="dialog" aria-label={myFU.source} style={{
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            background: C.panel, border: `1px solid ${C.amber}`, borderRadius: 8,
+            padding: '8px 14px', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center',
+            maxWidth: 'calc(100% - 32px)', flexWrap: 'wrap', justifyContent: 'center',
+          }}>
+            <span>
+              <b style={{ color: C.amber }}>{myFU.source}</b>:{' '}
+              {!fuStep ? `elige un hex resaltado para mover hasta ${myFU.move}` : `elige el enemigo para ${myFU.weaponName} (Timeline 0)`}
+            </span>
+            {!fuStep
+              ? <button onClick={() => setFollowTo({ id: `${myFU.unitId}:${gameState.log.length}`, to: null })} style={button('amber')}>No moverse</button>
+              : <>
+                  <button onClick={() => sendFollowUp(null)} style={button('amber')}>No atacar</button>
+                  <button onClick={() => setFollowTo(null)} style={button('ghost')}>Volver</button>
+                </>}
+            {fuStep && fuAttack?.size === 0 && <span style={{ color: C.textSoft }}>No hay enemigos a alcance desde ahí</span>}
+          </div>
+        )}
 
         {myForced && (
           <div role="dialog" aria-label="Elegir movimiento forzado" style={{

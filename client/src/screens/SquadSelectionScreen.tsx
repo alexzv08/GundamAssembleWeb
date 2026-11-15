@@ -48,20 +48,25 @@ export function SquadSelectionScreen({
   const [setFilter, setSetFilter] = useState<string>('Todas')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [onlyLegal, setOnlyLegal] = useState(true)
+  // Las unidades y cartas de la demo (pre-lanzamiento) se ocultan por defecto
+  const [showDemo, setShowDemo] = useState(false)
+  const isDemoUnit = (c: UnitCardData) => c.cardId.startsWith('DM01')
 
   const squadError = validateSquad(selectedSquad, availableUnitCards, MAX_SQUAD)
   const squadCards = selectedSquad.map(id => availableUnitCards.find(u => u.cardId === id)).filter((u): u is UnitCardData => !!u)
   const deckCards = availableTacticsCards.map(toDeckCard)
   const deckSize = requiredDeckSize(selectedSquad, availableUnitCards, deckCards)
   const canConfirm = selectedDeck.length === deckSize && !squadSubmitted
-  const sets = ['Todas', ...new Set(availableUnitCards.map(c => c.set))]
-  const units = availableUnitCards.filter(c => setFilter === 'Todas' || c.set === setFilter)
+  const visibleUnits = availableUnitCards.filter(c => showDemo || !isDemoUnit(c) || selectedSquad.includes(c.cardId))
+  const sets = ['Todas', ...new Set(visibleUnits.map(c => c.set))]
+  const units = visibleUnits.filter(c => setFilter === 'Todas' || c.set === setFilter)
   const detail = availableUnitCards.find(c => c.cardId === (focusUnit ?? selectedSquad[selectedSquad.length - 1])) ?? availableUnitCards[0]
 
   const rank = (c: TacticsCardData) => (cardRestriction(toDeckCard(c), squadCards) ? 4 : 0) + (c.source === 'demo' ? 2 : 0)
   const cards = [...availableTacticsCards]
     .filter(c => typeFilter === 'all' || c.type === typeFilter || (typeFilter === 'command' && c.type !== 'attack' && c.type !== 'response'))
     .filter(c => !onlyLegal || !cardRestriction(toDeckCard(c), squadCards))
+    .filter(c => showDemo || c.source !== 'demo' || selectedDeck.includes(c.cardId))
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
   const preview = availableTacticsCards.find(c => c.cardId === focusCard)
 
@@ -103,6 +108,10 @@ export function SquadSelectionScreen({
           <div style={{ minHeight: 0, overflowY: mobile ? 'visible' : 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {sets.map(s => filterChip(setFilter === s, s === 'Todas' ? 'Todos los sets' : s, () => setSetFilter(s)))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textSoft, marginLeft: 8 }}>
+                <input id="show-demo" type="checkbox" checked={showDemo} onChange={e => setShowDemo(e.target.checked)} />
+                Mostrar la demo (pre-lanzamiento)
+              </label>
             </div>
             <p style={{ color: C.textSoft, fontSize: 13 }}>
               Elige {MAX_SQUAD} unidades. No se repiten, salvo las Mass Produced (vuelve a pulsarla para añadir otra copia). Pulsa una elegida para quitarla.
@@ -175,6 +184,10 @@ export function SquadSelectionScreen({
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textSoft, marginLeft: 8 }}>
                 <input id="only-legal" type="checkbox" checked={onlyLegal} onChange={e => setOnlyLegal(e.target.checked)} />
                 Solo las que puede llevar tu escuadra
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textSoft, marginLeft: 8 }}>
+                <input id="show-demo-cards" type="checkbox" checked={showDemo} onChange={e => setShowDemo(e.target.checked)} />
+                Mostrar la demo (pre-lanzamiento)
               </label>
             </div>
             <p style={{ color: C.textSoft, fontSize: 13 }}>

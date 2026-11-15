@@ -450,7 +450,9 @@
       "source": "oficial",
       "signature": "Final Stand",
       "effectData": {
-        "type": "prevent_defeat"
+        "type": "prevent_defeat",
+        "amount": 2,
+        "weapon": "Rex Claws"
       }
     },
     {

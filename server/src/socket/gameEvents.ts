@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io'
 import { RoomManager, type Room } from '../rooms/roomManager'
 import { processAction, type ProcessResult } from '../game/engine'
-import { chooseBotAction, botFallback, actingPlayer } from '../game/bot'
+import { chooseBotAction, botFallback, actingPlayer, followUpReady } from '../game/bot'
 import { reachableFor } from '../game/queries'
 import { keyToHex } from '../game/hexGrid'
 import { reorderSlotTokens } from '../game/timeline'
@@ -11,7 +11,7 @@ import { forfeit } from '../game/victory'
 
 const ACTION_TYPES = new Set<GameAction['type']>([
     'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON', 'ATTACK_RWS',
-    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY', 'SURRENDER',
+    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY', 'SURRENDER', 'FOLLOW_UP',
 ])
 
 function isGameAction(value: unknown): value is GameAction {
@@ -58,9 +58,12 @@ const MAX_STRIKES = 3
 const clocks = new Map<string, { key: string; deadline: number; seconds: number; timer: ReturnType<typeof setTimeout> }>()
 const strikes = new Map<string, number>()   // `${roomId}:${playerId}` → turnos agotados seguidos
 
+function clockKind(s: GameState): TurnClock['kind'] {
+    return s.pendingForcedMove || followUpReady(s) ? 'choice' : s.pendingResponse ? 'response' : 'activation'
+}
+
 function clockKey(s: GameState): string {
-    const kind = s.pendingForcedMove ? 'choice' : s.pendingResponse ? 'response' : 'activation'
-    return [kind, actingPlayer(s), s.activeUnitId, s.pendingResponse?.trigger ?? '', JSON.stringify(s.pendingForcedMove?.request ?? '')].join('|')
+    return [clockKind(s), actingPlayer(s), s.activeUnitId, s.pendingResponse?.trigger ?? '', JSON.stringify(s.pendingForcedMove?.request ?? ''), followUpReady(s) ? 'fu' : ''].join('|')
 }
 
 export function stopClock(roomId: string): void {
@@ -77,7 +80,7 @@ function armClock(io: Server, room: Room): void {
         return
     }
     const actor = actingPlayer(s)
-    const kind: TurnClock['kind'] = s.pendingForcedMove ? 'choice' : s.pendingResponse ? 'response' : 'activation'
+    const kind = clockKind(s)
     const seconds = kind === 'activation' ? TURN_SECONDS : RESPONSE_SECONDS
     if ((room.vsBot && actor === 'player2') || seconds <= 0) { stopClock(room.id); s.turnClock = null; return }
     const key = clockKey(s)
@@ -149,7 +152,7 @@ function driveBot(io: Server, room: Room): void {
             action = botFallback(cur)
             result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
         }
-        if (!result.success && cur.activeUnitId && !cur.pendingResponse && !cur.pendingForcedMove) {
+        if (!result.success && cur.activeUnitId && !cur.pendingResponse && !cur.pendingForcedMove && !followUpReady(cur)) {
             const reach = [...reachableFor(cur, cur.activeUnitId, { kind: 'advance' }).keys()]
             if (reach.length) {
                 action = { type: 'ADVANCE', unitId: cur.activeUnitId, to: keyToHex(reach[0]) }

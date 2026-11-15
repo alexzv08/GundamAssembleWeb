@@ -42,6 +42,12 @@ export function processAction(
         return { success: true, state: s, phaseChanged: false, gameOver: true }
     }
 
+    // Iron-Blooded Tenacity: con el ataque ya resuelto, solo se espera su movimiento y ataque
+    const fu = state.pendingFollowUp
+    if (fu && !state.pendingAttack && !state.pendingResponse && !state.pendingForcedMove && action.type !== 'FOLLOW_UP') {
+        return no(`Esperando a que se resuelva ${fu.source}`)
+    }
+
     const pf = state.pendingForcedMove
     if (action.type === 'CHOOSE_FORCED_MOVE') {
         if (!pf) return no('No hay ningún movimiento forzado pendiente')
@@ -78,7 +84,7 @@ function resolve(state: GameState, action: GameAction, playerId: PlayerId, rng: 
 
 function run(state: GameState, action: GameAction, playerId: PlayerId, rng: Rng): ProcessResult {
     const isResponse = action.type === 'PLAY_RESPONSE' || action.type === 'PASS_RESPONSE' ||
-        action.type === 'USE_RESPONSE_ABILITY' || action.type === 'SET_AUTO_RESPONSES'
+        action.type === 'USE_RESPONSE_ABILITY' || action.type === 'SET_AUTO_RESPONSES' || action.type === 'FOLLOW_UP'
     if (!isResponse && state.activePlayerId !== playerId) return no('No es tu turno')
 
     const result = applyAction(state, action, playerId, rng)

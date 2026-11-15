@@ -15,7 +15,7 @@ import {
 } from './combat'
 import {
     applyCommandAbility, applyCardEffect, applyResponseCardEffect, collectTokens,
-    triggerAfterDash, triggerAfterMove, adjacentEnemyKeys, rescueGarrison, type Choice,
+    triggerAfterDash, triggerAfterMove, adjacentEnemyKeys, rescueGarrison, abilityMove, type Choice,
 } from './effects'
 import { contestObjectives } from './victory'
 import { endActivation } from './activation'
@@ -374,6 +374,35 @@ export function applyPlayResponse(state: GameState, cardId: string, playerId: Pl
     return { success: true, newState: s }
 }
 
+// Movimiento y ataque pendientes de Iron-Blooded Tenacity ("Moves 2 and makes a
+// Rex Claws attack at [Timeline 0]"): los dos son opcionales.
+export function applyFollowUp(state: GameState, to: HexCoord | null, targetId: string | null, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
+    const fu = state.pendingFollowUp
+    if (!fu) return fail('No hay ninguna acción pendiente')
+    if (fu.playerId !== playerId) return fail('Le toca elegir al rival')
+    if (state.pendingAttack || state.pendingResponse) return fail('Aún se está resolviendo el ataque')
+    const s = cloneState(state)
+    s.pendingFollowUp = null
+    const unit = s.units[fu.unitId]
+    if (!unit?.position) return { success: true, newState: s }
+    if (to) {
+        const moved = abilityMove(s, unit.id, fu.move, to, true)
+        if (!moved.success) return fail(moved.error ?? 'Destino no alcanzable')
+        pushLog(s, playerId, `${unit.name} se mueve (${fu.source})`, 'move', [hexKey(to)])
+    }
+    if (targetId) {
+        const weapon = unit.weapons.find(w => w.name === fu.weaponName)
+        const target = s.units[targetId] ?? null
+        const key = target?.position ? hexKey(target.position) : null
+        if (!weapon || !key) return fail('Objetivo no válido')
+        const check = checkAttackTargetWith(s, unit.id, weapon, key)
+        if (!check.ok) return fail(check.reason ?? 'Objetivo no válido')
+        pushLog(s, playerId, `${unit.name} ataca con ${weapon.name} a Timeline 0 (${fu.source})`, 'attack', [key])
+        startAttack(s, unit.id, weapon, key, rng)
+    }
+    return { success: true, newState: s }
+}
+
 export function applyPassResponse(state: GameState, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
     if (!state.pendingResponse || state.pendingResponse.forPlayerId !== playerId) return fail('No hay ventana de respuesta para ti')
     const s = cloneState(state)
@@ -431,6 +460,7 @@ export function applyAction(state: GameState, action: GameAction, playerId: Play
         case 'END_ACTIVATION': return applyEndActivation(state, action.unitId, playerId)
         case 'PLAY_RESPONSE': return applyPlayResponse(state, action.cardId, playerId, rng)
         case 'PASS_RESPONSE': return applyPassResponse(state, playerId, rng)
+        case 'FOLLOW_UP': return applyFollowUp(state, action.to, action.targetId, playerId, rng)
         default: return fail('Acción desconocida')
     }
 }

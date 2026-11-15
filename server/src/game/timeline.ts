@@ -96,6 +96,30 @@ export function advanceToken(
     return { ...timeline, slots: finalSlots }
 }
 
+// ─── RETROCEDER TOKEN ─────────────────────────────────────────────────────────
+// Efectos que "mueven hacia atrás" una ficha en el Timeline (Q&A 2, 22 y 28):
+// nunca antes de la ronda actual, y en el slot destino va DEBAJO de las que haya
+// (igual que al avanzar). Ninguna carta publicada lo usa todavía.
+export function retreatToken(
+    timeline: Timeline,
+    unitId: string,
+    amount: number,
+    currentRound: number,
+): Timeline {
+    const slot = timeline.slots.find(s => s.tokens.some(t => t.unitId === unitId))
+    if (!slot || amount <= 0) return timeline
+    const target = Math.max(currentRound, slot.round - amount)
+    if (target === slot.round) return timeline
+    const token = slot.tokens.find(t => t.unitId === unitId)!
+    return {
+        ...timeline,
+        slots: timeline.slots.map(s =>
+            s.round === slot.round ? { ...s, tokens: s.tokens.filter(t => t.unitId !== unitId) }
+                : s.round === target ? { ...s, tokens: [...s.tokens, token] }
+                    : s),
+    }
+}
+
 // ─── AVANZAR TOKEN AL SER DERROTADO ──────────────────────────────────────────
 // Cuando una unidad es derrotada su token avanza +2
 export function advanceTokenOnDefeat(

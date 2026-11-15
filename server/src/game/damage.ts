@@ -91,8 +91,10 @@ export function damageUnit(state: GameState, unitId: string, amount: number, opt
 }
 
 // Iron-Blooded Tenacity: "When Gundam Barbatos Lupus Rex would be defeated: Set
-// its HP to 1 instead." Se juega sola si está en la mano (no se pierde nada).
-// La parte "It Moves 2 and makes a Rex Claws attack" aún no se resuelve.
+// its HP to 1 instead. It Moves 2 and makes a Rex Claws attack at [Timeline 0]."
+// Se juega sola si está en la mano (no se pierde nada). El movimiento y el
+// ataque quedan pendientes (pendingFollowUp) hasta que acabe el ataque en curso;
+// los elige el dueño del Barbatos con la acción FOLLOW_UP.
 function preventDefeat(state: GameState, unitId: string): boolean {
     const unit = state.units[unitId]
     const tactics = state.players[unit.playerId].tactics
@@ -102,6 +104,9 @@ function preventDefeat(state: GameState, unitId: string): boolean {
     tactics.discarded.push(card)
     unit.currentHp = 1
     pushLog(state, unit.playerId, `${unit.name} resiste con "${card.name}" (queda a 1 HP)`, 'card')
+    if (card.effectData?.weapon && !state.pendingFollowUp) {
+        state.pendingFollowUp = { unitId, playerId: unit.playerId, move: card.effectData.amount ?? 0, weaponName: card.effectData.weapon, source: card.name }
+    }
     return true
 }
 

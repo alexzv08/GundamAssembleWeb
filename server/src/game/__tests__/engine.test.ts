@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import type { BoardMap, GameState, Unit, Weapon, Ability } from '../../types'
 import { hexDistance, getNeighbors, hexKey, checkLineOfSight, getReachableHexes } from '../hexGrid'
 import {
-  createEmptyTimeline, placeInitialToken, getNextActivation, advanceToken, getUnitRound, reorderSlotForTie,
+  createEmptyTimeline, placeInitialToken, getNextActivation, advanceToken, getUnitRound, reorderSlotForTie, retreatToken,
 } from '../timeline'
 import { reachableFor, checkAttackTarget, isEngaged } from '../queries'
 import { applyAction, applyAdvance, applyAttack, applyAttackGarrison, applyEndActivation, applyUseAbility, applyDash } from '../actions'
@@ -20,6 +20,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { listMaps, randomMapId } from '../maps'
+import { randomSquad, randomDeck } from '../bot'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -993,6 +994,36 @@ describe('Challenge, Protective Shot e Iron-Blooded Tenacity', () => {
     expect(s.units.b.position).not.toBeNull()
     expect(s.players.player1.vp).toBe(0)
   })
+  it('Iron-Blooded Tenacity: después mueve 2 y ataca con Rex Claws a Timeline 0', () => {
+    const rex = weapon({ name: 'Rex Claws', range: 1, strength: 3, tlCost: 2 })
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('b', 'player2', { q: 5, r: 2 }, { signature: 'Final Stand', currentHp: 2, weapons: [rex] })])
+    g.players.player2.tactics.hand = [card('Iron-Blooded Tenacity')]
+    const s = processAction(g, { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'b' }, 'player1', dice(5, 5, 5)).state!
+    expect(s.pendingFollowUp).toMatchObject({ unitId: 'b', playerId: 'player2', move: 2, weaponName: 'Rex Claws' })
+    // Hasta que se resuelva, nadie más actúa
+    expect(processAction(s, { type: 'END_ACTIVATION', unitId: 'a' }, 'player1').success).toBe(false)
+    // Solo el dueño del Barbatos elige
+    expect(processAction(s, { type: 'FOLLOW_UP', to: null, targetId: null }, 'player1').success).toBe(false)
+    // Se acerca a 'a' (adyacente a (2,2)) y le ataca
+    const tl = getUnitRound(s.timeline, 'b')
+    const r = processAction(s, { type: 'FOLLOW_UP', to: { q: 3, r: 2 }, targetId: 'a' }, 'player2', dice(5, 5, 5))
+    expect(r.success).toBe(true)
+    const s2 = r.state!
+    expect(s2.pendingFollowUp ?? null).toBeNull()
+    expect(s2.units.b.position).toEqual({ q: 3, r: 2 })
+    expect(s2.lastAttack?.attackerId).toBe('b')
+    expect(s2.units.a.currentHp).toBe(7)
+    expect(getUnitRound(s2.timeline, 'b')).toBe(tl)   // Timeline 0
+  })
+  it('Iron-Blooded Tenacity: no puede moverse más de 2', () => {
+    const rex = weapon({ name: 'Rex Claws', range: 1 })
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('b', 'player2', { q: 6, r: 2 }, { signature: 'Final Stand', currentHp: 2, weapons: [rex] })])
+    g.players.player2.tactics.hand = [card('Iron-Blooded Tenacity')]
+    g.units.a.weapons = [weapon({ range: 5 })]
+    const s = processAction(g, { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'b' }, 'player1', dice(5, 5, 5)).state!
+    expect(processAction(s, { type: 'FOLLOW_UP', to: { q: 3, r: 2 }, targetId: null }, 'player2').success).toBe(false)
+    expect(processAction(s, { type: 'FOLLOW_UP', to: null, targetId: null }, 'player2').success).toBe(true)
+  })
   it('Bit Assault recoloca todas las RWS y cada una hace 1 de daño a un enemigo adyacente', () => {
     const g = makeGame([makeUnit('a', 'player1', A, { signature: 'Protective Heroine' }), makeUnit('e', 'player2', { q: 5, r: 5 })])
     g.rws.r1 = { id: 'r1', kind: 'bit_stave', name: 'BIT', owner: 'player1', ownerUnitId: 'a', position: { q: 0, r: 0 }, vp: 2 }
@@ -1147,5 +1178,43 @@ describe('Partidas guardadas', () => {
     b.useStore(store)
     expect(await b.restore(io)).toBe(0)
     expect((await store.loadAll()).length).toBe(0)
+  })
+})
+
+describe('Contenido de la demo', () => {
+  it('el rival automático no usa unidades ni cartas de la demo si hay oficiales suficientes', () => {
+    const tactics = loadTacticsCatalog()
+    for (let i = 0; i < 20; i++) {
+      const squad = randomSquad(3)
+      expect(squad.some(id => id.startsWith('DM01'))).toBe(false)
+      const deck = randomDeck(squad)
+      const demo = deck.filter(id => tactics.find(c => c.id === id)?.source === 'demo')
+      const official = eligibleCards(squad, loadUnitCatalog(), tactics).filter(c => c.source !== 'demo').length
+      if (official >= deck.length) expect(demo).toEqual([])
+    }
+  })
+})
+
+describe('Setup y Timeline hacia atrás (previstos para unidades futuras)', () => {
+  it('retreatToken adelanta la ficha sin pasar de la ronda actual y la pone debajo', () => {
+    let tl = createEmptyTimeline()
+    tl = placeInitialToken(tl, { unitId: 'x', playerId: 'player1' }, 2)
+    tl = placeInitialToken(tl, { unitId: 'y', playerId: 'player2' }, 6)
+    tl = retreatToken(tl, 'y', 4, 1)
+    expect(getUnitRound(tl, 'y')).toBe(2)
+    expect(tl.slots.find(s => s.round === 2)!.tokens.map(t => t.unitId)).toEqual(['x', 'y'])
+    expect(getUnitRound(retreatToken(tl, 'y', 5, 2), 'y')).toBe(2)   // nunca antes de la ronda actual
+  })
+  it('las habilidades de Setup se aplican al empezar la partida', () => {
+    const setup = (abilityData: Ability['abilityData']): Ability => ({ name: 'Prueba', type: 'SETUP', description: '', abilityData })
+    const g = makeGame([
+      makeUnit('a', 'player1', null, { abilities: [setup({ type: 'setup_upgrade', upgradeType: 'shield', amount: 1 })] }),
+      makeUnit('b', 'player2', null, { startingTl: 4, abilities: [setup({ type: 'setup_energy', amount: 2 }), setup({ type: 'setup_timeline', amount: -2 })] }),
+    ])
+    g.phase = 'setup'
+    const s = startGame(structuredClone(g))
+    expect(s.units.a.upgrades.some(u => u.type === 'shield')).toBe(true)
+    expect(s.units.b.energy).toBe(2)
+    expect(getUnitRound(s.timeline, 'b')).toBe(2)
   })
 })
