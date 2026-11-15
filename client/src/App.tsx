@@ -1,10 +1,12 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
 import type { GameState, AttackPreview, ReplaySummary } from './types/gameState'
-import type { Unit } from './types/units'
+import type { Unit, Weapon } from './types/units'
+import type { AreaAim } from './types/gameState'
+import { aimToward, aimTargets, rotateAim, aimKey } from './game/areaAim'
 import { hexKey, gridDistance } from './game/hexGrid'
-import { baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
+import { targetAt, baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
 import { getNeighbors, keyToHex } from './game/hexGrid'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
@@ -86,6 +88,8 @@ export default function App() {
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ key: string; data: AttackPreview } | null>(null)
   // Iron-Blooded Tenacity: hex elegido para moverse (paso 1) antes de elegir objetivo (paso 2)
+  // Plantilla de área fijada (rotada a mano o tocada en móvil); si no, sigue al ratón
+  const [aimLock, setAimLock] = useState<AreaAim | null>(null)
   const [followTo, setFollowTo] = useState<{ id: string; to: { q: number; r: number } | null } | null>(null)
   const [mobileSheet, setMobileSheet] = useState<'info' | 'unit' | 'hidden' | null>(null)
   const allyPickRef = useRef<((allyId: string) => void) | null>(null)
@@ -135,6 +139,7 @@ export default function App() {
     setSelectedWeaponIndex(null)
     setPendingAbilityIndex(null)
     setPendingCardId(null)
+    setAimLock(null)
   }, [])
 
   // ─── AUTH ─────────────────────────────────────────────────────────────────
@@ -516,17 +521,64 @@ export default function App() {
     return false
   }, [])
 
+  // ─── PLANTILLAS DE ÁREA ────────────────────────────────────────────────────
+  // Armas "SP": el jugador orienta la cuña o centra la flor y confirma con un clic.
+  const areaWeapon: Weapon | null = useMemo(() => {
+    if (!gameState || !selectedUnitId || !myPlayerId) return null
+    const w = selectionMode === 'attacking' ? gameState.units[selectedUnitId]?.weapons[selectedWeaponIndex ?? 0]
+      : selectionMode === 'playing_card' && pendingCardId ? gameState.players[myPlayerId].tactics.hand.find(c => c.id === pendingCardId)?.weapon
+        : undefined
+    return w?.area ? w : null
+  }, [gameState, selectedUnitId, myPlayerId, selectionMode, selectedWeaponIndex, pendingCardId])
+  const currentAim = useMemo(() => !areaWeapon || !gameState || !selectedUnitId ? null
+    : aimLock ?? (hoverKey ? aimToward(gameState, selectedUnitId, areaWeapon, hoverKey) : null),
+  [areaWeapon, aimLock, hoverKey, gameState, selectedUnitId])
+  const aimInfo = useMemo(() => currentAim && areaWeapon && gameState && selectedUnitId
+    ? aimTargets(gameState, selectedUnitId, areaWeapon, currentAim, hoverKey) : null,
+  [currentAim, areaWeapon, gameState, selectedUnitId, hoverKey])
+
+  // Declara el ataque de área con la plantilla actual, o la coloca si el hex queda fuera
+  const areaClick = useCallback((key: string) => {
+    if (!areaWeapon || !gameState || !selectedUnitId || !myPlayerId) return
+    // En móvil (sin ratón) el primer toque coloca la plantilla y el segundo ataca
+    if (currentAim && (!isMobile || aimLock) && aimInfo?.primary && aimInfo.hexes.includes(key)) {
+      const k = aimInfo.primary
+      const unitTarget = gameState.board[k]?.occupiedBy
+      const rws = rwsAt(gameState, k)
+      const garrison = gameState.board[k]?.garrisonToken
+      const targetId = unitTarget ?? (rws && rws.owner !== myPlayerId ? rws.id : garrison?.id)
+      if (!targetId) return
+      const weaponIndex = selectedWeaponIndex ?? 0
+      const action = selectionMode === 'playing_card'
+        ? { type: 'PLAY_CARD', unitId: selectedUnitId, cardId: pendingCardId, targetId, aim: currentAim }
+        : unitTarget ? { type: 'ATTACK', unitId: selectedUnitId, weaponIndex, targetId, aim: currentAim }
+          : rws && rws.owner !== myPlayerId ? { type: 'ATTACK_RWS', unitId: selectedUnitId, weaponIndex, rwsId: rws.id }
+            : { type: 'ATTACK_GARRISON', unitId: selectedUnitId, weaponIndex, garrisonId: garrison!.id }
+      socket.emit('GAME_ACTION', { action })
+      clearSelection()
+      return
+    }
+    const next = aimToward(gameState, selectedUnitId, areaWeapon, key)
+    setAimLock(next)
+    if (next) setMessage('Plantilla colocada: toca dentro de ella para atacar')
+  }, [areaWeapon, gameState, selectedUnitId, myPlayerId, currentAim, aimInfo, selectedWeaponIndex, selectionMode, pendingCardId, clearSelection, isMobile, aimLock])
+
+  // Previsión del ataque (también con la plantilla colocada)
+  const previewSig = areaWeapon ? (aimInfo?.primary ? `area:${aimKey(currentAim)}:${aimInfo.primary}` : null) : hoverKey
   useEffect(() => {
     const unitId = gameState?.activeUnitId
     const attacking = selectionMode === 'attacking' || (selectionMode === 'playing_card' && !!pendingCardId)
-    if (!hoverKey || !unitId || !attacking || !attackableHexes.has(hoverKey)) return
+    if (!previewSig || !unitId || !attacking) return
+    const targetKey = areaWeapon ? aimInfo?.primary : hoverKey
+    if (!targetKey || (!areaWeapon && !attackableHexes.has(targetKey))) return
+    const aim = areaWeapon ? currentAim ?? undefined : undefined
     const req = selectionMode === 'attacking'
-      ? { unitId, weaponIndex: selectedWeaponIndex ?? 0, targetKey: hoverKey }
-      : { unitId, cardId: pendingCardId, targetKey: hoverKey }
+      ? { unitId, weaponIndex: selectedWeaponIndex ?? 0, targetKey, aim }
+      : { unitId, cardId: pendingCardId, targetKey, aim }
     let alive = true
-    socket.emit('PREVIEW_ATTACK', req, (p: AttackPreview | null) => { if (alive) setPreview(p ? { key: hoverKey, data: p } : null) })
+    socket.emit('PREVIEW_ATTACK', req, (p: AttackPreview | null) => { if (alive) setPreview(p ? { key: previewSig, data: p } : null) })
     return () => { alive = false }
-  }, [hoverKey, selectionMode, selectedWeaponIndex, pendingCardId, attackableHexes, gameState?.activeUnitId])
+  }, [previewSig, hoverKey, areaWeapon, aimInfo, currentAim, selectionMode, selectedWeaponIndex, pendingCardId, attackableHexes, gameState?.activeUnitId])
 
   // ─── ACCIONES ─────────────────────────────────────────────────────────────
   const handleUnitClick = useCallback((unitId: string) => {
@@ -552,6 +604,11 @@ export default function App() {
       setSelectionMode('none')
       setAttackableHexes(new Set())
       pick(unitId)
+      return
+    }
+
+    if (areaWeapon && unit.position && (selectionMode === 'attacking' || selectionMode === 'playing_card')) {
+      areaClick(hexKey(unit.position))
       return
     }
 
@@ -586,7 +643,7 @@ export default function App() {
     setAttackableHexes(new Set())
     setSelectedWeaponIndex(null)
     setMessage(`${unit.name} seleccionado`)
-  }, [gameState, myPlayerId, selectionMode, selectedUnitId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, calcReachable, clearSelection, followTo])
+  }, [gameState, myPlayerId, selectionMode, selectedUnitId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, calcReachable, clearSelection, followTo, areaWeapon, areaClick])
 
   const handleHexClick = useCallback((key: string) => {
     // Iron-Blooded Tenacity: primero el hex al que moverse, luego el enemigo
@@ -611,6 +668,11 @@ export default function App() {
       return
     }
     if (!gameState || !selectedUnitId) return
+
+    if (areaWeapon && (selectionMode === 'attacking' || selectionMode === 'playing_card')) {
+      areaClick(key)
+      return
+    }
 
     if (selectionMode === 'attacking' && attackableHexes.has(key)) {
       const rws = rwsAt(gameState, key)
@@ -683,7 +745,7 @@ export default function App() {
       setReachableHexes(new Set())
       setSelectionMode('none')
     }
-  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, bitAssault, clearSelection, followTo])
+  }, [gameState, selectedUnitId, selectionMode, reachableHexes, attackableHexes, myPlayerId, selectedWeaponIndex, pendingAbilityIndex, pendingCardId, bitAssault, clearSelection, followTo, areaWeapon, areaClick])
 
   const handleAttackMode = useCallback((weaponIndex: number) => {
     if (!gameState || !selectedUnitId) return
@@ -693,8 +755,11 @@ export default function App() {
     setSelectionMode('attacking')
     setAttackableHexes(attackable)
     setReachableHexes(new Set())
+    setAimLock(null)
     const weapon = gameState.units[selectedUnitId]?.weapons[weaponIndex]
-    setMessage(`${weapon?.name} — Selecciona un enemigo (rango ${weapon?.range})`)
+    setMessage(weapon?.area
+      ? `${weapon.name} — ${weapon.area === 'cone' ? 'orienta la plantilla con el ratón (o gírala)' : 'centra la plantilla en un hex a alcance'} y haz clic para atacar`
+      : `${weapon?.name} — Selecciona un enemigo (rango ${weapon?.range})`)
   }, [gameState, selectedUnitId, calcAttackable])
 
   const handleUseAbility = useCallback((abilityIndex: number) => {
@@ -864,7 +929,8 @@ export default function App() {
     if (card.type === 'attack') {
       if (!card.weapon) { setMessage(`"${card.name}" no está implementada aún`); return }
       if (gameState.hasUsedPrimaryAction) { setMessage('Las cartas Attack sustituyen al ataque primario, que ya usaste'); return }
-      startTargeting(new Set(attackableHexesWith(gameState, unitId, card.weapon)), 'playing_card', 'un objetivo')
+      setAimLock(null)
+      startTargeting(new Set(attackableHexesWith(gameState, unitId, card.weapon)), 'playing_card', card.weapon.area ? 'la colocación de la plantilla' : 'un objetivo')
       return
     }
     const e = card.effectData
@@ -1194,7 +1260,7 @@ export default function App() {
             myPlayerId={myPlayerId}
             selectedUnitId={selectedUnitId}
             reachableHexes={forcedHexes ?? fuMove ?? (myFU ? EMPTY_SET : reachableHexes)}
-            attackableHexes={forcedHexes ? EMPTY_SET : fuAttack ?? (myFU ? EMPTY_SET : attackableHexes)}
+            attackableHexes={forcedHexes ? EMPTY_SET : fuAttack ?? (myFU ? EMPTY_SET : aimInfo ? new Set(aimInfo.hexes) : attackableHexes)}
             onHexClick={handleHexClick}
             onUnitClick={handleUnitClick}
             onTokenHover={setTokenTooltip}
@@ -1206,9 +1272,43 @@ export default function App() {
         </div>
 
         <DiceTray gameState={gameState} myPlayerId={myPlayerId} />
-        {preview && preview.key === hoverKey && attackableHexes.has(hoverKey ?? '') && (selectionMode === 'attacking' || selectionMode === 'playing_card') && (
+        {preview && preview.key === previewSig && (areaWeapon || attackableHexes.has(hoverKey ?? '')) && (selectionMode === 'attacking' || selectionMode === 'playing_card') && (
           <AttackPreviewBox preview={preview.data}
-            targetName={(() => { const u = gameState.board[preview.key]?.occupiedBy; return u ? gameState.units[u].name : rwsAt(gameState, preview.key)?.name ?? 'Garrison' })()} />
+            targetName={(() => {
+              const k = areaWeapon ? aimInfo?.primary ?? '' : preview.key
+              const u = gameState.board[k]?.occupiedBy
+              const name = u ? gameState.units[u].name : rwsAt(gameState, k)?.name ?? 'Garrison'
+              return areaWeapon && preview.data.targets > 1 ? `${name} y ${preview.data.targets - 1} más` : name
+            })()} />
+        )}
+
+        {areaWeapon && (
+          <div role="dialog" aria-label="Plantilla de área" style={{
+            position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            background: C.panel, border: `1px solid ${C.enemy}`, borderRadius: 8,
+            padding: '8px 14px', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center',
+            maxWidth: 'calc(100% - 32px)', flexWrap: 'wrap', justifyContent: 'center',
+          }}>
+            <span>
+              <b style={{ color: C.enemy }}>{areaWeapon.name}</b>: {!currentAim
+                ? (areaWeapon.area === 'cone' ? 'apunta la plantilla hacia los enemigos' : 'elige el hex central (a alcance)')
+                : aimInfo?.primary
+                  ? `${aimInfo.hexes.filter(k => myPlayerId && targetAt(gameState, k, myPlayerId)).length} objetivo(s) dentro · clic dentro para atacar`
+                  : 'ningún objetivo válido dentro'}
+            </span>
+            {areaWeapon.area === 'cone' && (
+              <>
+                <button type="button" aria-label="Girar a la izquierda" title="Girar a la izquierda" style={button('subtle')}
+                  onClick={() => setAimLock(rotateAim(currentAim ?? { facing: 0 }, 1))}>⟲</button>
+                <button type="button" aria-label="Girar a la derecha" title="Girar a la derecha" style={button('subtle')}
+                  onClick={() => setAimLock(rotateAim(currentAim ?? { facing: 0 }, -1))}>⟳</button>
+              </>
+            )}
+            {aimLock && <button type="button" onClick={() => setAimLock(null)} style={button('ghost')} title="La plantilla vuelve a seguir al ratón">Seguir al ratón</button>}
+            {aimInfo?.primary && isMobile && (
+              <button type="button" onClick={() => areaClick(aimInfo.primary!)} style={button('danger')}>Atacar</button>
+            )}
+          </div>
         )}
         <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
 

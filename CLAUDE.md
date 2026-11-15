@@ -88,11 +88,13 @@ server/src/
     victory.ts            — disputa de Objetivos, puntuación por fase, ganador
     catalog.ts            — carga unit_library.json / card_library.json y construye las unidades
     createServerGame.ts   — GameState inicial (tablero, unidades en Reserva, Timeline, iniciativa, mazos)
-    bot.ts                — IA del rival automático (salas contra la máquina y self-play)
+    bot.ts                — IA del rival automático con niveles facil/normal/dificil (salas contra la máquina y self-play)
+    replay.ts             — repeticiones: estado inicial + acciones + dados (recordedAction) y reconstrucción (replayFrames)
     maps.ts               — lista de mapas y validación de ids (sin rutas)
     __tests__/            — tests del motor
-  rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId)
-  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION llama a processAction
+  rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId), abandono, revancha, espectadores
+  rooms/gameStore.ts      — partidas en curso y repeticiones en disco o Supabase (GAME_STORE=file|supabase|none)
+  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION → recordedAction (processAction + registro); reloj de turno; PREVIEW_ATTACK; REMATCH, SPECTATE, REPLAY_*
   routes/                 — /api/maps, /api/units, /api/cards, /api/auth
 server/data/
   units/unit_library.json — 15 unidades oficiales + 6 de la demo (formato v2)
@@ -112,6 +114,8 @@ client/src/
                             DiceTray, ChoiceModal, MapThumb, UnitCardPreview (UnitModelViewer)…
   game/sound.ts           — efectos de sonido sintetizados (Web Audio) y silencio
   game/useIsMobile.ts     — HUD compacto en pantallas de ≤ 760 px
+  game/areaAim.ts         — colocación a mano de las plantillas de área (orientar la cuña, centrar la flor)
+  game/links.ts           — enlaces ?sala= / ?ver= / ?repeticion=
   three/                  — escena 3D (GameScene: luz, niebla, cámara que sigue a la unidad activa; HexTile; UnitMesh con
                             peana, etiqueta y daño flotante; AttackTracer); models.ts asocia cardId → modelo GLB
 public/models/            — modelos GLB comprimidos con meshopt (originales STL en assets-src/models, tools/stl-to-glb.mjs)
@@ -143,7 +147,9 @@ io.emit GAME_STATE_UPDATE | PHASE_TRANSITION | GAME_OVER  (con lastAttack.rolls 
 - **Ataque**: dados = Strength + Strength Upgrades + modificadores. Accuracy suma al dado salvo 1 (fallo) y 9-10 (crit). Impacto con 4+. Crit una vez por ataque. Daño = impactos + bonus − Shields activos (que se ponen boca abajo); Fracture +3 si el daño es 3+; Disarm repite los impactos y anula crits.
 - **Engagement**: adyacente a enemigo a la misma elevación → −1 movimiento y debe atacar a un trabado.
 - **Objetivos**: se disputan al terminar la activación; mayoría captura (neutral) o neutraliza (rival). Puntúan al final de cada fase.
-- **Fin**: tras la Fase 2; empate → gana el último que actuó.
+- **Fin**: tras la Fase 2; empate → gana el último que actuó. También por `SURRENDER`, por abandono (5 min) o por agotar el reloj 3 veces seguidas (`forfeit` en victory.ts).
+- **Plantillas de área**: `aim: { facing }` (cuña, `coneHexes`) o `aim: { center }` (flor) en ATTACK / PLAY_CARD; `resolveAim` elige la mejor si falta y queda fija en `pendingAttack.aim`.
+- **Repeticiones**: toda acción que llega al motor desde la sala pasa por `recordedAction`; nada de `Math.random` en el motor fuera del `rng` (si no, las repeticiones dejan de ser exactas: el self-play lo comprueba).
 
 ---
 
@@ -378,3 +384,15 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **Ambientación**: cielo con degradado y estrellas (`SkyDome`), rocas, chatarra y matas deterministas por hex (`TerrainProps`, instanciadas), bloom y viñeta con `@react-three/postprocessing` 3.0.4 (solo escritorio; la 3.2 obliga a subir React Three Fiber, y con la 9.8 las etiquetas `Html` de drei dejaban de verse).
 - **Lobby**: "Buscar partida" usa un mapa al azar (`randomMapId`, escuadras de 3); "Contra la máquina" y "Sala privada" abren su pantalla con el mapa y el tamaño de escuadra. Test nuevo.
 - Archivos: `client/public/cards/**`, `client/src/{cardArt.ts,theme.ts}`, `client/src/components/ui/{TacticsHand,UnitToken,UnitPanel,TimelineBar,UnitCardPreview}.tsx`, `client/src/screens/{LobbyScreen,SquadSelectionScreen}.tsx`, `client/src/three/{GameScene,UnitMesh,useUnitModel,models,TerrainProps,SkyDome}.ts(x)`, `client/package.json`, `server/src/game/maps.ts`, `server/src/rooms/roomManager.ts`, tests, `GAMEPLAN.md`, `CLAUDE.md`.
+
+### 2026-11-15 — Datos verificados, reloj, partidas guardadas, CI, bot con niveles, repeticiones, espectadores y plantillas de área
+- **Datos**: test que compara las 15 unidades con los valores de las cartas impresas (`fixtures/official_unit_cards.json`); corregidos Guncannon (sin Challenge) y Quadruple Bop Missile (TL 3, Strength 5).
+- **Partidas que no se cuelgan**: reloj de turno y de Response con pase automático y derrota a la tercera (`TURN_SECONDS`, `RESPONSE_SECONDS`), botón Rendirse, derrota por abandono.
+- **Persistencia**: `gameStore.ts` (disco o Supabase, migraciones en `server/supabase/migrations`); las salas se recuperan al arrancar.
+- **CI**: `.github/workflows/ci.yml` (sync, tipos, tests, self-play, smoke, lint y build).
+- **Reglas**: Iron-Blooded Tenacity completa (`pendingFollowUp`, `FOLLOW_UP`); motor de habilidades de Setup, `Unit.carrier` reservado y `retreatToken`; demo oculta por defecto.
+- **Previsión de ataque** (`previewAttack`, evento `PREVIEW_ATTACK`, `AttackPreviewBox`) y **bot con niveles** (selector en el lobby; `--p1/--p2` en el self-play).
+- **Revancha, enlaces, espectadores y repeticiones**: `REMATCH`, `SPECTATE`, `REPLAY_LIST/OPEN/FRAME`; `replay.ts`; `ReplayBar`; lista de repeticiones en el lobby. El self-play verifica que cada repetición reproduce la partida.
+- **Plantillas de área a mano**: cuña de 60° con la forma de los diagramas (War Edge, Twin Buster Rifle) y flor centrable en un hex vacío; banner con giro y previsión con todos los objetivos alcanzados.
+- **Tests**: 148; self-play 100/100 con repeticiones exactas; smoke con espectador, repetición y revancha.
+- Archivos: `server/src/game/{bot,combat,replay,queries,hexGrid,actions,effects,damage,engine,victory,timeline}.ts`, `server/src/rooms/{roomManager,gameStore}.ts`, `server/src/socket/gameEvents.ts`, `server/src/types/*`, `server/scripts/{self-play,socket-smoke}.ts`, `server/supabase/migrations/*`, `.github/workflows/ci.yml`, `client/src/App.tsx`, `client/src/game/{areaAim,links,followUp}.ts`, `client/src/components/ui/{ReplayBar,AttackPreviewBox,GameStatusBar,GameOverModal}.tsx`, `client/src/screens/{LobbyScreen,WaitingScreen,SquadSelectionScreen}.tsx`, `client/src/three/*`, copias compartidas, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.

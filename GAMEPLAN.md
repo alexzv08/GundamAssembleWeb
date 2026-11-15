@@ -25,8 +25,9 @@ Fuentes oficiales:
 - ✅ **Orden propio en el Timeline**: cada jugador reordena sus fichas apiladas (pantalla de setup)
 - ✅ **Iniciativa**: empieza quien tenga el TL inicial más bajo; si empatan, tirada de dado
 - ✅ **Tamaño de escuadra por escenario** (3 o 5): se elige al crear la sala junto con el mapa
-- ❌ **Habilidades de Setup** (tipo `SETUP` existe, sin efectos)
-- ❌ **Carriers**
+- ⚠️ **Habilidades de Setup**: motor preparado (`applySetupAbilities` al empezar, efectos `setup_upgrade`, `setup_energy` y `setup_timeline`); ninguna unidad publicada tiene aún una
+- ⚠️ **Carriers**: tipo reservado (`Unit.carrier`); sin unidades publicadas
+- ✅ **Mover fichas hacia atrás en la Timeline** (`retreatToken`), listo para los efectos que lo pidan
 
 ## 2. Timeline
 
@@ -74,7 +75,9 @@ Fuentes oficiales:
 - ✅ Ataques que también alcanzan a los adyacentes al objetivo (una sola tirada)
 - ✅ Derrota: VP al rival, Reserva, +2 TL, HP al máximo, sin estados, conserva Energy y Upgrades
 - ✅ **Ventanas de Response durante el ataque**: antes y después de la tirada (primero el atacante, luego el defensor); el ataque se pausa solo si alguien tiene una carta jugable
-- ⚠️ **Plantillas de área "SP"** (Twin Buster Rifle, Quadruple Bop Missile, 240mm Cannon, War Edge): cono = 60° hasta 3 hexes; flor = hex elegido + 6 vecinos. La forma exacta está en el diagrama de la carta (la hoja enlaza la imagen de War Edge)
+- ✅ **Plantillas de área "SP" colocadas a mano**: el jugador orienta la cuña con el ratón o la gira (6 orientaciones) y centra la flor en cualquier hex a alcance; el servidor valida la colocación (`aim` en ATTACK / PLAY_CARD) y, sin ella, elige la que más enemigos alcanza
+  - Cuña comprobada con los diagramas: War Edge (fondo 2: 2 + 3 hexes) y Twin Buster Rifle (fondo 3: 2 + 3 + 4)
+  - ⚠️ 240mm Low-Recoil Cannon y Quadruple Bop Missile: modelados como flor (hex central + 6 vecinos) según la wiki; no hay imagen de su diagrama para comprobarlo
 - ✅ **Elección del jugador** en Push/Pull: quien empuja o atrae elige cada hex entre los válidos y puede parar antes, incluso sin mover (Q&A 7). Si no hay hex libre, la colisión es automática
 - ✅ Push/Pull hacia un hex más bajo: la unidad cae sin daño (Q&A 10)
 
@@ -94,8 +97,8 @@ Fuentes oficiales:
 
 ### Cartas de Tactics (lista oficial: 45)
 - ✅ **Las 45 jugables**: 3 Attack, 25 Command y 17 Response (antes de tirar, después de tirar y tras el daño), incluidas On-Site Integration y Special OPs (elegir Upgrade), Bit Assault (recolocar varias RWS), Interception (Challenge) y Protective Shot (ataque fuera de turno)
-- ⚠️ Iron-Blooded Tenacity: evita la derrota (queda a 1 HP), pero no aplica el movimiento ni el ataque posteriores del texto
-- Se conservan 17 cartas de la demo (marcadas como `demo`)
+- ✅ Iron-Blooded Tenacity completa: evita la derrota (queda a 1 HP) y luego mueve hasta 2 y ataca con Rex Claws a Timeline 0 (`pendingFollowUp`, acción `FOLLOW_UP`)
+- Se conservan 17 cartas de la demo (marcadas como `demo`), ocultas por defecto en la selección de mazo
 
 ## 6b. Q&A oficial (130 preguntas revisadas)
 
@@ -116,12 +119,18 @@ Fuentes oficiales:
 - ✅ Las 15 unidades oficiales (ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos, firma y textos oficiales
 - ✅ **Coste de TL, alcance, Strength, tipo de habilidad y coste de Energy** de las 15 unidades comprobados con las cartas oficiales impresas (test `Datos de unidades contra las cartas oficiales`). Corregidos: el Guncannon no tiene Challenge y el Quadruple Bop Missile del Guntank es TL 3 / Strength 5
 - ✅ Habilidades Response con coste de Energy (Toss Away, Blitzing Slash, Coordinated Payload, Stunning Shot…): se usan solas si hay Energy, salvo que el jugador desactive las Response automáticas de esa unidad
-- ✅ Se conservan las 6 unidades de la demo (DM01)
+- ✅ Se conservan las 6 unidades de la demo (DM01), ocultas por defecto en la selección de escuadra ("Mostrar la demo")
 
 ## 9. Multijugador / Red
 
 - ✅ Salas privadas y emparejamiento; reconexión 5 min **solo para el mismo usuario autenticado**
-- ✅ **Partida contra la máquina**: el servidor juega por el rival con la misma IA del self-play (`bot.ts`)
+- ✅ **Partida contra la máquina** con tres niveles (`bot.ts`): fácil (al azar), normal y difícil (puntúan ataques con la previsión de daño y probabilidad de derrota, y casillas por Objetivos, alcance y peligro; difícil mira además el ataque que tendría tras moverse). En 120 partidas: normal gana a fácil 93–27, difícil a fácil 104–16 y a normal entre 61–59 y 78–42 según el bando
+- ✅ **Reloj de turno** (`TURN_SECONDS`, 120 s) y de Response / elecciones (`RESPONSE_SECONDS`, 30 s): al agotarse se juega lo mínimo por el jugador; 3 veces seguidas = derrota. **Rendirse** en cualquier momento; abandono = derrota si no vuelve en 5 min
+- ✅ **Partidas guardadas** fuera de memoria (`GAME_STORE=file|supabase|none`): sobreviven a un reinicio del servidor
+- ✅ **Revancha** (los dos jugadores, o uno contra la máquina), **enlaces** para unirse (`?sala=`), ver como **espectador** (`?ver=`) y abrir una **repetición** (`?repeticion=`)
+- ✅ **Repeticiones exactas**: estado inicial + acciones + dados; el servidor las reconstruye con el motor (el self-play comprueba en cada partida que la repetición acaba igual) y el cliente las recorre paso a paso
+- ✅ **Previsión del ataque** antes de confirmar (dados, Accuracy, probabilidad de impacto, de crítico y de derrota, daño esperado)
+- ✅ **Integración continua** (GitHub Actions): tipos, tests, self-play, smoke, lint y build
 - ✅ Chat de partida (200 caracteres, 1 mensaje por segundo)
 - ✅ Rutas de mapas protegidas: ids sin rutas (`/^[A-Za-z0-9_-]+$/`) y subida de mapas con sesión y límite de 200 KB
 - ✅ El servidor valida escuadra, mazo, turno y reglas, y tira todos los dados
@@ -135,5 +144,4 @@ Fuentes oficiales:
 - ✅ Bloom y viñeta, cielo estrellado y decorado de terreno (rocas, chatarra, matas)
 - ✅ Partida pública con mapa al azar; mapa a elegir en salas privadas y contra la máquina
 - ⚠️ 9 de las 15 unidades oficiales no tienen modelo 3D (se dibuja una pieza genérica) y los modelos no están pintados
-- ❌ Colocar a mano la plantilla de AoE (cono / flor)
 - ❌ Oclusión ambiental y efectos distintos por arma

@@ -1,5 +1,6 @@
 // Habilidades de unidad (Ongoing / Command / Response automáticas) y cartas de
 // Tactics. Las funciones que reciben `state` lo MUTAN (el llamador clona).
+import type { AreaAim } from '../types'
 import type { GameState, PlayerId, HexCoord, AbilityEffect } from '../types'
 import type { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
@@ -259,7 +260,7 @@ export function abilityMove(state: GameState, unitId: string, amount: number, to
 
 // ─── HABILIDADES COMMAND ──────────────────────────────────────────────────────
 
-export interface Choice { choice?: string; choices?: string[] }
+export interface Choice { choice?: string; choices?: string[]; aim?: AreaAim }
 
 const UPGRADE_CHOICES = ['attack', 'movement', 'shield']
 

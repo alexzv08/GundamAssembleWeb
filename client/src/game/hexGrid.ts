@@ -90,6 +90,26 @@ export function hexesInRange(origin: HexCoord, range: number): HexCoord[] {
   return results
 }
 
+// ─── PLANTILLA EN CUÑA (área "SP" en cono) ────────────────────────────────────
+// Direcciones cúbicas en orden circular: E, NE, NO, O, SO, SE.
+const CUBE_DIRS = [[1, -1, 0], [1, 0, -1], [0, 1, -1], [-1, 1, 0], [-1, 0, 1], [0, -1, 1]] as const
+
+// Cuña de 60° entre las direcciones `facing` y `facing + 1` (0-5), de `depth` hexes
+// de fondo: 2 hexes a distancia 1, 3 a distancia 2, 4 a distancia 3… Es la forma
+// del diagrama de las cartas (War Edge: fondo 2; Twin Buster Rifle: fondo 3).
+export function coneHexes(origin: HexCoord, facing: number, depth: number): HexCoord[] {
+  const o = offsetToCube(origin.q, origin.r)
+  const d1 = CUBE_DIRS[((facing % 6) + 6) % 6], d2 = CUBE_DIRS[(((facing + 1) % 6) + 6) % 6]
+  const out: HexCoord[] = []
+  for (let k = 1; k <= depth; k++) {
+    for (let j = 0; j <= k; j++) {
+      const i = k - j
+      out.push(cubeToOffset(o.x + i * d1[0] + j * d2[0], o.z + i * d1[2] + j * d2[2]))
+    }
+  }
+  return out
+}
+
 // ─── LÍNEA DE HEXES ───────────────────────────────────────────────────────────
 function cubeToOffset(x: number, z: number): HexCoord {
   const q = x + (z - (z & 1)) / 2

@@ -13,13 +13,14 @@
 // Precisión: cada punto de Accuracy suma/resta al valor del dado, salvo 1 (fallo
 // siempre) y 9-10 (crit siempre). Impacta con 4 o más.
 // MUTA `state` (el llamador clona).
+import type { AreaAim } from '../types'
 import type {
     GameState, AttackReport, Weapon, WeaponEffect, PlayerId, PendingAttack, PendingResponse, TacticsCard, ResponseTrigger, AttackPreview,
 } from '../types'
 import type { CardEffect } from '../types/tactics'
 import { hexKey, keyToHex, gridDistance, findPath } from './hexGrid'
 import {
-    terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer,
+    terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer, resolveAim,
     attackDefenders, canPlayResponseCard, checkAttackTargetWith, rwsAdjacentTo, alliedRws, challengeOptions, protectiveShooters, type TargetRef,
 } from './queries'
 import { damageUnit, destroyGarrison, destroyRws, damageAt, forceMove, pushLog } from './damage'
@@ -43,7 +44,7 @@ export function isHit(roll: number, accuracy: number, critThreshold: number): bo
 // Lo que el atacante puede esperar antes de confirmar: mismos dados, Accuracy y
 // umbral de crítico que usará la resolución real. No cuenta las Response (cartas
 // ni habilidades con coste de Energy) porque aún no se han decidido. No muta.
-export function previewAttack(state: GameState, attackerId: string, weapon: Weapon, targetKey: string): AttackPreview | null {
+export function previewAttack(state: GameState, attackerId: string, weapon: Weapon, targetKey: string, aim?: AreaAim): AttackPreview | null {
     const attacker = state.units[attackerId]
     if (!attacker?.position) return null
     const primary = targetAt(state, targetKey, attacker.playerId)
@@ -82,7 +83,7 @@ export function previewAttack(state: GameState, attackerId: string, weapon: Weap
         expectedHits: dice * p, critChance: 1 - (1 - pc) ** dice,
         shields, damageBonus, expectedDamage: Math.max(0, dice * p + damageBonus - shields),
         killChance: target ? kill : 0,
-        targets: attackTargets(state, attackerId, weapon, targetKey).length,
+        targets: attackTargets(state, attackerId, weapon, targetKey, aim).length,
     }
 }
 
@@ -116,7 +117,7 @@ export function primaryAccuracy(state: GameState): number {
 
 export function startAttack(
     state: GameState, attackerId: string, weapon: Weapon, primaryKey: string, rng: Rng,
-    opts: { isRepeat?: boolean } = {},
+    opts: { isRepeat?: boolean; aim?: AreaAim } = {},
 ): void {
     const attacker = state.units[attackerId]
     const player = attacker.playerId
@@ -132,9 +133,11 @@ export function startAttack(
         if (moved?.position) key = hexKey(moved.position)
     }
 
+    // Plantilla de área: la colocación elegida (o la mejor) queda fija para todo el ataque
+    const aim = weapon.area && attacker.position ? resolveAim(state, attacker.position, weapon, key, opts.aim) : undefined
     state.pendingAttack = {
-        attackerId, weapon, primaryKey: key,
-        targetKeys: attackTargets(state, attackerId, weapon, key).map(t => t.key),
+        attackerId, weapon, primaryKey: key, aim,
+        targetKeys: attackTargets(state, attackerId, weapon, key, aim).map(t => t.key),
         stage: 'before_roll', isRepeat: !!opts.isRepeat,
         bonusStrength: 0, bonusAccuracy: 0, bonusDamage: 0, reductions: {}, destroyTargetUpgrades: false,
         rolls: [], rerolled: [], disarmed: false, critThreshold: 9, queue: [], targetIds: [], damagedIds: [],

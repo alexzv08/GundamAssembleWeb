@@ -2,7 +2,7 @@
 // del Core Rulebook v1.2 que comprueba.
 import { describe, it, expect } from 'vitest'
 import type { BoardMap, GameState, Unit, Weapon, Ability } from '../../types'
-import { hexDistance, getNeighbors, hexKey, checkLineOfSight, getReachableHexes } from '../hexGrid'
+import { hexDistance, getNeighbors, hexKey, checkLineOfSight, getReachableHexes, coneHexes, gridDistance } from '../hexGrid'
 import {
   createEmptyTimeline, placeInitialToken, getNextActivation, advanceToken, getUnitRound, reorderSlotForTie, retreatToken,
 } from '../timeline'
@@ -1378,5 +1378,92 @@ describe('Revancha y espectadores', () => {
     expect(rm.getPlayerIdBySocket('v')).toBeNull()
     expect(rm.removeSpectator('v')).toBe(room.id)
     expect(rm.spectatorCount(room.id)).toBe(0)
+  })
+})
+
+describe('Plantillas de área colocadas a mano', () => {
+  const cone = weapon({ name: 'Twin Buster Rifle', range: 3, strength: 3, area: 'cone' })
+  const flower = weapon({ name: '240mm Low-Recoil Cannon', range: 3, strength: 3, area: 'flower' })
+
+  it('la cuña tiene la forma del diagrama: 2 + 3 + 4 hexes, en 6 orientaciones distintas', () => {
+    const o = { q: 4, r: 4 }
+    const seen = new Set<string>()
+    for (let f = 0; f < 6; f++) {
+      const hexes = coneHexes(o, f, 3)
+      expect(hexes).toHaveLength(9)
+      expect([1, 2, 3].map(d => hexes.filter(h => gridDistance(o, h) === d).length)).toEqual([2, 3, 4])
+      expect(new Set(hexes.map(hexKey)).size).toBe(9)
+      seen.add(hexes.map(hexKey).sort().join('|'))
+    }
+    expect(seen.size).toBe(6)
+    // War Edge (fondo 2): 5 hexes
+    expect(coneHexes(o, 0, 2)).toHaveLength(5)
+    // Las 6 cuñas de fondo 1 cubren los 6 vecinos, cada uno en dos cuñas
+    const count = new Map<string, number>()
+    for (let f = 0; f < 6; f++) for (const h of coneHexes(o, f, 1)) count.set(hexKey(h), (count.get(hexKey(h)) ?? 0) + 1)
+    expect([...count.keys()].sort()).toEqual(getNeighbors(o).map(hexKey).sort())
+    expect([...count.values()].every(n => n === 2)).toBe(true)
+  })
+
+  it('la orientación elegida decide a quién alcanza la cuña', () => {
+    const units = () => [
+      makeUnit('a', 'player1', { q: 3, r: 3 }, { weapons: [cone] }),
+      makeUnit('e1', 'player2', { q: 4, r: 3 }),
+      makeUnit('e2', 'player2', { q: 2, r: 3 }),
+    ]
+    const facings = [0, 1, 2, 3, 4, 5]
+    const hit = (f: number) => {
+      const r = applyAction(makeGame(units()), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { facing: f } }, 'player1', dice(5, 5, 5))
+      return r.success ? (r.newState!.pendingAttack ? 'pausa' : 'ok') : r.error
+    }
+    const valid = facings.filter(f => hit(f) === 'ok')
+    expect(valid).toHaveLength(2)   // E1 está en dos cuñas (las que comparten su dirección)
+    for (const f of facings.filter(f => !valid.includes(f))) expect(hit(f)).toBe('El objetivo no está dentro de la plantilla')
+    expect(hit(7)).toBe('Orientación de la plantilla no válida')
+    // e2 está justo detrás: ninguna orientación válida para e1 lo alcanza
+    for (const f of valid) {
+      const s = applyAction(makeGame(units()), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { facing: f } }, 'player1', dice(5, 5, 5)).newState!
+      expect(s.units.e1.currentHp).toBe(7)
+      expect(s.units.e2.currentHp).toBe(10)
+    }
+  })
+
+  it('sin orientación, el motor elige la que alcanza a más enemigos', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 3, r: 3 }, { weapons: [cone] }),
+      makeUnit('e1', 'player2', { q: 4, r: 3 }),
+      makeUnit('e2', 'player2', { q: 5, r: 2 }),
+      makeUnit('e3', 'player2', { q: 5, r: 4 }),
+    ])
+    const counts = [0, 1, 2, 3, 4, 5].map(f => applyAction(g, { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { facing: f } }, 'player1', dice(5, 5, 5)))
+      .map(r => r.success ? Object.values(r.newState!.units).filter(u => u.playerId === 'player2' && u.currentHp < 10).length : 0)
+    const auto = applyAttack(g, 'a', 0, 'e1', 'player1', dice(5, 5, 5)).newState!
+    expect(Object.values(auto.units).filter(u => u.playerId === 'player2' && u.currentHp < 10).length).toBe(Math.max(...counts))
+  })
+
+  it('la flor se puede centrar en un hex vacío a alcance para alcanzar a dos enemigos', () => {
+    const units = () => [
+      makeUnit('a', 'player1', { q: 1, r: 3 }, { weapons: [flower] }),
+      makeUnit('e1', 'player2', { q: 3, r: 2 }),
+      makeUnit('e2', 'player2', { q: 3, r: 4 }),
+    ]
+    // Centrada en (3,3), vacío y vecino de los dos
+    const r = applyAction(makeGame(units()), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { center: { q: 3, r: 3 } } }, 'player1', dice(5, 5, 5, 5, 5, 5))
+    expect(r.success).toBe(true)
+    expect(r.newState!.units.e1.currentHp).toBe(7)
+    expect(r.newState!.units.e2.currentHp).toBe(7)
+    // Centrada en el propio e1 no llega a e2
+    const solo = applyAttack(makeGame(units()), 'a', 0, 'e1', 'player1', dice(5, 5, 5, 5, 5, 5)).newState!
+    expect(solo.units.e2.currentHp).toBe(10)
+    // Rechazos: centro fuera de alcance y objetivo fuera de la flor
+    const short = makeGame(units())
+    short.units.a.weapons = [{ ...flower, range: 2 }]
+    expect(applyAction(short, { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { center: { q: 4, r: 2 } } }, 'player1', dice()).error).toBe('Objetivo fuera de alcance')
+    expect(applyAction(makeGame(units()), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e2', aim: { center: { q: 3, r: 1 } } }, 'player1', dice()).error).toBe('El objetivo no está dentro de la plantilla')
+  })
+
+  it('War Edge (carta Attack) tiene una cuña de fondo 2', () => {
+    const card = loadTacticsCatalog().find(c => c.id === 'ST01-T11')!
+    expect(card.weapon).toMatchObject({ area: 'cone', range: 2 })
   })
 })

@@ -148,13 +148,13 @@ export interface PlayerState {
 
 export type GameAction =
   | { type: 'ADVANCE'; unitId: string; to: HexCoord }
-  | { type: 'ATTACK'; unitId: string; weaponIndex: number; targetId: string }
+  | { type: 'ATTACK'; unitId: string; weaponIndex: number; targetId: string; aim?: AreaAim }
   | { type: 'DASH'; unitId: string; to: HexCoord }
   | { type: 'ENERGIZE'; unitId: string }
   | { type: 'RESCUE'; unitId: string; garrisonId: string }
   | { type: 'ATTACK_GARRISON'; unitId: string; weaponIndex: number; garrisonId: string }
   | { type: 'ATTACK_RWS'; unitId: string; weaponIndex: number; rwsId: string }
-  | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string; targetHex?: HexCoord; choice?: string; choices?: string[] }
+  | { type: 'PLAY_CARD'; unitId: string; cardId: string; targetId?: string; targetHex?: HexCoord; choice?: string; choices?: string[]; aim?: AreaAim }
   | { type: 'USE_ABILITY'; unitId: string; abilityIndex: number; targetId?: string; targetHex?: HexCoord; choice?: string; choices?: string[] }
   | { type: 'SET_AUTO_RESPONSES'; unitId: string; enabled: boolean }
   | { type: 'USE_RESPONSE_ABILITY'; unitId: string; abilityIndex: number }
@@ -178,4 +178,12 @@ export interface ReplaySummary {
   vsBot: boolean
   /** Solo en la lista del propio jugador: con qué bando jugó */
   mySide?: PlayerId
+}
+
+// Colocación de una plantilla de área ("SP"): la cuña se gira (facing 0-5,
+// ver coneHexes) y la flor se centra en cualquier hex a alcance (center).
+// Sin ella el motor elige la colocación que más enemigos alcanza con el objetivo.
+export interface AreaAim {
+  facing?: number
+  center?: HexCoord
 }

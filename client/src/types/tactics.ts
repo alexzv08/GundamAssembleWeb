@@ -1,5 +1,6 @@
 // AUTO-GENERADO por scripts/sync-shared.mjs desde server/src — NO EDITAR AQUÍ.
 import type { Weapon } from './units'
+import type { AreaAim } from './gameState'
 
 // ─── CARD EFFECTS ─────────────────────────────────────────────────────────────
 
@@ -103,6 +104,8 @@ export interface PendingAttack {
     attackerId: string
     weapon: Weapon
     primaryKey: string
+    /** Colocación de la plantilla de área (armas "SP") */
+    aim?: AreaAim
     targetKeys: string[]
     stage: 'before_roll' | 'after_roll' | 'after_damage'
     isRepeat: boolean

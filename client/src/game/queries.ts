@@ -2,9 +2,9 @@
 // Consultas puras sobre el GameState que comparten servidor (validación) y
 // cliente (resaltado de hexes). Así lo que la UI ofrece coincide siempre con lo
 // que el servidor acepta.
-import type { GameState, PlayerId, Unit, HexCoord, BoardMap, Weapon, TacticsCard, ResponseTrigger, RemoteWeapon, RwsKind } from '../types'
+import type { GameState, PlayerId, Unit, HexCoord, BoardMap, Weapon, TacticsCard, ResponseTrigger, RemoteWeapon, RwsKind, AreaAim } from '../types'
 import {
-  hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, getReachableHexes,
+  hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, getReachableHexes, coneHexes,
   type MoveOptions,
 } from './hexGrid'
 
@@ -223,42 +223,48 @@ export function enemiesAdjacentTo(state: GameState, key: string, attackerPlayer:
 
 export interface TargetCheck { ok: boolean; reason?: string }
 
-// Posición en el plano (pointy-top, odd-r) para calcular ángulos del cono.
-function planePos(c: HexCoord): [number, number] {
-  return [c.q + (c.r & 1) * 0.5, c.r * Math.sqrt(3) / 2]
+// Hexes de una plantilla de área ("SP").
+//  cone:   cuña de 60° con tantos hexes de fondo como el alcance del arma, girada
+//          según aim.facing (forma del diagrama de las cartas; ver coneHexes).
+//  flower: el hex central (aim.center, o el objetivo) y sus 6 vecinos.
+export function templateHexes(state: GameState, from: HexCoord, weapon: Weapon, aim: AreaAim): string[] {
+  if (weapon.area === 'cone') return coneHexes(from, aim.facing ?? 0, weapon.range).map(hexKey).filter(k => state.board[k])
+  if (weapon.area === 'flower' && aim.center) {
+    const c = aim.center
+    return [hexKey(c), ...getNeighbors(c).map(hexKey)].filter(k => state.board[k])
+  }
+  return []
 }
 
-// Hexes de una plantilla de área apuntada a `targetKey`.
-//  flower: el hex elegido y sus 6 vecinos.
-//  cone:   hexes a distancia ≤ alcance dentro de un ángulo de 60° hacia el objetivo.
-// Aproximación: la forma exacta sale del diagrama impreso en la carta.
-export function areaHexes(state: GameState, from: HexCoord, weapon: Weapon, targetKey: string): string[] {
-  const center = keyToHex(targetKey)
-  if (weapon.area === 'flower') return [targetKey, ...getNeighbors(center).map(hexKey)].filter(k => state.board[k])
-  if (weapon.area === 'cone') {
-    const [ox, oy] = planePos(from)
-    const [tx, ty] = planePos(center)
-    const dir = Math.atan2(ty - oy, tx - ox)
-    return Object.keys(state.board).filter(k => {
-      const h = keyToHex(k)
-      const d = gridDistance(from, h)
-      if (d === 0 || d > weapon.range) return false
-      const [hx, hy] = planePos(h)
-      let diff = Math.abs(Math.atan2(hy - oy, hx - ox) - dir)
-      if (diff > Math.PI) diff = 2 * Math.PI - diff
-      return diff <= Math.PI / 6 + 1e-6
-    })
+// Colocación usada: la indicada o, si falta (bot, contraataques, llamadas
+// antiguas), la que incluye el objetivo y alcanza más enemigos.
+export function resolveAim(state: GameState, from: HexCoord, weapon: Weapon, targetKey: string, aim?: AreaAim): AreaAim {
+  if (weapon.area === 'flower') return { center: aim?.center ?? keyToHex(targetKey) }
+  if (weapon.area !== 'cone') return {}
+  if (aim?.facing !== undefined) return { facing: ((aim.facing % 6) + 6) % 6 }
+  const player = state.units[state.board[targetKey]?.occupiedBy ?? '']?.playerId
+  let best = 0, bestCount = -1
+  for (let f = 0; f < 6; f++) {
+    const keys = templateHexes(state, from, weapon, { facing: f })
+    if (!keys.includes(targetKey)) continue
+    const n = keys.filter(k => { const u = state.units[state.board[k]?.occupiedBy ?? '']; return u && u.playerId === player }).length
+    if (n > bestCount) { best = f; bestCount = n }
   }
-  return [targetKey]
+  return { facing: best }
+}
+
+export function areaHexes(state: GameState, from: HexCoord, weapon: Weapon, targetKey: string, aim?: AreaAim): string[] {
+  if (!weapon.area) return [targetKey]
+  return templateHexes(state, from, weapon, resolveAim(state, from, weapon, targetKey, aim))
 }
 
 // Objetivos reales de un ataque apuntado a `targetKey`: el principal más los
 // adicionales de la plantilla o del efecto "also targets each enemy adjacent".
-export function attackTargets(state: GameState, unitId: string, weapon: Weapon, targetKey: string): TargetRef[] {
+export function attackTargets(state: GameState, unitId: string, weapon: Weapon, targetKey: string, aim?: AreaAim): TargetRef[] {
   const unit = state.units[unitId]
   if (!unit?.position) return []
   const primary = targetAt(state, targetKey, unit.playerId)
-  const keys = weapon.area ? areaHexes(state, unit.position, weapon, targetKey) : [targetKey]
+  const keys = weapon.area ? areaHexes(state, unit.position, weapon, targetKey, aim) : [targetKey]
   const result: TargetRef[] = []
   for (const k of keys) {
     const t = targetAt(state, k, unit.playerId)
@@ -277,27 +283,34 @@ export function attackTargets(state: GameState, unitId: string, weapon: Weapon, 
 
 // ¿Puede `unitId` atacar el hex `targetKey` con `weapon`?
 // Comprueba alcance, línea de visión y la restricción de Engagement.
-export function checkAttackTargetWith(state: GameState, unitId: string, weapon: Weapon, targetKey: string): TargetCheck {
+export function checkAttackTargetWith(state: GameState, unitId: string, weapon: Weapon, targetKey: string, aim?: AreaAim): TargetCheck {
   const unit = state.units[unitId]
   if (!unit?.position) return { ok: false, reason: 'Unidad no válida' }
   const target = targetAt(state, targetKey, unit.playerId)
   if (!target) return { ok: false, reason: 'No hay un enemigo en ese hex' }
 
   const from = unit.position
-  const to = keyToHex(targetKey)
+  // Plantilla colocada a mano: el objetivo debe quedar dentro; la flor se centra
+  // en un hex a alcance y con línea de visión, que es lo que se comprueba
+  if (weapon.area && aim) {
+    if (aim.facing !== undefined && (!Number.isInteger(aim.facing) || aim.facing < 0 || aim.facing > 5)) return { ok: false, reason: 'Orientación de la plantilla no válida' }
+    if (aim.center && !state.board[hexKey(aim.center)]) return { ok: false, reason: 'Centro de la plantilla fuera del tablero' }
+    if (!areaHexes(state, from, weapon, targetKey, aim).includes(targetKey)) return { ok: false, reason: 'El objetivo no está dentro de la plantilla' }
+  }
+  const to = weapon.area === 'flower' && aim?.center ? aim.center : keyToHex(targetKey)
   if (gridDistance(from, to) > weapon.range) return { ok: false, reason: 'Objetivo fuera de alcance' }
 
   if (weapon.effectData?.type !== 'ignore_los') {
     // Las áreas de efecto ignoran unidades y Garrisons para la línea de visión
     const blockers = weapon.area ? new Set<string>() : enemyHexes(state, unit.playerId)
-    blockers.delete(targetKey)
+    blockers.delete(hexKey(to))
     const los = checkLineOfSight(from, to, state.board, blockers)
     if (!los.clear) return { ok: false, reason: `Sin línea de visión: ${los.reason}` }
   }
 
   const engaged = engagedEnemyKeys(state, unitId)
   if (engaged.length > 0) {
-    const included = new Set(attackTargets(state, unitId, weapon, targetKey).map(t => t.key))
+    const included = new Set(attackTargets(state, unitId, weapon, targetKey, aim).map(t => t.key))
     if (!engaged.some(k => included.has(k))) {
       return { ok: false, reason: 'Engaged: debes atacar a un enemigo con el que estás trabado' }
     }

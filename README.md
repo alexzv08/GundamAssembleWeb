@@ -7,7 +7,9 @@ Proyecto personal de Alejandro de la Torre Ruiz. Fan project sin ánimo de lucro
 ## Funcionalidades
 
 - **Multijugador en tiempo real** con Socket.IO: salas privadas con código y emparejamiento aleatorio.
-- **Partida contra la máquina**: el servidor juega por el rival con una IA sencilla.
+- **Partida contra la máquina** con tres niveles de dificultad.
+- **Revancha, enlaces para invitar, modo espectador y repeticiones** de cada partida.
+- **Reloj de turno, rendición y partidas guardadas** que sobreviven a un reinicio del servidor.
 - **Mapas y escuadras de 3 o 5 unidades** a elegir al crear la sala.
 - **Tablero hexagonal en 3D** con Three.js y React Three Fiber, con elevación, agua y modelos 3D de las unidades (GLB comprimidos).
 - **Motor de reglas autoritativo en el servidor**: el cliente solo calcula ayudas visuales; el servidor valida cada acción y tira los dados (anti-trampas).
@@ -60,9 +62,14 @@ Requisitos: Node.js 20 o superior y un proyecto de Supabase.
    ```
    SUPABASE_URL=
    SUPABASE_SERVICE_ROLE_KEY=
+   # Opcionales
+   GAME_STORE=file          # file (por defecto) | supabase | none: dónde se guardan partidas en curso y repeticiones
+   TURN_SECONDS=120         # tiempo por activación (0 = sin reloj)
+   RESPONSE_SECONDS=30      # tiempo para Response y elecciones
+   BOT_DELAY_MS=700         # pausa entre acciones de la máquina
    ```
 
-   El esquema de la base de datos está en `server/scripts/schema.sql`.
+   El esquema de la base de datos está en `server/scripts/schema.sql`. Con `GAME_STORE=supabase` hay que aplicar también `server/supabase/migrations/` (tablas `active_rooms` y `replays`). Con `file`, se guardan en `server/data/runtime/` (en un despliegue, ese directorio debe ser un volumen persistente).
 
 2. Servidor (puerto 3001):
 

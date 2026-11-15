@@ -2,7 +2,7 @@
 // Cada apply* valida, trabaja sobre UNA copia del estado y la devuelve.
 // El paso a la siguiente activación, las fases y el fin de partida los
 // gestiona engine.ts.
-import type { GameState, GameAction, PlayerId, HexCoord } from '../types'
+import type { GameState, GameAction, PlayerId, HexCoord, AreaAim } from '../types'
 import { hexKey, findPath, gridDistance, getNeighbors } from './hexGrid'
 import { advanceToken } from './timeline'
 import {
@@ -175,7 +175,7 @@ export function applyRescue(state: GameState, unitId: string, garrisonId: string
 // ─── ATTACK ───────────────────────────────────────────────────────────────────
 
 function attackAt(
-    state: GameState, unitId: string, weaponIndex: number, targetKey: string, playerId: PlayerId, rng: Rng,
+    state: GameState, unitId: string, weaponIndex: number, targetKey: string, playerId: PlayerId, rng: Rng, aim?: AreaAim,
 ): ActionResult {
     const err = validateTurn(state, unitId, playerId) ?? requireOnBoard(state, unitId)
     if (err) return fail(err)
@@ -184,7 +184,7 @@ function attackAt(
     if (!weapon) return fail('Arma no encontrada')
     if (weapon.energyCost && unit.energy < weapon.energyCost) return fail('No hay suficiente Energy')
 
-    const check = checkAttackTarget(state, unitId, weaponIndex, targetKey)
+    const check = checkAttackTargetWith(state, unitId, weapon, targetKey, aim)
     if (!check.ok) return fail(check.reason!)
 
     const s = cloneState(state)
@@ -205,18 +205,18 @@ function attackAt(
         : target.kind === 'rws'
             ? { type: 'ATTACK_RWS', unitId, weaponIndex, rwsId: target.id }
             : { type: 'ATTACK_GARRISON', unitId, weaponIndex, garrisonId: target.id })
-    startAttack(s, unitId, weapon, targetKey, rng)
+    startAttack(s, unitId, weapon, targetKey, rng, { aim })
     return { success: true, newState: s }
 }
 
 export function applyAttack(
-    state: GameState, unitId: string, weaponIndex: number, targetId: string, playerId: PlayerId, rng: Rng = rollD10,
+    state: GameState, unitId: string, weaponIndex: number, targetId: string, playerId: PlayerId, rng: Rng = rollD10, aim?: AreaAim,
 ): ActionResult {
     const target = state.units[targetId]
     if (!target) return fail('Objetivo no encontrado')
     if (!target.position) return fail('El objetivo está en la Reserva')
     if (target.playerId === playerId) return fail('No puedes atacar unidades aliadas')
-    return attackAt(state, unitId, weaponIndex, hexKey(target.position), playerId, rng)
+    return attackAt(state, unitId, weaponIndex, hexKey(target.position), playerId, rng, aim)
 }
 
 export function applyAttackRws(
@@ -302,7 +302,7 @@ export function applyPlayCard(
             : rwsTarget?.position ? hexKey(rwsTarget.position)
             : Object.entries(s.board).find(([, h]) => h.garrisonToken?.id === targetId)?.[0] ?? null
         if (!attackKey) return fail('Elige un objetivo para el ataque')
-        const check = checkAttackTargetWith(s, unitId, card.weapon, attackKey)
+        const check = checkAttackTargetWith(s, unitId, card.weapon, attackKey, pick.aim)
         if (!check.ok) return fail(check.reason!)
         s.timeline = advanceToken(s.timeline, unitId, card.weapon.tlCost)
     } else {
@@ -316,7 +316,7 @@ export function applyPlayCard(
     s.activation!.cardPlayed = true
     s.actionLog.push({ type: 'PLAY_CARD', unitId, cardId, targetId, targetHex })
     pushLog(s, playerId, `${s.players[playerId].name} jugó "${card.name}"`, 'card')
-    if (attackKey && card.weapon) startAttack(s, unitId, card.weapon, attackKey, rng)
+    if (attackKey && card.weapon) startAttack(s, unitId, card.weapon, attackKey, rng, { aim: pick.aim })
     const before = state.units[unitId].position
     const after = s.units[unitId].position
     if (before && after && hexKey(before) !== hexKey(after)) openAdvanceResponseWindow(s, unitId, playerId)
@@ -447,7 +447,7 @@ export function applySetAutoResponses(state: GameState, unitId: string, enabled:
 export function applyAction(state: GameState, action: GameAction, playerId: PlayerId, rng: Rng = rollD10): ActionResult {
     switch (action.type) {
         case 'ADVANCE': return applyAdvance(state, action.unitId, action.to, playerId)
-        case 'ATTACK': return applyAttack(state, action.unitId, action.weaponIndex, action.targetId, playerId, rng)
+        case 'ATTACK': return applyAttack(state, action.unitId, action.weaponIndex, action.targetId, playerId, rng, action.aim)
         case 'ATTACK_GARRISON': return applyAttackGarrison(state, action.unitId, action.weaponIndex, action.garrisonId, playerId, rng)
         case 'ATTACK_RWS': return applyAttackRws(state, action.unitId, action.weaponIndex, action.rwsId, playerId, rng)
         case 'DASH': return applyDash(state, action.unitId, action.to, playerId)

@@ -2,10 +2,10 @@ import { Server, Socket } from 'socket.io'
 import { RoomManager, type Room } from '../rooms/roomManager'
 import { type ProcessResult } from '../game/engine'
 import { chooseBotAction, botFallback, actingPlayer, followUpReady } from '../game/bot'
-import { reachableFor } from '../game/queries'
+import { reachableFor, checkAttackTargetWith } from '../game/queries'
 import { keyToHex } from '../game/hexGrid'
 import { reorderSlotTokens } from '../game/timeline'
-import type { GameAction, GameState, TurnClock, AttackPreview } from '../types'
+import type { GameAction, GameState, TurnClock, AttackPreview, AreaAim } from '../types'
 import { previewAttack } from '../game/combat'
 import { cloneState, pushLog } from '../game/damage'
 import { forfeit } from '../game/victory'
@@ -307,7 +307,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
 
     // ── Previsión de ataque (solo lectura) ──────────────────────────────────────
     // El jugador activo pregunta qué puede esperar de un ataque antes de confirmarlo.
-    socket.on('PREVIEW_ATTACK', (req: { unitId?: string; weaponIndex?: number; cardId?: string; targetKey?: string } = {}, ack?: (p: AttackPreview | null) => void) => {
+    socket.on('PREVIEW_ATTACK', (req: { unitId?: string; weaponIndex?: number; cardId?: string; targetKey?: string; aim?: AreaAim } = {}, ack?: (p: AttackPreview | null) => void) => {
         if (typeof ack !== 'function') return
         const room = roomManager.getRoomBySocket(socket.id)
         const playerId = roomManager.getPlayerIdBySocket(socket.id)
@@ -318,7 +318,9 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             ? s.players[unit.playerId].tactics.hand.find(c => c.id === req.cardId)?.weapon
             : unit.weapons[Number(req.weaponIndex)]
         if (!weapon) return ack(null)
-        ack(previewAttack(s, unit.id, weapon, req.targetKey))
+        const aim = req.aim && typeof req.aim === 'object' ? req.aim : undefined
+        if (aim && !checkAttackTargetWith(s, unit.id, weapon, req.targetKey, aim).ok) return ack(null)
+        ack(previewAttack(s, unit.id, weapon, req.targetKey, aim))
     })
 
     // ── Chat de la sala ────────────────────────────────────────────────────────
