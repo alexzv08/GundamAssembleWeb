@@ -432,3 +432,8 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - `client/src/components/ui/Disclaimer.tsx`: aviso de proyecto de fans no oficial, gratuito y en beta, con los titulares de los derechos (©SOTSU·SUNRISE, ©SOTSU·MBS, BANDAI SPIRITS) y enlace a la web oficial de Gundam Assemble. Pie de la pantalla de login y del lobby; etiqueta `BetaBadge` bajo el título del lobby. Sección "Aviso legal" en el README.
 - Archivos: `client/src/components/ui/{Disclaimer,AuthScreen}.tsx`, `client/src/screens/LobbyScreen.tsx`, `README.md`, `CLAUDE.md`.
 
+### 2026-11-15 — Un solo mapa (Sleeping Leviathan, Objetivos de 5 y 8 VP) y menú del lobby más claro
+- `DemoMap` es el escenario oficial **Operation Sleeping Leviathan** (Starter Set 01, según la wiki: "4 objectives, 1,2 5 VP, 3,4 8 VP", 7 Garrisons por bando, 9 Upgrades y 2 de Energy, que ya coincidían): renombrado, descripción corregida (decía 3 Garrisons) y Objetivos 3 y 4 a 8 VP. Se quita `MyMap` (era el mismo tablero con Objetivos de 3 VP). Tests: valores 5/5/8/8 y 7 Garrisons por bando; el de mapa al azar admite un solo mapa.
+- Lobby: los modos de juego son una lista de opciones neutras con su explicación (antes "Buscar partida" y "Contra la máquina" parecían botones ya pulsados); se iluminan solo al pasar el ratón o con el teclado. El selector de mapa (`MapPicker`) es solo informativo cuando hay un único mapa; títulos "Tamaño de escuadra" y "Dificultad" en la partida contra la máquina.
+- Archivos: `server/data/maps/DemoMap.json`, `server/data/maps/MyMap.json` (borrado), `server/src/game/__tests__/engine.test.ts`, `client/src/screens/LobbyScreen.tsx`, `client/src/App.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
+

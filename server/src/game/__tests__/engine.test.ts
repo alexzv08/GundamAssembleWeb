@@ -1042,12 +1042,21 @@ describe('Mapas y tamaño de escuadra', () => {
     const { mapExists, listMaps } = await import('../maps')
     expect(mapExists('DemoMap')).toBe(true)
     expect(mapExists('../units/unit_library')).toBe(false)
-    expect(listMaps().map(m => m.id)).toContain('MyMap')
+    expect(listMaps().map(m => m.id)).toEqual(['DemoMap'])
+  })
+  it('Sleeping Leviathan: Objetivos 1 y 2 de 5 VP y 3 y 4 de 8 VP, 7 Garrisons por bando', () => {
+    const g = createServerGame('A', 'B', ['ST01-U01', 'ST01-U02', 'ST01-U03'], ['ST01-U04', 'ST01-U05', 'ST01-U06'], [], [], { mapId: 'DemoMap' })
+    const objectives = Object.values(g.board).filter(h => h.objectiveToken).map(h => h.objectiveToken!.vpValue).sort()
+    expect(objectives).toEqual([5, 5, 8, 8])
+    const garrisons = Object.values(g.board).filter(h => h.garrisonToken).map(h => h.garrisonToken!.owner)
+    expect(garrisons.filter(o => o === 'player1')).toHaveLength(7)
+    expect(garrisons.filter(o => o === 'player2')).toHaveLength(7)
   })
   it('una sala de 5 exige escuadras de 5 y usa su mapa', () => {
     const rm = new RoomManager()
-    const room = rm.createRoom('s1', 'Ana', 'u1', { mapId: 'MyMap', squadSize: 5 })
-    expect(room.mapId).toBe('MyMap')
+    const room = rm.createRoom('s1', 'Ana', 'u1', { mapId: 'DemoMap', squadSize: 5 })
+    expect(room.mapId).toBe('DemoMap')
+    expect(room.squadSize).toBe(5)
     rm.joinRoom(room.id, 's2', 'Bea', 'u2')
     const three = ['ST01-U01', 'ST01-U02', 'ST01-U03']
     expect('error' in rm.submitSquad('s1', three, [])).toBe(true)
@@ -1059,7 +1068,7 @@ describe('Mapas y tamaño de escuadra', () => {
     const seen = new Set<string>()
     for (let i = 0; i < 40; i++) seen.add(randomMapId())
     seen.forEach(id => expect(ids.has(id)).toBe(true))
-    expect(randomMapId(() => 0)).not.toBe(randomMapId(() => 0.99))
+    if (ids.size > 1) expect(randomMapId(() => 0)).not.toBe(randomMapId(() => 0.99))   // con un solo mapa siempre sale ese
     const rm = new RoomManager()
     rm.joinQueue('a', 'A', 'ua')
     const r = rm.joinQueue('b', 'B', 'ub') as { room?: { mapId: string } }

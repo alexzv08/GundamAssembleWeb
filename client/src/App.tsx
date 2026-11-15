@@ -104,7 +104,7 @@ export default function App() {
   const [setupConfirmed, setSetupConfirmed] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [lobbyMode, setLobbyMode] = useState<'main' | 'private'>('main')
-  const [maps, setMaps] = useState<{ id: string; name: string; description?: string }[]>([{ id: 'DemoMap', name: 'Colina central' }])
+  const [maps, setMaps] = useState<{ id: string; name: string; description?: string }[]>([{ id: 'DemoMap', name: 'Sleeping Leviathan' }])
   const [mapId, setMapId] = useState('DemoMap')
   const [squadSize, setSquadSize] = useState(3)
   useEffect(() => { fetchMapList().then(r => setMaps(r.maps)).catch(() => {}) }, [])

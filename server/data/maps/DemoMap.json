@@ -875,8 +875,8 @@
     ]
   ],
   "scenario": {
-    "name": "Colina central",
-    "description": "Meseta en el centro, 4 Objetivos de 5 VP y 3 Garrisons por bando.",
+    "name": "Sleeping Leviathan",
+    "description": "Escenario oficial del Starter Set 01: meseta en el centro, 2 Objetivos de 5 VP junto a ella y 2 de 8 VP en los extremos, 7 Garrisons por bando.",
     "vpToWin": 0,
     "objectives": [
       {
@@ -895,13 +895,13 @@
         "col": 6,
         "row": 1,
         "id": "obj_3",
-        "vpValue": 5
+        "vpValue": 8
       },
       {
         "col": 6,
         "row": 13,
         "id": "obj_4",
-        "vpValue": 5
+        "vpValue": 8
       }
     ],
     "garrisons": [

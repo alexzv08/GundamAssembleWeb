@@ -141,21 +141,8 @@ export function LobbyScreen({
                 <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Partida contra la máquina</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={eyebrow}>Mapa</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                {maps.map(m => (
-                  <button key={m.id} type="button" onClick={() => onMapIdChange(m.id)} aria-pressed={mapId === m.id}
-                    style={{
-                      display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, cursor: 'pointer', color: C.text,
-                      background: mapId === m.id ? `${C.ally}14` : C.panelSolid, border: `1px solid ${mapId === m.id ? C.ally : C.line}`,
-                    }}>
-                    <MapThumb mapId={m.id} size={74} />
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                      <b style={{ fontFamily: FONT.display, fontSize: 14.5 }}>{m.name}</b>
-                      {m.description && <span style={{ fontSize: 12, color: C.textSoft, lineHeight: 1.35 }}>{m.description}</span>}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                  <MapPicker maps={maps} mapId={mapId} onChange={onMapIdChange} />
+                  <span style={eyebrow}>Tamaño de escuadra</span>
                   <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Tamaño de escuadra">
                 {[3, 5].map(n => (
                   <button key={n} type="button" role="radio" aria-checked={squadSize === n} onClick={() => onSquadSizeChange(n)}
@@ -163,6 +150,7 @@ export function LobbyScreen({
                 ))}
               </div>
             </div>
+                <span style={eyebrow}>Dificultad</span>
                 <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Dificultad de la máquina">
                   {([['facil', 'Fácil'], ['normal', 'Normal'], ['dificil', 'Difícil']] as const).map(([v, label]) => (
                     <button key={v} type="button" role="radio" aria-checked={botLevel === v} onClick={() => setBotLevel(v)}
@@ -173,43 +161,24 @@ export function LobbyScreen({
                 <button onClick={() => setBotSetup(false)} style={button('ghost')}>Volver</button>
               </div>
             ) : lobbyMode === 'main' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <button disabled={!canPlay} onClick={onFindMatch} style={{ ...button('amber', !canPlay), padding: 13, fontSize: 15, fontWeight: 600 }}>
-                  Buscar partida
-                </button>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button disabled={!canPlay} onClick={() => setBotSetup(true)} title="Partida de práctica contra la IA del servidor" style={{ ...button('primary', !canPlay), flex: 1, padding: 11 }}>
-                    Contra la máquina
-                  </button>
-                  <button disabled={!canPlay} onClick={() => onSetLobbyMode('private')} style={{ ...button('ghost', !canPlay), flex: 1, padding: 11 }}>
-                    Sala privada
-                  </button>
-                </div>
-                <button disabled={!connected || loadingReplays} onClick={openReplays} style={{ ...button('subtle', !connected || loadingReplays), padding: 9 }}>
-                  {loadingReplays ? 'Cargando…' : 'Repeticiones'}
-                </button>
-                <span style={{ fontSize: 11.5, color: C.textDim }}>Buscar partida te empareja con otro jugador en un mapa al azar, con escuadras de 3. En una sala privada eliges tú el mapa.</span>
-              </div>
+              <nav aria-label="Modos de juego" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <span style={eyebrow}>¿Cómo quieres jugar?</span>
+                <ModeOption disabled={!canPlay} onClick={onFindMatch} icon="⚔"
+                  title="Buscar partida" text="Contra otro jugador conectado. Escuadras de 3." />
+                <ModeOption disabled={!canPlay} onClick={() => setBotSetup(true)} icon="◎"
+                  title="Contra la máquina" text="Práctica contra la IA: eliges tamaño de escuadra y dificultad." />
+                <ModeOption disabled={!canPlay} onClick={() => onSetLobbyMode('private')} icon="⌂"
+                  title="Sala privada" text="Crea una sala y comparte el enlace, o únete con un código." />
+                <ModeOption disabled={!connected || loadingReplays} onClick={openReplays} icon="▶" compact
+                  title={loadingReplays ? 'Cargando…' : 'Repeticiones'} text="Vuelve a ver tus partidas terminadas." />
+              </nav>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Sala privada</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={eyebrow}>Mapa</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                {maps.map(m => (
-                  <button key={m.id} type="button" onClick={() => onMapIdChange(m.id)} aria-pressed={mapId === m.id}
-                    style={{
-                      display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, cursor: 'pointer', color: C.text,
-                      background: mapId === m.id ? `${C.ally}14` : C.panelSolid, border: `1px solid ${mapId === m.id ? C.ally : C.line}`,
-                    }}>
-                    <MapThumb mapId={m.id} size={74} />
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                      <b style={{ fontFamily: FONT.display, fontSize: 14.5 }}>{m.name}</b>
-                      {m.description && <span style={{ fontSize: 12, color: C.textSoft, lineHeight: 1.35 }}>{m.description}</span>}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                  <MapPicker maps={maps} mapId={mapId} onChange={onMapIdChange} />
+                  <span style={eyebrow}>Tamaño de escuadra</span>
                   <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Tamaño de escuadra">
                 {[3, 5].map(n => (
                   <button key={n} type="button" role="radio" aria-checked={squadSize === n} onClick={() => onSquadSizeChange(n)}
@@ -238,3 +207,58 @@ export function LobbyScreen({
     </div>
   )
 }
+
+// Opción del menú principal: todas iguales y sin destacar ninguna (antes parecían
+// botones ya pulsados); se iluminan solo al pasar el ratón o con el foco del teclado.
+function ModeOption({ title, text, icon, onClick, disabled = false, compact = false }: {
+  title: string; text: string; icon: string; onClick: () => void; disabled?: boolean; compact?: boolean
+}) {
+  const [hot, setHot] = useState(false)
+  const lit = hot && !disabled
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)}
+      onFocus={() => setHot(true)} onBlur={() => setHot(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+        padding: compact ? '8px 12px' : '12px 14px', borderRadius: 10, color: C.text,
+        background: lit ? C.panelRaised : 'transparent', border: `1px solid ${lit ? C.ally : C.line}`,
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1,
+        transition: 'background 120ms, border-color 120ms', outline: 'none',
+      }}>
+      <span aria-hidden style={{ width: 30, textAlign: 'center', fontSize: compact ? 15 : 19, color: lit ? C.ally : C.textSoft }}>{icon}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+        <b style={{ fontFamily: FONT.display, fontSize: compact ? 14 : 16, fontWeight: 600 }}>{title}</b>
+        <span style={{ fontSize: 12, color: C.textSoft, lineHeight: 1.35 }}>{text}</span>
+      </span>
+      <span aria-hidden style={{ color: lit ? C.ally : C.textDim, fontSize: 18 }}>›</span>
+    </button>
+  )
+}
+
+// Selector de mapa. Con un solo mapa es solo informativo (no un botón "marcado").
+function MapPicker({ maps, mapId, onChange }: { maps: { id: string; name: string; description?: string }[]; mapId: string; onChange: (id: string) => void }) {
+  const card = (selected: boolean): React.CSSProperties => ({
+    display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, color: C.text,
+    background: selected ? `${C.ally}14` : C.panelSolid, border: `1px solid ${selected ? C.ally : C.line}`,
+  })
+  const body = (m: { id: string; name: string; description?: string }) => (
+    <>
+      <MapThumb mapId={m.id} size={74} />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+        <b style={{ fontFamily: FONT.display, fontSize: 14.5 }}>{m.name}</b>
+        {m.description && <span style={{ fontSize: 12, color: C.textSoft, lineHeight: 1.35 }}>{m.description}</span>}
+      </span>
+    </>
+  )
+  if (maps.length === 1) return <div style={card(false)}>{body(maps[0])}</div>
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }} role="radiogroup" aria-label="Mapa">
+      {maps.map(m => (
+        <button key={m.id} type="button" role="radio" aria-checked={mapId === m.id} onClick={() => onChange(m.id)}
+          style={{ ...card(mapId === m.id), cursor: 'pointer' }}>{body(m)}</button>
+      ))}
+    </div>
+  )
+}
+

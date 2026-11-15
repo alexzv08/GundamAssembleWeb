@@ -142,6 +142,6 @@ Fuentes oficiales:
 - ✅ Modelos GLB comprimidos con meshopt (1,6 MB en lugar de 143 MB de STL)
 - ✅ Arte oficial de las cartas de unidad y de Tactics (escuadra, mazo, mano en abanico) y retratos circulares en la Timeline, el tablero y la ficha
 - ✅ Bloom y viñeta, cielo estrellado y decorado de terreno (rocas, chatarra, matas)
-- ✅ Partida pública con mapa al azar; mapa a elegir en salas privadas y contra la máquina
+- ✅ Un solo mapa por ahora: **Sleeping Leviathan** (escenario oficial del Starter Set 01) con Objetivos de 5 y 8 VP, 7 Garrisons por bando, 9 Upgrades y 2 de Energy. El selector de mapa vuelve a aparecer en cuanto haya más de uno en `server/data/maps`
 - ⚠️ 9 de las 15 unidades oficiales no tienen modelo 3D (se dibuja una pieza genérica) y los modelos no están pintados
 - ❌ Oclusión ambiental y efectos distintos por arma
