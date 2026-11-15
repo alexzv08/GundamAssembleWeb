@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io'
 import { RoomManager, type Room } from '../rooms/roomManager'
-import { processAction, type ProcessResult } from '../game/engine'
+import { type ProcessResult } from '../game/engine'
 import { chooseBotAction, botFallback, actingPlayer, followUpReady } from '../game/bot'
 import { reachableFor } from '../game/queries'
 import { keyToHex } from '../game/hexGrid'
@@ -9,6 +9,7 @@ import type { GameAction, GameState, TurnClock, AttackPreview } from '../types'
 import { previewAttack } from '../game/combat'
 import { cloneState, pushLog } from '../game/damage'
 import { forfeit } from '../game/victory'
+import { recordedAction, recordForfeit, replayFrames, type Replay } from '../game/replay'
 
 const ACTION_TYPES = new Set<GameAction['type']>([
     'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON', 'ATTACK_RWS',
@@ -35,7 +36,8 @@ function publish(io: Server, room: Room, result: ProcessResult, action: GameActi
     const diceRolls = gameState.lastAttack !== before.lastAttack ? gameState.lastAttack?.rolls ?? null : null
     if (result.gameOver) {
         room.status = 'finished'
-        io.to(room.id).emit('GAME_OVER', { gameState, winner: gameState.winner, reason: gameState.winReason ?? '', diceRolls })
+        const replayId = manager?.archiveReplay(room) ?? null
+        io.to(room.id).emit('GAME_OVER', { gameState, winner: gameState.winner, reason: gameState.winReason ?? '', diceRolls, replayId })
         return
     }
     if (result.phaseChanged) {
@@ -47,6 +49,7 @@ function publish(io: Server, room: Room, result: ProcessResult, action: GameActi
 
 // Guardado de la sala tras cada cambio (lo conecta registerGameEvents)
 let persistRoom: (room: Room) => void = () => {}
+let manager: RoomManager | null = null
 
 // ─── RELOJ DE TURNO ──────────────────────────────────────────────────────────
 // Que una partida no se quede colgada: cada situación en la que debe actuar un
@@ -106,7 +109,9 @@ function onTimeout(io: Server, room: Room, key: string): void {
     strikes.set(sk, n)
     if (n >= MAX_STRIKES) {
         const end = cloneState(s)
-        forfeit(end, actor, `${end.players[actor].name} pierde por agotar el tiempo ${MAX_STRIKES} veces seguidas`)
+        const reason = `${end.players[actor].name} pierde por agotar el tiempo ${MAX_STRIKES} veces seguidas`
+        forfeit(end, actor, reason)
+        recordForfeit(room.record, actor, reason)
         publish(io, room, { success: true, state: end, phaseChanged: false, gameOver: true }, { type: 'SURRENDER' })
         return
     }
@@ -121,7 +126,7 @@ function onTimeout(io: Server, room: Room, key: string): void {
         }
         let done = false
         for (const action of tries) {
-            const r = processAction(cur, action, actor, undefined, PLAY_OPTS)
+            const r = recordedAction(room.record, cur, action, actor)
             if (r.success && r.state) {
                 if (i === 0) pushLog(r.state, actor, `Tiempo agotado: ${r.state.players[actor].name} pasa automáticamente`, 'end')
                 publish(io, room, r, action)
@@ -137,8 +142,7 @@ function onTimeout(io: Server, room: Room, key: string): void {
 
 // Si le toca al bot (actuar o responder), juega una acción tras una pausa
 // corta para que el humano vea lo que pasa, y repite mientras siga siendo su turno.
-// En partida real, quien empuja o atrae elige cada hex (Q&A 7)
-const PLAY_OPTS = { choosePushes: true }
+// En partida real, quien empuja o atrae elige cada hex (Q&A 7): recordedAction usa REPLAY_OPTS
 const BOT_DELAY_MS = Number(process.env.BOT_DELAY_MS ?? 700)
 function driveBot(io: Server, room: Room): void {
     const s = room.gameState
@@ -148,16 +152,16 @@ function driveBot(io: Server, room: Room): void {
         const cur = room.gameState
         if (!cur || cur !== s) return   // el estado cambió mientras esperaba
         let action = chooseBotAction(cur, 'player2', Math.random, room.botLevel ?? 'normal')
-        let result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
+        let result = recordedAction(room.record, cur, action, 'player2')
         if (!result.success) {
             action = botFallback(cur)
-            result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
+            result = recordedAction(room.record, cur, action, 'player2')
         }
         if (!result.success && cur.activeUnitId && !cur.pendingResponse && !cur.pendingForcedMove && !followUpReady(cur)) {
             const reach = [...reachableFor(cur, cur.activeUnitId, { kind: 'advance' }).keys()]
             if (reach.length) {
                 action = { type: 'ADVANCE', unitId: cur.activeUnitId, to: keyToHex(reach[0]) }
-                result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
+                result = recordedAction(room.record, cur, action, 'player2')
             }
         }
         if (!result.success || !result.state) {
@@ -169,8 +173,22 @@ function driveBot(io: Server, room: Room): void {
     }, BOT_DELAY_MS)
 }
 
+// Repeticiones reconstruidas hace poco (las 10 últimas en memoria)
+const frameCache = new Map<string, { summary: Replay['summary']; frames: GameState[] }>()
+async function loadFrames(rm: RoomManager, id: string) {
+    const hit = frameCache.get(id)
+    if (hit) { frameCache.delete(id); frameCache.set(id, hit); return hit }
+    const replay = await rm.getReplayStore()?.load(id)
+    if (!replay) return null
+    const entry = { summary: replay.summary, frames: replayFrames(replay) }
+    frameCache.set(id, entry)
+    while (frameCache.size > 10) frameCache.delete(frameCache.keys().next().value!)
+    return entry
+}
+
 export function registerGameEvents(io: Server, socket: Socket, roomManager: RoomManager) {
     persistRoom = room => roomManager.persist(room)
+    manager = roomManager
     const userId = socket.data.userId as string
     const defaultName = (socket.data.userName as string) ?? 'Jugador'
 
@@ -277,7 +295,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        const result = processAction(room.gameState, action, playerId, undefined, PLAY_OPTS)
+        const result = recordedAction(room.record, room.gameState, action, playerId)
         if (!result.success || !result.state) {
             socket.emit('ACTION_ERROR', { message: result.error })
             return
@@ -317,6 +335,55 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         io.to(room.id).emit('CHAT_MESSAGE', { playerId, name, text: clean, at: now })
     })
 
+    // ── Revancha ───────────────────────────────────────────────────────────────
+    socket.on('REMATCH', () => {
+        const r = roomManager.requestRematch(socket.id)
+        if ('error' in r) { socket.emit('ACTION_ERROR', { message: r.error }); return }
+        if (!r.ready) {
+            io.to(r.room.id).emit('REMATCH_REQUESTED', { playerId: r.playerId })
+            return
+        }
+        for (const player of r.room.players) {
+            if (player.socketId) io.to(player.socketId).emit('SQUAD_SELECTION_STARTED', { playerId: player.playerId, roomId: r.room.id, mapId: r.room.mapId, squadSize: r.room.squadSize, vsBot: !!r.room.vsBot })
+        }
+        io.to(r.room.id).emit('SPECTATE_ENDED', { message: 'Los jugadores empiezan la revancha' })
+    })
+
+    // ── Espectadores ───────────────────────────────────────────────────────────
+    socket.on('SPECTATE', ({ roomId }: { roomId?: string } = {}) => {
+        const r = roomManager.addSpectator(socket.id, String(roomId ?? '').toUpperCase())
+        if ('error' in r) { socket.emit('SPECTATE_ERROR', { message: r.error }); return }
+        socket.join(r.id)
+        socket.emit('SPECTATE_STARTED', { roomId: r.id, gameState: r.gameState, replayId: r.replayId ?? null })
+        io.to(r.id).emit('SPECTATORS', { count: roomManager.spectatorCount(r.id) })
+    })
+
+    socket.on('STOP_SPECTATING', () => {
+        const roomId = roomManager.removeSpectator(socket.id)
+        if (!roomId) return
+        socket.leave(roomId)
+        io.to(roomId).emit('SPECTATORS', { count: roomManager.spectatorCount(roomId) })
+    })
+
+    // ── Repeticiones ───────────────────────────────────────────────────────────
+    // Se reconstruyen en el servidor con el motor y se piden fotograma a fotograma.
+    socket.on('REPLAY_LIST', async (_: unknown, ack?: (list: unknown[]) => void) => {
+        if (typeof ack !== 'function') return
+        ack(await roomManager.getReplayStore()?.listFor(userId) ?? [])
+    })
+
+    socket.on('REPLAY_OPEN', async ({ id }: { id?: string } = {}, ack?: (r: { summary: Replay['summary']; frames: number } | null) => void) => {
+        if (typeof ack !== 'function') return
+        const frames = await loadFrames(roomManager, String(id ?? ''))
+        ack(frames ? { summary: frames.summary, frames: frames.frames.length } : null)
+    })
+
+    socket.on('REPLAY_FRAME', async ({ id, index }: { id?: string; index?: number } = {}, ack?: (s: GameState | null) => void) => {
+        if (typeof ack !== 'function') return
+        const frames = await loadFrames(roomManager, String(id ?? ''))
+        ack(frames?.frames[Math.max(0, Math.min(frames.frames.length - 1, Number(index) || 0))] ?? null)
+    })
+
     // ── Reconexión ────────────────────────────────────────────────────────────
     socket.on('RECONNECT', ({ roomId, playerId }: { roomId?: string; playerId?: 'player1' | 'player2' } = {}) => {
         if (playerId !== 'player1' && playerId !== 'player2') return
@@ -335,6 +402,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             squadSubmitted: room.squadSelections[playerId] !== null,
             mapId: room.mapId,
             squadSize: room.squadSize,
+            replayId: room.replayId ?? null,
         })
         driveBot(io, room)
         const opponent = room.players.find(p => p.playerId !== playerId)

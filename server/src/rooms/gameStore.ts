@@ -66,3 +66,81 @@ export async function createGameStore(kind = process.env.GAME_STORE ?? 'file'): 
     }
     return new FileGameStore(process.env.GAME_STORE_DIR ?? path.join(__dirname, '../../data/runtime/rooms'))
 }
+
+// ─── REPETICIONES ────────────────────────────────────────────────────────────
+// Se guardan al terminar cada partida. Se pueden ver con el enlace (?repeticion=ID)
+// y cada jugador ve en el lobby las suyas.
+import type { Replay, ReplaySummary } from '../game/replay'
+
+export interface ReplayStore {
+    save(replay: Replay): Promise<void>
+    load(id: string): Promise<Replay | null>
+    listFor(userId: string, limit?: number): Promise<ReplaySummary[]>
+}
+
+export class MemoryReplayStore implements ReplayStore {
+    private items = new Map<string, Replay>()
+    constructor(private max = 200) {}
+    async save(r: Replay) {
+        this.items.set(r.summary.id, r)
+        while (this.items.size > this.max) this.items.delete(this.items.keys().next().value!)
+    }
+    async load(id: string) { return this.items.get(id) ?? null }
+    async listFor(userId: string, limit = 20) {
+        return [...this.items.values()].filter(r => r.userIds.includes(userId)).map(r => r.summary).reverse().slice(0, limit)
+    }
+}
+
+export class FileReplayStore implements ReplayStore {
+    constructor(private dir: string, private max = 500) { fs.mkdirSync(dir, { recursive: true }) }
+    private file(id: string) { return path.join(this.dir, `${id}.json`) }
+    private indexFile() { return path.join(this.dir, 'index.json') }
+    private async index(): Promise<{ summary: ReplaySummary; userIds: string[] }[]> {
+        try { return JSON.parse(await fs.promises.readFile(this.indexFile(), 'utf-8')) } catch { return [] }
+    }
+    async save(r: Replay) {
+        if (!SAFE_ID.test(r.summary.id)) return
+        await fs.promises.writeFile(this.file(r.summary.id), JSON.stringify(r))
+        const idx = [...await this.index(), { summary: r.summary, userIds: r.userIds }]
+        for (const old of idx.splice(0, Math.max(0, idx.length - this.max))) await fs.promises.rm(this.file(old.summary.id), { force: true })
+        const tmp = this.indexFile() + '.tmp'
+        await fs.promises.writeFile(tmp, JSON.stringify(idx))
+        await fs.promises.rename(tmp, this.indexFile())
+    }
+    async load(id: string) {
+        if (!SAFE_ID.test(id)) return null
+        try { return JSON.parse(await fs.promises.readFile(this.file(id), 'utf-8')) as Replay } catch { return null }
+    }
+    async listFor(userId: string, limit = 20) {
+        return (await this.index()).filter(e => e.userIds.includes(userId)).map(e => e.summary).reverse().slice(0, limit)
+    }
+}
+
+export class SupabaseReplayStore implements ReplayStore {
+    constructor(private client: { from: (t: string) => any }) {}   // eslint-disable-line @typescript-eslint/no-explicit-any
+    async save(r: Replay) {
+        const { error } = await this.client.from('replays').insert({ id: r.summary.id, summary: r.summary, data: r, user_ids: r.userIds })
+        if (error) console.error('[replays] no se pudo guardar', r.summary.id, error.message)
+    }
+    async load(id: string) {
+        if (!SAFE_ID.test(id)) return null
+        const { data, error } = await this.client.from('replays').select('data').eq('id', id).maybeSingle()
+        if (error) { console.error('[replays]', error.message); return null }
+        return (data?.data as Replay) ?? null
+    }
+    async listFor(userId: string, limit = 20) {
+        const { data, error } = await this.client.from('replays').select('summary').contains('user_ids', [userId])
+            .order('created_at', { ascending: false }).limit(limit)
+        if (error) { console.error('[replays]', error.message); return [] }
+        return (data ?? []).map((r: { summary: ReplaySummary }) => r.summary)
+    }
+}
+
+export async function createReplayStore(kind = process.env.GAME_STORE ?? 'file'): Promise<ReplayStore> {
+    if (kind === 'none') return new MemoryReplayStore()
+    if (kind === 'supabase') {
+        const { supabaseAdmin } = await import('../lib/supabase')
+        return new SupabaseReplayStore(supabaseAdmin)
+    }
+    return new FileReplayStore(process.env.REPLAY_DIR ?? path.join(__dirname, '../../data/runtime/replays'))
+}

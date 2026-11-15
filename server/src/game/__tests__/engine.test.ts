@@ -16,12 +16,13 @@ import { previewAttack } from '../combat'
 import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize, eligibleCards } from '../catalog'
 import { createServerGame } from '../createServerGame'
 import { RoomManager } from '../../rooms/roomManager'
-import { FileGameStore } from '../../rooms/gameStore'
+import { FileGameStore, MemoryReplayStore, FileReplayStore } from '../../rooms/gameStore'
+import { startRecording, recordedAction, recordForfeit, replayFrames } from '../replay'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { listMaps, randomMapId } from '../maps'
-import { randomSquad, randomDeck, chooseBotAction } from '../bot'
+import { randomSquad, randomDeck, chooseBotAction, actingPlayer, botFallback } from '../bot'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1263,5 +1264,118 @@ describe('Bot con niveles', () => {
     const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 7, r: 7 })])
     g.units.a.weapons = [weapon({ range: 1 })]
     expect(chooseBotAction(g, 'player1', () => 0.5, 'dificil').type).not.toBe('ATTACK')
+  })
+})
+
+describe('Repeticiones', () => {
+  it('el estado inicial más las acciones y sus dados reconstruyen la partida', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', B)])
+    const rec = startRecording(g)
+    const r1 = recordedAction(rec, g, { type: 'ATTACK', unitId: 'a', weaponIndex: 1, targetId: 'e' }, 'player1', dice(9, 6, 4, 2), {})
+    expect(r1.success).toBe(true)
+    expect(rec.steps[0].rolls).toEqual([9, 6, 4, 2])
+    // Una acción rechazada no se apunta
+    expect(recordedAction(rec, r1.state!, { type: 'ATTACK', unitId: 'a', weaponIndex: 1, targetId: 'e' }, 'player1', dice(9), {}).success).toBe(false)
+    expect(rec.steps).toHaveLength(1)
+    const frames = replayFrames(rec)
+    expect(frames).toHaveLength(2)
+    expect(frames[1].units.e.currentHp).toBe(r1.state!.units.e.currentHp)
+    expect(frames[0].units.e.currentHp).toBe(10)
+  })
+
+  it('una partida entera entre bots se reproduce igual, también con una derrota por abandono', () => {
+    const units = loadUnitCatalog(), tactics = loadTacticsCatalog()
+    let seed = 7
+    const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
+    const d10 = () => Math.floor(rand() * 10) + 1
+    const sq1 = ['ST01-U01', 'ST01-U02', 'ST01-U03'], sq2 = ['ST01-U04', 'ST01-U05', 'ST01-U06']
+    const deck = (sq: string[]) => eligibleCards(sq, units, tactics).slice(0, requiredDeckSize(sq, units, tactics)).map(c => c.id)
+    let s = startGame(createServerGame('A', 'B', sq1, sq2, deck(sq1), deck(sq2), { rng: d10, random: rand }))
+    const rec = startRecording(s)
+    for (let n = 0; n < 60 && s.phase !== 'finished'; n++) {
+      const p = actingPlayer(s)
+      let r = recordedAction(rec, s, chooseBotAction(s, p, rand, 'normal'), p, d10)
+      if (!r.success) r = recordedAction(rec, s, botFallback(s), p, d10)
+      if (r.success) s = r.state!
+    }
+    recordForfeit(rec, 'player2', 'B abandona la partida')
+    const frames = replayFrames(rec)
+    expect(frames).toHaveLength(rec.steps.length + 1)
+    const last = frames[frames.length - 1]
+    expect(last.winner).toBe('player1')
+    expect(last.winReason).toBe('B abandona la partida')
+    expect(JSON.stringify(frames[frames.length - 2].units)).toBe(JSON.stringify(s.units))
+    expect(JSON.stringify(frames[frames.length - 2].log)).toBe(JSON.stringify(s.log))
+  })
+
+  it('el almacén en disco guarda, lista por usuario y no admite ids con rutas', async () => {
+    const store = new FileReplayStore(fs.mkdtempSync(path.join(os.tmpdir(), 'ga-replays-')))
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', B)])
+    const summary = { id: 'abc123', createdAt: '', mapId: 'DemoMap', players: { player1: 'P1', player2: 'P2' }, winner: null, winReason: '', vp: { player1: 0, player2: 0 }, steps: 0, vsBot: false }
+    await store.save({ initial: g, steps: [], summary, userIds: ['u1', 'u2'] })
+    expect((await store.load('abc123'))?.summary.id).toBe('abc123')
+    expect(await store.listFor('u1')).toHaveLength(1)
+    expect(await store.listFor('otro')).toHaveLength(0)
+    expect(await store.load('../index')).toBeNull()
+  })
+})
+
+describe('Revancha y espectadores', () => {
+  const units = loadUnitCatalog(), tactics = loadTacticsCatalog()
+  const squad = ['ST01-U01', 'ST01-U02', 'ST01-U03']
+  const deck = eligibleCards(squad, units, tactics).slice(0, requiredDeckSize(squad, units, tactics)).map(c => c.id)
+  const finish = (rm: RoomManager, sid: string) => {
+    const room = rm.getRoomBySocket(sid)!
+    room.gameState = { ...room.gameState!, phase: 'finished', winner: 'player1' }
+    room.status = 'finished'
+    return room
+  }
+
+  it('contra la máquina la revancha vuelve a la selección de escuadra y guarda la repetición', () => {
+    const rm = new RoomManager()
+    rm.useReplayStore(new MemoryReplayStore())
+    rm.createBotRoom('h', 'Humano', 'u1')
+    expect('error' in rm.requestRematch('h')).toBe(true)   // aún no ha terminado
+    rm.submitSquad('h', squad, deck)
+    rm.confirmSetup('h')
+    const room = finish(rm, 'h')
+    expect(rm.archiveReplay(room)).toMatch(/^[a-z0-9]{12}$/)
+    const r = rm.requestRematch('h')
+    expect('error' in r ? r.error : r.ready).toBe(true)
+    expect(room.status).toBe('squad_selection')
+    expect(room.gameState).toBeNull()
+    expect(room.squadSelections.player2).not.toBeNull()   // el bot ya eligió
+    expect(room.squadSelections.player1).toBeNull()
+  })
+
+  it('entre dos jugadores hace falta que la pidan los dos', () => {
+    const rm = new RoomManager()
+    const room = rm.createRoom('a', 'Ana', 'u1')
+    rm.joinRoom(room.id, 'b', 'Beto', 'u2')
+    rm.submitSquad('a', squad, deck)
+    rm.submitSquad('b', squad, deck)
+    rm.confirmSetup('a'); rm.confirmSetup('b')
+    finish(rm, 'a')
+    const first = rm.requestRematch('a')
+    expect('error' in first ? first.error : first.ready).toBe(false)
+    expect(room.status).toBe('finished')
+    const second = rm.requestRematch('b')
+    expect('error' in second ? second.error : second.ready).toBe(true)
+    expect(room.status).toBe('squad_selection')
+  })
+
+  it('los espectadores entran en partidas empezadas y no pueden actuar', () => {
+    const rm = new RoomManager()
+    const room = rm.createBotRoom('h', 'Humano', 'u1')
+    expect(rm.addSpectator('v', room.id)).toEqual({ error: 'La partida aún no ha empezado' })
+    rm.submitSquad('h', squad, deck)
+    rm.confirmSetup('h')
+    expect(rm.addSpectator('v', room.id)).toBe(room)
+    expect(rm.addSpectator('h', room.id)).toEqual({ error: 'Ya estás jugando en una sala' })
+    expect(rm.addSpectator('v2', 'NOEXISTE')).toEqual({ error: 'Sala no encontrada' })
+    expect(rm.spectatorCount(room.id)).toBe(1)
+    expect(rm.getPlayerIdBySocket('v')).toBeNull()
+    expect(rm.removeSpectator('v')).toBe(room.id)
+    expect(rm.spectatorCount(room.id)).toBe(0)
   })
 })

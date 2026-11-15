@@ -6,7 +6,8 @@ import { createServerGame } from '../game/createServerGame'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from '../game/catalog'
 import { mapExists, randomMapId } from '../game/maps'
 import { forfeit } from '../game/victory'
-import type { GameStore } from './gameStore'
+import type { GameStore, ReplayStore } from './gameStore'
+import { startRecording, recordForfeit, summarize, type ReplayRecord } from '../game/replay'
 import { randomSquad, randomDeck, BOT_LEVELS, type BotLevel } from '../game/bot'
 
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
@@ -23,6 +24,9 @@ export interface Room {
     squadSize: number
     vsBot?: boolean          // el jugador 2 es el bot del servidor
     botLevel?: BotLevel      // dificultad del bot
+    record?: ReplayRecord | null       // acciones de la partida en curso (para la repetición)
+    replayId?: string | null           // repetición guardada al terminar
+    rematch?: ('player1' | 'player2')[] // quién ha pedido la revancha
 }
 
 export const BOT_USER_ID = 'bot'
@@ -34,6 +38,8 @@ export class RoomManager {
     private socketToRoom = new Map<string, string>()
     private cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>()
     constructor(private reconnectTimeoutMs = RECONNECT_TIMEOUT_MS) {}
+    private spectators = new Map<string, string>()   // socketId → roomId
+    private finishedTimers = new Map<string, ReturnType<typeof setTimeout>>()
     private matchmakingQueue: { socketId: string; userId: string; playerName: string }[] = []
 
     private newRoomId(): string {
@@ -137,6 +143,7 @@ export class RoomManager {
         if (bothConfirmed) {
             room.gameState = startGame(structuredClone(room.gameState))
             room.setupConfirmed = { player1: false, player2: false }
+            room.record = startRecording(room.gameState)
         }
 
         return { room, bothConfirmed }
@@ -181,6 +188,12 @@ export class RoomManager {
 
     handleDisconnect(socketId: string, io: Server) {
         this.leaveQueue(socketId)
+        const watched = this.spectators.get(socketId)
+        if (watched) {
+            this.spectators.delete(socketId)
+            io.to(watched).emit('SPECTATORS', { count: this.spectatorCount(watched) })
+            return
+        }
         const room = this.getRoomBySocket(socketId)
         if (!room) return
 
@@ -194,6 +207,7 @@ export class RoomManager {
 
         // Si la sala sólo tenía un jugador o ya terminó, borrar directamente
         if (room.players.length < 2 || room.status === 'finished') {
+            if (room.status === 'finished') io.to(room.id).emit('REMATCH_UNAVAILABLE')
             this.cleanupRoom(room.id)
             return
         }
@@ -214,9 +228,12 @@ export class RoomManager {
             this.cleanupTimers.delete(timerKey)
             const gs = room.gameState
             if (room.status === 'playing' && gs && gs.phase !== 'finished' && gs.phase !== 'setup') {
-                forfeit(gs, disconnectedPlayer.playerId, `${gs.players[disconnectedPlayer.playerId].name} abandona la partida`)
+                const reason = `${gs.players[disconnectedPlayer.playerId].name} abandona la partida`
+                forfeit(gs, disconnectedPlayer.playerId, reason)
+                recordForfeit(room.record, disconnectedPlayer.playerId, reason)
                 room.status = 'finished'
-                io.to(room.id).emit('GAME_OVER', { gameState: gs, winner: gs.winner, reason: gs.winReason ?? '', diceRolls: null })
+                const replayId = this.archiveReplay(room)
+                io.to(room.id).emit('GAME_OVER', { gameState: gs, winner: gs.winner, reason: gs.winReason ?? '', diceRolls: null, replayId })
             } else {
                 io.to(room.id).emit('OPPONENT_ABANDONED', {
                     message: 'El oponente abandonó la partida'
@@ -254,6 +271,10 @@ export class RoomManager {
     private cleanupRoom(roomId: string) {
         const room = this.rooms.get(roomId)
         if (!room) return
+        const ft = this.finishedTimers.get(roomId)
+        if (ft) clearTimeout(ft)
+        this.finishedTimers.delete(roomId)
+        for (const [sid, rid] of this.spectators) if (rid === roomId) this.spectators.delete(sid)
         for (const p of room.players) {
             if (p.socketId) this.socketToRoom.delete(p.socketId)
         }
@@ -262,6 +283,89 @@ export class RoomManager {
         if (pending) clearTimeout(pending)
         this.pendingSaves.delete(roomId)
         this.store?.remove(roomId).catch(e => console.error('[gameStore]', e))
+    }
+
+    // ─── ESPECTADORES ─────────────────────────────────────────────────────────
+    // Ven la partida en directo (reciben las mismas actualizaciones) pero no
+    // pueden actuar: no figuran en socketToRoom, así que GAME_ACTION los rechaza.
+    addSpectator(socketId: string, roomId: string): Room | { error: string } {
+        const room = this.rooms.get(roomId)
+        if (!room) return { error: 'Sala no encontrada' }
+        if (!room.gameState || room.status === 'waiting' || room.status === 'squad_selection') return { error: 'La partida aún no ha empezado' }
+        if (this.socketToRoom.has(socketId)) return { error: 'Ya estás jugando en una sala' }
+        this.spectators.set(socketId, roomId)
+        return room
+    }
+
+    removeSpectator(socketId: string): string | null {
+        const roomId = this.spectators.get(socketId) ?? null
+        this.spectators.delete(socketId)
+        return roomId
+    }
+
+    spectatorCount(roomId: string): number {
+        let n = 0
+        for (const rid of this.spectators.values()) if (rid === roomId) n++
+        return n
+    }
+
+    // ─── REVANCHA ─────────────────────────────────────────────────────────────
+    // Con la partida terminada, cada jugador la pide; cuando la piden los dos (o
+    // uno contra la máquina) la sala vuelve a la selección de escuadra con el
+    // mismo mapa y tamaño.
+    requestRematch(socketId: string): { room: Room; ready: boolean; playerId: 'player1' | 'player2' } | { error: string } {
+        const room = this.getRoomBySocket(socketId)
+        const playerId = this.getPlayerIdBySocket(socketId)
+        if (!room || !playerId) return { error: 'No estás en una sala' }
+        if (room.status !== 'finished') return { error: 'La partida no ha terminado' }
+        const other = room.players.find(p => p.playerId !== playerId)
+        if (!room.vsBot && !other?.socketId) return { error: 'El rival ya no está en la sala' }
+        room.rematch = [...new Set([...(room.rematch ?? []), playerId])]
+        const ready = !!room.vsBot || room.rematch.length === 2
+        if (ready) {
+            const ft = this.finishedTimers.get(room.id)
+            if (ft) clearTimeout(ft)
+            this.finishedTimers.delete(room.id)
+            room.status = 'squad_selection'
+            room.gameState = null
+            room.record = null
+            room.replayId = null
+            room.rematch = []
+            room.squadSelections = { player1: null, player2: null }
+            room.deckSelections = { player1: null, player2: null }
+            room.setupConfirmed = { player1: false, player2: false }
+            if (room.vsBot) {
+                const squad = randomSquad(room.squadSize)
+                room.squadSelections.player2 = squad
+                room.deckSelections.player2 = randomDeck(squad)
+            }
+        }
+        return { room, ready, playerId }
+    }
+
+    // ─── REPETICIONES ─────────────────────────────────────────────────────────
+    private replays: ReplayStore | null = null
+    useReplayStore(store: ReplayStore | null) { this.replays = store }
+    getReplayStore(): ReplayStore | null { return this.replays }
+
+    // Guarda la repetición de una partida recién terminada y devuelve su id.
+    // La sala terminada se mantiene 30 min para la revancha.
+    archiveReplay(room: Room): string | null {
+        const ft = this.finishedTimers.get(room.id)
+        if (ft) clearTimeout(ft)
+        this.finishedTimers.set(room.id, setTimeout(() => { if (room.status === 'finished') this.cleanupRoom(room.id) }, 30 * 60_000))
+        if (room.replayId) return room.replayId
+        const final = room.gameState
+        if (!room.record || !final || !this.replays) return null
+        const id = Array.from({ length: 12 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[randomInt(32)]).join('')
+        room.replayId = id
+        const replay = {
+            ...room.record,
+            summary: summarize(id, room.record, final, room.mapId, !!room.vsBot),
+            userIds: room.players.map(p => p.userId).filter(u => u !== BOT_USER_ID),
+        }
+        this.replays.save(replay).catch(e => console.error('[replays]', e))
+        return id
     }
 
     // ─── PERSISTENCIA ─────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import path from 'path'
 import { RoomManager } from '../src/rooms/roomManager'
+import { MemoryReplayStore } from '../src/rooms/gameStore'
 import { registerGameEvents } from '../src/socket/gameEvents'
 import { reachableFor } from '../src/game/queries'
 import { keyToHex } from '../src/game/hexGrid'
@@ -22,6 +23,7 @@ const { io: ioc } = require(path.join(__dirname, '../../client/node_modules/sock
 const http = createServer()
 const io = new Server(http)
 const rm = new RoomManager()
+rm.useReplayStore(new MemoryReplayStore())
 io.use((socket, next) => { socket.data.userId = socket.handshake.auth.userId; socket.data.userName = socket.handshake.auth.userId; next() })
 io.on('connection', s => { registerGameEvents(io, s, rm); s.on('disconnect', () => rm.handleDisconnect(s.id, io)) })
 
@@ -33,6 +35,7 @@ http.listen(0, async () => {
     const a = ioc(url, { auth: { userId: 'ana' } })
     const b = ioc(url, { auth: { userId: 'bea' } })
     const intruder = ioc(url, { auth: { userId: 'intruso' } })
+    let lastBotRoom = ''
     const wait = (sock: any, ev: string) => new Promise<any>(res => sock.once(ev, res))
     const fail = (msg: string): never => { console.error('FALLO:', msg); process.exit(1) }
 
@@ -113,17 +116,29 @@ http.listen(0, async () => {
     // ── Partida contra la máquina ──
     const h = ioc(url, { auth: { userId: 'humano' } })
     h.emit('PLAY_BOT', { playerName: 'Humano', squadSize: 3 })
-    await wait(h, 'SQUAD_SELECTION_STARTED')
+    lastBotRoom = (await wait(h, 'SQUAD_SELECTION_STARTED')).roomId
     const squadH = ['ST01-U01', 'ST01-U02', 'ST01-U03']
     h.emit('SELECT_SQUAD', { unitCardIds: squadH, cardIds: deck(squadH) })
     await wait(h, 'GAME_STARTED')
     let bs: GameState | null = null
     let botOver = false
+    let replayId: string | null = null
     h.on('GAME_STATE_UPDATE', (p: any) => { bs = p.gameState })
     h.on('PHASE_TRANSITION', (p: any) => { bs = p.gameState })
-    h.on('GAME_OVER', (p: any) => { bs = p.gameState; botOver = true })
+    h.on('GAME_OVER', (p: any) => { bs = p.gameState; botOver = true; replayId = p.replayId })
     h.emit('CONFIRM_SETUP')
     await wait(h, 'GAME_STATE_UPDATE')
+
+    // Un espectador entra con el código de la sala y recibe las actualizaciones
+    const viewer = ioc(url, { auth: { userId: 'mirona' } })
+    let viewerUpdates = 0
+    viewer.on('GAME_STATE_UPDATE', () => viewerUpdates++)
+    viewer.emit('SPECTATE', { roomId: lastBotRoom })
+    const spec = await wait(viewer, 'SPECTATE_STARTED')
+    if (!spec.gameState) fail('el espectador no recibió el estado')
+    viewer.emit('GAME_ACTION', { action: { type: 'END_ACTIVATION', unitId: 'x' } })
+    await wait(viewer, 'ACTION_ERROR')
+    console.log('✓ espectador dentro (y sin poder actuar)')
     let botActions = 0
     for (let i = 0; i < 3000 && !botOver; i++) {
         const s: GameState = bs!
@@ -146,6 +161,24 @@ http.listen(0, async () => {
     const botMoves = bs!.log.filter(l => l.playerId === 'player2').length
     if (botMoves === 0) fail('el bot no hizo nada')
     console.log(`✓ partida contra el bot terminada (${botMoves} entradas del bot en el registro). Ganador: ${bs!.winner}`)
+    if (viewerUpdates === 0) fail('el espectador no recibió actualizaciones')
+
+    // Repetición: se reconstruye en el servidor y acaba igual que la partida
+    if (!replayId) fail('GAME_OVER sin repetición')
+    const opened: any = await new Promise(res => h.emit('REPLAY_OPEN', { id: replayId }, res))
+    if (!opened || opened.frames < 2) fail('la repetición no se abrió')
+    const lastFrame: GameState = await new Promise(res => h.emit('REPLAY_FRAME', { id: replayId, index: opened.frames - 1 }, res))
+    if (lastFrame.winner !== bs!.winner || lastFrame.players.player1.vp !== bs!.players.player1.vp) fail('la repetición no acaba como la partida')
+    const list: any[] = await new Promise(res => h.emit('REPLAY_LIST', {}, res))
+    if (!list.some(r => r.id === replayId)) fail('la repetición no aparece en la lista del jugador')
+    console.log(`✓ repetición de ${opened.frames} pasos idéntica al final de la partida`)
+
+    // Revancha contra la máquina: vuelve a la selección de escuadra
+    h.emit('REMATCH')
+    const again = await wait(h, 'SQUAD_SELECTION_STARTED')
+    if (!again.vsBot) fail('la revancha no es contra la máquina')
+    console.log('✓ revancha')
+    viewer.disconnect()
 
     // ── Reloj de turno: un jugador que no hace nada pasa solo y, a la tercera, pierde ──
     const idle = ioc(url, { auth: { userId: 'dormido' } })

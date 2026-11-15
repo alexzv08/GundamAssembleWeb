@@ -10,6 +10,7 @@
  *   npx tsx scripts/self-play.ts [--games 50] [--seed 42] [--verbose]
  */
 import { createServerGame } from '../src/game/createServerGame'
+import { startRecording, recordedAction, replayFrames } from '../src/game/replay'
 import { chooseBotAction, actingPlayer, botFallback, BOT_LEVELS, type BotLevel } from '../src/game/bot'
 import { processAction } from '../src/game/engine'
 import { startGame } from '../src/game/activation'
@@ -65,14 +66,26 @@ function runGame(): Result {
     const sq1 = randomSquad(), sq2 = randomSquad()
     let s = createServerGame('BotA', 'BotB', sq1, sq2, randomDeck(sq1), randomDeck(sq2), { rng: d10, random: rand })
     s = startGame(s)
+    const rec = startRecording(s)
     let errors = 0
     for (let n = 0; n < MAX_ACTIONS; n++) {
-        if (s.phase === 'finished') return { ok: true, actions: n, winner: s.winner!, vp: [s.players.player1.vp, s.players.player2.vp] }
+        if (s.phase === 'finished') {
+            // La repetición (estado inicial + acciones + dados) debe reconstruir la misma partida
+            const frames = replayFrames(rec)
+            const last = frames[frames.length - 1] as unknown as Record<string, unknown>
+            const cur = s as unknown as Record<string, unknown>
+            const diff = [...new Set([...Object.keys(cur), ...Object.keys(last)])]
+                .filter(k => k !== 'turnClock' && JSON.stringify(cur[k]) !== JSON.stringify(last[k]))
+            if (frames.length !== rec.steps.length + 1 || diff.length) {
+                return { ok: false, actions: n, error: `La repetición no reproduce la partida (${frames.length}/${rec.steps.length + 1} pasos; difieren: ${diff.join(', ')})` }
+            }
+            return { ok: true, actions: n, winner: s.winner!, vp: [s.players.player1.vp, s.players.player2.vp] }
+        }
         const player = actingPlayer(s)
         const action = botAction(s, player)
         let r
         try {
-            r = processAction(s, action, player, d10, OPTS)
+            r = recordedAction(rec, s, action, player, d10, OPTS)
         } catch (e) {
             return { ok: false, actions: n, error: `Excepción en ${action.type}: ${(e as Error).stack}` }
         }
@@ -82,11 +95,11 @@ function runGame(): Result {
             if (++errors > 50) return { ok: false, actions: n, error: `50 rechazos seguidos; último: ${action.type} → ${r.error}` }
             const fallback: GameAction = botFallback(s)
             if (VERBOSE) console.log(`  rechazado ${action.type}: ${r.error}`)
-            r = processAction(s, fallback, player, d10, OPTS)
+            r = recordedAction(rec, s, fallback, player, d10, OPTS)
             if (!r.success) {
                 // Sobre la Base sin haber avanzado: avanzar a cualquier hex
                 const reach = [...reachableFor(s, s.activeUnitId!, { kind: 'advance' }).keys()]
-                if (reach.length) r = processAction(s, { type: 'ADVANCE', unitId: s.activeUnitId!, to: keyToHex(reach[0]) }, player, d10, OPTS)
+                if (reach.length) r = recordedAction(rec, s, { type: 'ADVANCE', unitId: s.activeUnitId!, to: keyToHex(reach[0]) }, player, d10, OPTS)
             }
             if (!r.success) return { ok: false, actions: n, error: `Bloqueo: ${r.error}` }
         } else {

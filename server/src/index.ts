@@ -4,7 +4,7 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import { roomManager } from './rooms/roomManager'
-import { createGameStore } from './rooms/gameStore'
+import { createGameStore, createReplayStore } from './rooms/gameStore'
 import { registerGameEvents } from './socket/gameEvents'
 import mapsRouter from './routes/maps'
 import unitsRouter from './routes/units'
@@ -61,6 +61,7 @@ const PORT = process.env.PORT ?? 3001
 // Recuperar las partidas en curso guardadas antes de aceptar conexiones
 createGameStore().then(async store => {
     roomManager.useStore(store)
+    roomManager.useReplayStore(await createReplayStore())
     const n = await roomManager.restore(io)
     if (n) console.log(`Recuperadas ${n} partidas en curso`)
 }).catch(e => console.error('[gameStore] sin persistencia:', e)).finally(() => {
