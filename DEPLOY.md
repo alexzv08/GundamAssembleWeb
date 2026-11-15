@@ -20,8 +20,9 @@ Rellena las URLs en este orden: Supabase → Railway → Vercel → vuelta a Rai
 
 1. Crea un proyecto en <https://supabase.com> (región cercana, p. ej. `eu-west`).
 2. **SQL Editor** → ejecuta, en este orden:
-   1. `server/scripts/schema.sql` — **solo si el proyecto es nuevo** (crea `profiles` y el trigger que crea el perfil
-      al registrarse; si ya lo tienes de antes, sáltalo: no se puede ejecutar dos veces).
+   1. `server/scripts/schema.sql` — **solo si el proyecto está vacío** (crea `profiles` y el trigger que crea el perfil
+      al registrarse). Si ya tienes la base de datos montada, **sáltalo**: si lo ejecutas dará
+      `ERROR: 42710: type "match_type" already exists` (no rompe nada, pero no hace falta).
    2. `server/supabase/migrations/20261115_active_rooms.sql` (partidas en curso).
    3. `server/supabase/migrations/20261116_replays.sql` (repeticiones).
    Las dos migraciones se pueden repetir sin problema.
