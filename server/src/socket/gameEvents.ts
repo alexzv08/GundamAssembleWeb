@@ -5,7 +5,8 @@ import { chooseBotAction, botFallback, actingPlayer, followUpReady } from '../ga
 import { reachableFor } from '../game/queries'
 import { keyToHex } from '../game/hexGrid'
 import { reorderSlotTokens } from '../game/timeline'
-import type { GameAction, GameState, TurnClock } from '../types'
+import type { GameAction, GameState, TurnClock, AttackPreview } from '../types'
+import { previewAttack } from '../game/combat'
 import { cloneState, pushLog } from '../game/damage'
 import { forfeit } from '../game/victory'
 
@@ -146,7 +147,7 @@ function driveBot(io: Server, room: Room): void {
     setTimeout(() => {
         const cur = room.gameState
         if (!cur || cur !== s) return   // el estado cambió mientras esperaba
-        let action = chooseBotAction(cur, 'player2')
+        let action = chooseBotAction(cur, 'player2', Math.random, room.botLevel ?? 'normal')
         let result = processAction(cur, action, 'player2', undefined, PLAY_OPTS)
         if (!result.success) {
             action = botFallback(cur)
@@ -194,8 +195,8 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
     })
 
     // ── Partida contra la máquina ──────────────────────────────────────────────
-    socket.on('PLAY_BOT', ({ playerName, mapId, squadSize }: { playerName?: string; mapId?: string; squadSize?: number } = {}) => {
-        const room = roomManager.createBotRoom(socket.id, cleanName(playerName, defaultName), userId, { mapId, squadSize })
+    socket.on('PLAY_BOT', ({ playerName, mapId, squadSize, level }: { playerName?: string; mapId?: string; squadSize?: number; level?: string } = {}) => {
+        const room = roomManager.createBotRoom(socket.id, cleanName(playerName, defaultName), userId, { mapId, squadSize, botLevel: level })
         socket.join(room.id)
         socket.emit('SQUAD_SELECTION_STARTED', { playerId: 'player1', roomId: room.id, mapId: room.mapId, squadSize: room.squadSize, vsBot: true })
     })
@@ -284,6 +285,22 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         strikes.delete(`${room.id}:${playerId}`)
         publish(io, room, result, action)
         driveBot(io, room)
+    })
+
+    // ── Previsión de ataque (solo lectura) ──────────────────────────────────────
+    // El jugador activo pregunta qué puede esperar de un ataque antes de confirmarlo.
+    socket.on('PREVIEW_ATTACK', (req: { unitId?: string; weaponIndex?: number; cardId?: string; targetKey?: string } = {}, ack?: (p: AttackPreview | null) => void) => {
+        if (typeof ack !== 'function') return
+        const room = roomManager.getRoomBySocket(socket.id)
+        const playerId = roomManager.getPlayerIdBySocket(socket.id)
+        const s = room?.gameState
+        const unit = s && typeof req.unitId === 'string' ? s.units[req.unitId] : null
+        if (!s || !unit || unit.playerId !== playerId || typeof req.targetKey !== 'string' || !s.board[req.targetKey]) return ack(null)
+        const weapon = typeof req.cardId === 'string'
+            ? s.players[unit.playerId].tactics.hand.find(c => c.id === req.cardId)?.weapon
+            : unit.weapons[Number(req.weaponIndex)]
+        if (!weapon) return ack(null)
+        ack(previewAttack(s, unit.id, weapon, req.targetKey))
     })
 
     // ── Chat de la sala ────────────────────────────────────────────────────────

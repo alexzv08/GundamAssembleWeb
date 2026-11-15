@@ -7,7 +7,7 @@ import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from
 import { mapExists, randomMapId } from '../game/maps'
 import { forfeit } from '../game/victory'
 import type { GameStore } from './gameStore'
-import { randomSquad, randomDeck } from '../game/bot'
+import { randomSquad, randomDeck, BOT_LEVELS, type BotLevel } from '../game/bot'
 
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
 
@@ -22,11 +22,12 @@ export interface Room {
     mapId: string
     squadSize: number
     vsBot?: boolean          // el jugador 2 es el bot del servidor
+    botLevel?: BotLevel      // dificultad del bot
 }
 
 export const BOT_USER_ID = 'bot'
 
-export interface RoomOptions { mapId?: string; squadSize?: number }
+export interface RoomOptions { mapId?: string; squadSize?: number; botLevel?: string }
 
 export class RoomManager {
     private rooms = new Map<string, Room>()
@@ -68,6 +69,7 @@ export class RoomManager {
         room.players.push({ socketId: '', userId: BOT_USER_ID, playerId: 'player2', name: 'Bot' })
         room.status = 'squad_selection'
         room.vsBot = true
+        room.botLevel = (BOT_LEVELS as string[]).includes(opts.botLevel ?? '') ? opts.botLevel as BotLevel : 'normal'
         const squad = randomSquad(room.squadSize)
         room.squadSelections.player2 = squad
         room.deckSelections.player2 = randomDeck(squad)

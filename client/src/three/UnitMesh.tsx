@@ -16,11 +16,12 @@ interface UnitMeshProps {
   isSelected?: boolean
   isMine?: boolean
   onClick?: () => void
+  onHover?: (on: boolean) => void
 }
 
 // Pieza de una unidad: peana del color del bando (tú cian, rival rojo), modelo
 // en gris "gunpla" con un toque del color del bando, y etiqueta con nombre y HP.
-export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, isMine = false, onClick }: UnitMeshProps) {
+export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = false, isMine = false, onClick, onHover }: UnitMeshProps) {
   const [hovered, setHovered] = useState(false)
   const model = useUnitModel(modelUrlFor(unit.cardId))
   const hits = useDamagePopups(unit.currentHp)
@@ -33,8 +34,8 @@ export function UnitMesh({ unit, elevation = 0, isActive = false, isSelected = f
 
   const handlers = {
     onClick: (e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onClick?.() },
-    onPointerEnter: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer' },
-    onPointerLeave: () => { setHovered(false); document.body.style.cursor = '' },
+    onPointerEnter: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); onHover?.(true); document.body.style.cursor = 'pointer' },
+    onPointerLeave: () => { setHovered(false); onHover?.(false); document.body.style.cursor = '' },
   }
 
   return (

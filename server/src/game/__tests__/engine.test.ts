@@ -12,6 +12,7 @@ import { processAction } from '../engine'
 import { beginActivation, newActivation, startGame } from '../activation'
 import { contestObjectives, scoreObjectives, decideWinner } from '../victory'
 import { forceMove } from '../damage'
+import { previewAttack } from '../combat'
 import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize, eligibleCards } from '../catalog'
 import { createServerGame } from '../createServerGame'
 import { RoomManager } from '../../rooms/roomManager'
@@ -20,7 +21,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { listMaps, randomMapId } from '../maps'
-import { randomSquad, randomDeck } from '../bot'
+import { randomSquad, randomDeck, chooseBotAction } from '../bot'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1216,5 +1217,51 @@ describe('Setup y Timeline hacia atrás (previstos para unidades futuras)', () =
     expect(s.units.a.upgrades.some(u => u.type === 'shield')).toBe(true)
     expect(s.units.b.energy).toBe(2)
     expect(getUnitRound(s.timeline, 'b')).toBe(2)
+  })
+})
+
+describe('Previsión de ataque', () => {
+  it('usa los mismos dados, Accuracy y Shields que el ataque real', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', B, { currentHp: 2, upgrades: [{ type: 'shield', value: 1, active: true }] })])
+    g.units.a.upgrades = [{ type: 'attack', value: 1 }]
+    const p = previewAttack(g, 'a', g.units.a.weapons[1], hexKey(B))!
+    expect(p.dice).toBe(5)                 // Saber S4 + 1 Strength Upgrade
+    expect(p.accuracy).toBe(0)
+    expect(p.hitChance).toBeCloseTo(0.7)   // 4..10
+    expect(p.expectedHits).toBeCloseTo(3.5)
+    expect(p.shields).toBe(1)
+    expect(p.critChance).toBeCloseTo(1 - 0.8 ** 5)
+    // Derrotarlo exige 3+ impactos (2 HP + 1 Shield)
+    const binom = (n: number, k: number) => { let c = 1; for (let i = 1; i <= k; i++) c = c * (n - i + 1) / i; return c }
+    let expected = 0
+    for (let k = 3; k <= 5; k++) expected += binom(5, k) * 0.7 ** k * 0.3 ** (5 - k)
+    expect(p.killChance).toBeCloseTo(expected)
+  })
+  it('no muta el estado ni da previsión sin objetivo', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', B)])
+    const before = JSON.stringify(g)
+    previewAttack(g, 'a', g.units.a.weapons[0], hexKey(B))
+    expect(JSON.stringify(g)).toBe(before)
+    expect(previewAttack(g, 'a', g.units.a.weapons[0], '6,6')).toBeNull()
+  })
+})
+
+describe('Bot con niveles', () => {
+  it('normal y difícil atacan al enemigo que pueden derrotar en vez de al sano', () => {
+    for (const level of ['normal', 'dificil'] as const) {
+      const g = makeGame([
+        makeUnit('a', 'player1', A),
+        makeUnit('sano', 'player2', { q: 2, r: 4 }),
+        makeUnit('debil', 'player2', { q: 5, r: 2 }, { currentHp: 1 }),
+      ])
+      g.units.a.weapons = [weapon({ range: 5 })]
+      const act = chooseBotAction(g, 'player1', () => 0.5, level)
+      expect(act).toMatchObject({ type: 'ATTACK', targetId: 'debil' })
+    }
+  })
+  it('sin objetivos no ataca', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 7, r: 7 })])
+    g.units.a.weapons = [weapon({ range: 1 })]
+    expect(chooseBotAction(g, 'player1', () => 0.5, 'dificil').type).not.toBe('ATTACK')
   })
 })

@@ -87,6 +87,21 @@ export interface PendingFollowUp {
   source: string
 }
 
+/** Previsión de un ataque antes de confirmarlo (la calcula el servidor con las mismas reglas) */
+export interface AttackPreview {
+  dice: number
+  accuracy: number
+  critThreshold: number
+  hitChance: number          // por dado, de 0 a 1
+  expectedHits: number
+  critChance: number         // probabilidad de al menos un crítico
+  shields: number            // Shields activos del objetivo principal
+  damageBonus: number
+  expectedDamage: number
+  killChance: number         // probabilidad de derrotar al objetivo principal (sin efectos de crítico)
+  targets: number            // objetivos que alcanza el ataque (áreas, ataques a adyacentes)
+}
+
 export interface TurnClock {
   playerId: PlayerId
   kind: 'activation' | 'response' | 'choice'

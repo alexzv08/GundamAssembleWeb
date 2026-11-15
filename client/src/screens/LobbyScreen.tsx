@@ -26,7 +26,7 @@ interface LobbyScreenProps {
   onCancelMatch: () => void
   onCreateRoom: () => void
   onJoinRoom: () => void
-  onPlayBot: () => void
+  onPlayBot: (level: 'facil' | 'normal' | 'dificil') => void
   maps: { id: string; name: string; description?: string }[]
   mapId: string
   onMapIdChange: (id: string) => void
@@ -49,6 +49,7 @@ export function LobbyScreen({
   const mobile = useIsMobile()
   // Contra la máquina también deja elegir mapa y tamaño antes de empezar
   const [botSetup, setBotSetup] = useState(false)
+  const [botLevel, setBotLevel] = useState<'facil' | 'normal' | 'dificil'>('normal')
   const canPlay = playerName.trim().length > 0 && connected
 
   return (
@@ -122,7 +123,13 @@ export function LobbyScreen({
                 ))}
               </div>
             </div>
-                <button disabled={!canPlay} onClick={onPlayBot} style={{ ...button('amber', !canPlay), padding: 12, fontWeight: 600 }}>Empezar</button>
+                <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Dificultad de la máquina">
+                  {([['facil', 'Fácil'], ['normal', 'Normal'], ['dificil', 'Difícil']] as const).map(([v, label]) => (
+                    <button key={v} type="button" role="radio" aria-checked={botLevel === v} onClick={() => setBotLevel(v)}
+                      style={{ ...button(botLevel === v ? 'primary' : 'subtle'), flex: 1 }}>{label}</button>
+                  ))}
+                </div>
+                <button disabled={!canPlay} onClick={() => onPlayBot(botLevel)} style={{ ...button('amber', !canPlay), padding: 12, fontWeight: 600 }}>Empezar</button>
                 <button onClick={() => setBotSetup(false)} style={button('ghost')}>Volver</button>
               </div>
             ) : lobbyMode === 'main' ? (

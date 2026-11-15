@@ -14,7 +14,7 @@
 // siempre) y 9-10 (crit siempre). Impacta con 4 o más.
 // MUTA `state` (el llamador clona).
 import type {
-    GameState, AttackReport, Weapon, WeaponEffect, PlayerId, PendingAttack, PendingResponse, TacticsCard, ResponseTrigger,
+    GameState, AttackReport, Weapon, WeaponEffect, PlayerId, PendingAttack, PendingResponse, TacticsCard, ResponseTrigger, AttackPreview,
 } from '../types'
 import type { CardEffect } from '../types/tactics'
 import { hexKey, keyToHex, gridDistance, findPath } from './hexGrid'
@@ -37,6 +37,53 @@ export function isHit(roll: number, accuracy: number, critThreshold: number): bo
     if (roll === 1) return false
     if (roll >= critThreshold) return true
     return roll + accuracy >= 4
+}
+
+// ─── PREVISIÓN ────────────────────────────────────────────────────────────────
+// Lo que el atacante puede esperar antes de confirmar: mismos dados, Accuracy y
+// umbral de crítico que usará la resolución real. No cuenta las Response (cartas
+// ni habilidades con coste de Energy) porque aún no se han decidido. No muta.
+export function previewAttack(state: GameState, attackerId: string, weapon: Weapon, targetKey: string): AttackPreview | null {
+    const attacker = state.units[attackerId]
+    if (!attacker?.position) return null
+    const primary = targetAt(state, targetKey, attacker.playerId)
+    if (!primary) return null
+    const mods = getAttackModifiers(state, attackerId, weapon.name, primary.kind === 'unit' ? primary.id : null)
+    const effect = weapon.effectData
+    let dice = weapon.strength + mods.strengthBonus
+    if (effect?.type === 'strength_per_upgrade') dice += upgradeCount(attacker, (effect.upgradeType ?? 'any') as 'attack' | 'movement' | 'shield' | 'any')
+    if (effect?.type === 'strength_per_ally') {
+        const n = Object.values(state.units).filter(u => u.id !== attacker.id && u.playerId === attacker.playerId && u.position &&
+            gridDistance(attacker.position!, u.position) <= (effect.max ?? 3)).length
+        dice += (effect.amount ?? 2) * n
+    }
+    if (effect?.type === 'strength_per_rws_adjacent') dice += rwsAdjacentTo(state, targetKey, attacker.playerId).length * (effect.amount ?? 1)
+    dice = Math.max(0, dice)
+    const terrain = terrainAccuracy(state.board, attacker.position, keyToHex(targetKey))
+    const corax = rwsAdjacentTo(state, targetKey, attacker.playerId, 'corax').length > 0 ? 1 : 0
+    const accuracy = mods.accuracyBonus + terrain + corax
+    const crit = mods.critThreshold
+    let hits = 0
+    for (let r = 1; r <= 10; r++) if (isHit(r, accuracy, crit)) hits++
+    const p = hits / 10
+    const pc = Math.max(0, (11 - crit) / 10)
+    const target = primary.kind === 'unit' ? state.units[primary.id] : null
+    const shields = target ? target.upgrades.filter(u => u.type === 'shield' && u.active !== false).reduce((n, u) => n + (u.value ?? 1), 0) : 0
+    const damageBonus = (state.activation?.unitId === attackerId ? state.activation.damageBonus : 0)
+    const hp = target ? target.currentHp : 1
+    // Probabilidad de derrotarlo: P(impactos + bonus − Shields ≥ HP), binomial exacta
+    let kill = 0, comb = 1
+    for (let k = 0; k <= dice; k++) {
+        if (k > 0) comb = comb * (dice - k + 1) / k
+        if (Math.max(0, k + damageBonus - shields) >= hp) kill += comb * p ** k * (1 - p) ** (dice - k)
+    }
+    return {
+        dice, accuracy, critThreshold: crit, hitChance: p,
+        expectedHits: dice * p, critChance: 1 - (1 - pc) ** dice,
+        shields, damageBonus, expectedDamage: Math.max(0, dice * p + damageBonus - shields),
+        killChance: target ? kill : 0,
+        targets: attackTargets(state, attackerId, weapon, targetKey).length,
+    }
 }
 
 function isCritEffect(e: WeaponEffect | null | undefined, timing: 'roll' | 'damage'): boolean {

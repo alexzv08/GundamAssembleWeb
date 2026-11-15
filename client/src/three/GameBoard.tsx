@@ -13,6 +13,7 @@ interface GameBoardProps {
     onHexClick?: (key: string) => void
     onTokenHover?: (info: string | null) => void
     logHighlightedHexes?: Set<string>
+    onHexHover?: (key: string | null) => void
 }
 
 export function GameBoard({
@@ -24,6 +25,7 @@ export function GameBoard({
     onHexClick,
     onTokenHover,
     logHighlightedHexes = EMPTY,
+    onHexHover,
 }: GameBoardProps) {
     return (
         <group>
@@ -38,6 +40,7 @@ export function GameBoard({
                     isLogHighlighted={logHighlightedHexes.has(key)}
                     onClick={() => onHexClick?.(key)}
                     onTokenHover={onTokenHover}
+                    onHover={onHexHover ? on => onHexHover(on ? key : null) : undefined}
                 />
             ))}
         </group>

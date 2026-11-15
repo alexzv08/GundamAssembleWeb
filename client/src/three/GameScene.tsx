@@ -27,6 +27,7 @@ interface GameSceneProps {
   logHighlightedHexes?: Set<string>
   /** Hex al que se acerca la cámara (la unidad activa al empezar su activación) */
   focusKey?: string | null
+  onHexHover?: (key: string | null) => void
   compact?: boolean
 }
 
@@ -35,7 +36,7 @@ interface GameSceneProps {
 // izquierda, contraluz fría y niebla que funde los bordes del tablero con el fondo.
 export function GameScene({
   gameState, myPlayerId, selectedUnitId, reachableHexes, attackableHexes,
-  onHexClick, onUnitClick, onTokenHover, logHighlightedHexes, focusKey, compact = false,
+  onHexClick, onUnitClick, onTokenHover, logHighlightedHexes, focusKey, compact = false, onHexHover,
 }: GameSceneProps) {
   const selectedUnit = selectedUnitId ? gameState.units[selectedUnitId] : null
   const selectedHexKey = selectedUnit?.position ? hexKey(selectedUnit.position) : null
@@ -88,6 +89,7 @@ export function GameScene({
           onHexClick={onHexClick}
           onTokenHover={onTokenHover}
           logHighlightedHexes={logHighlightedHexes}
+          onHexHover={onHexHover}
         />
 
         {Object.values(gameState.rws ?? {}).map(rws => rws.position && (
@@ -112,6 +114,7 @@ export function GameScene({
             isSelected={selectedUnitId === unit.id}
             isMine={unit.playerId === myPlayerId}
             onClick={() => onUnitClick(unit.id)}
+            onHover={onHexHover ? on => onHexHover(on && unit.position ? hexKey(unit.position) : null) : undefined}
           />
         ))}
       </Suspense>

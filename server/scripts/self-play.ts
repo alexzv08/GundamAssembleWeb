@@ -10,7 +10,7 @@
  *   npx tsx scripts/self-play.ts [--games 50] [--seed 42] [--verbose]
  */
 import { createServerGame } from '../src/game/createServerGame'
-import { chooseBotAction, actingPlayer, botFallback } from '../src/game/bot'
+import { chooseBotAction, actingPlayer, botFallback, BOT_LEVELS, type BotLevel } from '../src/game/bot'
 import { processAction } from '../src/game/engine'
 import { startGame } from '../src/game/activation'
 import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes } from '../src/game/queries'
@@ -43,7 +43,10 @@ function shuffle<T>(xs: T[]): T[] {
 const units = loadUnitCatalog()
 const tactics = loadTacticsCatalog()
 // La IA es la misma que usa el rival automático (src/game/bot.ts)
-const botAction = (s: GameState, player: PlayerId) => chooseBotAction(s, player, rand)
+// Nivel de cada bando: --p1 facil|normal|dificil --p2 ... (por defecto fácil contra fácil)
+const levelArg = (name: string): BotLevel => { const i = args.indexOf(name); const v = i >= 0 ? args[i + 1] : 'facil'; return (BOT_LEVELS as string[]).includes(v) ? v as BotLevel : 'facil' }
+const LEVELS: Record<PlayerId, BotLevel> = { player1: levelArg('--p1'), player2: levelArg('--p2') }
+const botAction = (s: GameState, player: PlayerId) => chooseBotAction(s, player, rand, LEVELS[player])
 
 function randomSquad(): string[] {
     for (;;) {
@@ -112,6 +115,7 @@ for (let g = 0; g < NUM_GAMES; g++) {
     if (r.ok) { ok++; wins[r.winner!]++; totalActions += r.actions }
     else console.log(`Partida ${g + 1}: ERROR tras ${r.actions} acciones — ${r.error}`)
 }
-console.log(`\nSemilla ${startSeed}: ${ok}/${NUM_GAMES} partidas completas, media ${Math.round(totalActions / Math.max(ok, 1))} acciones`)
+console.log(`\nNiveles: P1 ${LEVELS.player1} · P2 ${LEVELS.player2}`)
+console.log(`Semilla ${startSeed}: ${ok}/${NUM_GAMES} partidas completas, media ${Math.round(totalActions / Math.max(ok, 1))} acciones`)
 console.log(`Victorias: P1 ${wins.player1} · P2 ${wins.player2} · elecciones de Push/Pull: ${forcedChoices}`)
 process.exit(ok === NUM_GAMES ? 0 : 1)

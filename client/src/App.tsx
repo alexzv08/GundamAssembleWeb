@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
-import type { GameState } from './types/gameState'
+import type { GameState, AttackPreview } from './types/gameState'
 import type { Unit } from './types/units'
 import { hexKey, gridDistance } from './game/hexGrid'
 import { baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
@@ -16,6 +16,7 @@ import { ToastContainer } from './components/ui/Toast'
 import type { ChatMessage } from './components/ui/ChatPanel'
 import { SideRail } from './components/ui/SideRail'
 import { DiceTray } from './components/ui/DiceTray'
+import { AttackPreviewBox } from './components/ui/AttackPreviewBox'
 import { useIsMobile } from './game/useIsMobile'
 import { myFollowUp, followUpMoveHexes, followUpAttackHexes } from './game/followUp'
 import { C, button } from './theme'
@@ -79,6 +80,9 @@ export default function App() {
   const [chat, setChat] = useState<ChatMessage[]>([])
   const [muted, setMutedState] = useState(isMuted())
   const isMobile = useIsMobile()
+  // Previsión del ataque sobre el hex bajo el ratón
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ key: string; data: AttackPreview } | null>(null)
   // Iron-Blooded Tenacity: hex elegido para moverse (paso 1) antes de elegir objetivo (paso 2)
   const [followTo, setFollowTo] = useState<{ id: string; to: { q: number; r: number } | null } | null>(null)
   const [mobileSheet, setMobileSheet] = useState<'info' | 'unit' | 'hidden' | null>(null)
@@ -398,6 +402,18 @@ export default function App() {
     }
     return false
   }, [])
+
+  useEffect(() => {
+    const unitId = gameState?.activeUnitId
+    const attacking = selectionMode === 'attacking' || (selectionMode === 'playing_card' && !!pendingCardId)
+    if (!hoverKey || !unitId || !attacking || !attackableHexes.has(hoverKey)) return
+    const req = selectionMode === 'attacking'
+      ? { unitId, weaponIndex: selectedWeaponIndex ?? 0, targetKey: hoverKey }
+      : { unitId, cardId: pendingCardId, targetKey: hoverKey }
+    let alive = true
+    socket.emit('PREVIEW_ATTACK', req, (p: AttackPreview | null) => { if (alive) setPreview(p ? { key: hoverKey, data: p } : null) })
+    return () => { alive = false }
+  }, [hoverKey, selectionMode, selectedWeaponIndex, pendingCardId, attackableHexes, gameState?.activeUnitId])
 
   // ─── ACCIONES ─────────────────────────────────────────────────────────────
   const handleUnitClick = useCallback((unitId: string) => {
@@ -869,7 +885,7 @@ export default function App() {
         onFindMatch={() => socket.emit('FIND_MATCH', { playerName: playerName.trim() })}
         onCancelMatch={() => socket.emit('CANCEL_MATCH')}
         onCreateRoom={() => socket.emit('CREATE_ROOM', { playerName: playerName.trim(), mapId, squadSize })}
-        onPlayBot={() => socket.emit('PLAY_BOT', { playerName: playerName.trim(), mapId, squadSize })}
+        onPlayBot={level => socket.emit('PLAY_BOT', { playerName: playerName.trim(), mapId, squadSize, level })}
         maps={maps}
         mapId={mapId}
         onMapIdChange={setMapId}
@@ -1062,11 +1078,16 @@ export default function App() {
             onTokenHover={setTokenTooltip}
             logHighlightedHexes={logHoveredHexes}
             focusKey={activeUnit?.position ? hexKey(activeUnit.position) : null}
+            onHexHover={setHoverKey}
             compact={isMobile}
           />
         </div>
 
         <DiceTray gameState={gameState} myPlayerId={myPlayerId} />
+        {preview && preview.key === hoverKey && attackableHexes.has(hoverKey ?? '') && (selectionMode === 'attacking' || selectionMode === 'playing_card') && (
+          <AttackPreviewBox preview={preview.data}
+            targetName={(() => { const u = gameState.board[preview.key]?.occupiedBy; return u ? gameState.units[u].name : rwsAt(gameState, preview.key)?.name ?? 'Garrison' })()} />
+        )}
         <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
 
         {myFU && (

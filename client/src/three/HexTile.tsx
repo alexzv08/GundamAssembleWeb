@@ -14,6 +14,7 @@ interface HexTileProps {
     isLogHighlighted?: boolean
     onClick?: () => void
     onTokenHover?: (info: string | null) => void
+    onHover?: (on: boolean) => void
 }
 
 // Resaltados: colores que no existen en el terreno (H2)
@@ -24,7 +25,7 @@ const HL_LOG = '#d9a520'
 
 export const HexTile = memo(function HexTile({
     hex, myPlayerId = null, isSelected = false, isReachable = false, isAttackable = false, isLogHighlighted = false,
-    onClick, onTokenHover,
+    onClick, onTokenHover, onHover,
 }: HexTileProps) {
     const [hovered, setHovered] = useState(false)
     const look = terrainLook(hex.terrain, hex.elevation)
@@ -40,8 +41,8 @@ export const HexTile = memo(function HexTile({
             {/* Cuerpo (laterales más oscuros) */}
             <mesh position={[x, y - height / 2, z]} castShadow receiveShadow
                 onClick={e => { e.stopPropagation(); onClick?.() }}
-                onPointerEnter={e => { e.stopPropagation(); setHovered(true) }}
-                onPointerLeave={() => setHovered(false)}
+                onPointerEnter={e => { e.stopPropagation(); setHovered(true); onHover?.(true) }}
+                onPointerLeave={() => { setHovered(false); onHover?.(false) }}
             >
                 <cylinderGeometry args={[HEX_SIZE * 0.97, HEX_SIZE * 0.99, height, 6, 1, false, 0]} />
                 <meshStandardMaterial color={look.side} roughness={0.95} metalness={0.05} />
@@ -50,8 +51,8 @@ export const HexTile = memo(function HexTile({
             {/* Cara superior: color del terreno + resaltado */}
             <mesh position={[x, y + 0.006, z]} receiveShadow
                 onClick={e => { e.stopPropagation(); onClick?.() }}
-                onPointerEnter={e => { e.stopPropagation(); setHovered(true) }}
-                onPointerLeave={() => setHovered(false)}
+                onPointerEnter={e => { e.stopPropagation(); setHovered(true); onHover?.(true) }}
+                onPointerLeave={() => { setHovered(false); onHover?.(false) }}
             >
                 <cylinderGeometry args={[HEX_SIZE * 0.9, HEX_SIZE * 0.95, 0.03, 6, 1, false, 0]} />
                 <meshStandardMaterial
