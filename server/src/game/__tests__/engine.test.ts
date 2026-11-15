@@ -1029,3 +1029,21 @@ describe('Mapas y tamaño de escuadra', () => {
     expect(ids.has(r.room!.mapId)).toBe(true)
   })
 })
+
+// ─── DATOS OFICIALES ──────────────────────────────────────────────────────────
+// Fija los valores leídos de las cartas impresas (fixtures/official_unit_cards.json)
+// para que ningún cambio de datos los altere sin querer.
+describe('Datos de unidades contra las cartas oficiales', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const official: Record<string, { hp: number; vp: number; tl: number; weapons: [string, number, number | 'SP', number][]; abilities: [string, string, number][] }> = require('./fixtures/official_unit_cards.json')
+  const lib = loadUnitCatalog()
+  for (const [id, card] of Object.entries(official)) {
+    if (id.startsWith('_')) continue
+    it(`${id} coincide con su carta`, () => {
+      const u = lib.find(c => c.cardId === id)!
+      expect({ hp: u.hp, vp: u.vp, tl: u.tl }).toEqual({ hp: card.hp, vp: card.vp, tl: card.tl })
+      expect(u.weapons.map(w => [w.name, w.tlCost, w.area ? 'SP' : w.range, w.strength])).toEqual(card.weapons)
+      expect(u.abilities.map(a => [a.name, a.type, a.energyCost ?? 0])).toEqual(card.abilities)
+    })
+  }
+})

@@ -1,0 +1,18 @@
+{
+  "_source": "Leído de las imágenes oficiales de las cartas de unidad (client/public/cards/units). Armas: [nombre, TL, alcance ('SP' = plantilla), Strength]. Habilidades: [nombre, tipo, coste de Energy o 0].",
+  "EX01-U01": { "hp": 14, "vp": 10, "tl": 3, "weapons": [["Beam Saber", 2, 1, 4], ["Beam Magnum", 4, 4, 8]], "abilities": [["Psycho-Frame Synchrony", "RSP", 1], ["Newtype Destroyer", "ONG", 0]] },
+  "EX01-U02": { "hp": 8, "vp": 5, "tl": 1, "weapons": [["Armored Frame", 2, 1, 3]], "abilities": [["Rescue Maneuver", "CMD", 1], ["Supply", "RSP", 0], ["Material Transfer", "CMD", 0]] },
+  "EX01-U03": { "hp": 11, "vp": 7, "tl": 2, "weapons": [["Twin-Barreled Grenade Launcher", 2, 3, 3], ["Beam Rifle", 4, 5, 6]], "abilities": [["Blitzing Slash", "RSP", 1], ["Jet Through", "ONG", 0]] },
+  "EX02-U01": { "hp": 16, "vp": 10, "tl": 1, "weapons": [["Beam Sabers", 2, 1, 3], ["Beam Rifle", 4, 4, 6]], "abilities": [["Permet Burst", "RSP", 1], ["BIT Stave Direct", "CMD", 0], ["Challenge", "RSP", 0]] },
+  "EX02-U02": { "hp": 12, "vp": 7, "tl": 2, "weapons": [["Beak Foot", 2, 3, 3], ["Beam Arquebus", 4, 5, 6]], "abilities": [["Lockdown", "RSP", 1], ["Corax Direct", "CMD", 0], ["Hover", "ONG", 0]] },
+  "EX02-U03": { "hp": 13, "vp": 8, "tl": 3, "weapons": [["Shackle Claw", 2, 2, 4], ["Beam Saber", 3, 1, 7]], "abilities": [["Sundering Strike", "CMD", 1], ["Iśvara B Type Direct", "CMD", 0]] },
+  "PA01-U01": { "hp": 17, "vp": 10, "tl": 1, "weapons": [["Beam Saber", 2, 1, 3], ["Beam Rifle", 3, 3, 5]], "abilities": [["Toss Away", "RSP", 1], ["Inspiring Presence", "RSP", 0], ["Challenge", "RSP", 0]] },
+  "PA01-U02": { "hp": 12, "vp": 7, "tl": 2, "weapons": [["240mm Low-Recoil Cannon", 2, "SP", 3], ["Beam Rifle", 4, 4, 7]], "abilities": [["Stunning Shot", "RSP", 1], ["Firing Line", "ONG", 0]] },
+  "PA01-U03": { "hp": 13, "vp": 7, "tl": 2, "weapons": [["120mm Low-Recoil Cannons", 2, 4, 2], ["Quadruple Bop Missile", 3, "SP", 5]], "abilities": [["Coordinated Payload", "RSP", 1], ["Crowd Control", "RSP", 0]] },
+  "ST01-U01": { "hp": 15, "vp": 8, "tl": 2, "weapons": [["Vulcan Guns", 2, 2, 3], ["Beam Saber", 3, 1, 6]], "abilities": [["Frenzied Charge", "CMD", 1], ["Escape from Side 7", "RSP", 0]] },
+  "ST01-U02": { "hp": 12, "vp": 9, "tl": 3, "weapons": [["Beam Saber", 2, 1, 4], ["Twin Buster Rifle", 4, "SP", 6]], "abilities": [["Full Power", "CMD", 1], ["Zero System", "ONG", 0], ["Hover", "ONG", 0]] },
+  "ST01-U03": { "hp": 17, "vp": 10, "tl": 2, "weapons": [["Rex Claws", 2, 1, 3], ["Tail Blade", 4, 2, 7]], "abilities": [["Annihilate", "CMD", 1], ["Alaya-Vijnana Exertion", "CMD", 0], ["Fight to the End", "ONG", 0]] },
+  "ST01-U04": { "hp": 12, "vp": 7, "tl": 2, "weapons": [["Heat Hawk", 2, 1, 4], ["Zaku Bazooka", 4, 4, 7]], "abilities": [["Checkmate", "CMD", 1], ["Three-Times Faster", "ONG", 0], ["Char Kick", "RSP", 0]] },
+  "ST01-U05": { "hp": 15, "vp": 9, "tl": 3, "weapons": [["Heat Rod", 2, 2, 3], ["Beam Sword", 3, 1, 7]], "abilities": [["No Escape", "CMD", 1], ["Exploit Weakness", "ONG", 0], ["Hover", "ONG", 0]] },
+  "ST01-U06": { "hp": 13, "vp": 7, "tl": 1, "weapons": [["Handguns", 3, 2, 3], ["Burst Saber", 4, 1, 8]], "abilities": [["Hunter's Edge", "CMD", 1], ["Alaya-Vijnana Type E System", "CMD", 0]] }
+}

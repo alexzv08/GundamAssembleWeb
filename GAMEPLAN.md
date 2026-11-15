@@ -114,7 +114,7 @@ Fuentes oficiales:
 ## 8. Datos
 
 - ✅ Las 15 unidades oficiales (ST01, EX01, EX02, PA01) con HP, VP, TL, rasgos, firma y textos oficiales
-- ✅ **Coste de TL, alcance, Strength, tipo de habilidad y coste de Energy** de las 15 unidades tomados de la wiki comunitaria (la web oficial solo los muestra en la imagen de la carta). ⚠️ La wiki tiene erratas en nombres de armas del PA01 y le falta Challenge del Guncannon; conviene revisarlos con las cartas físicas
+- ✅ **Coste de TL, alcance, Strength, tipo de habilidad y coste de Energy** de las 15 unidades comprobados con las cartas oficiales impresas (test `Datos de unidades contra las cartas oficiales`). Corregidos: el Guncannon no tiene Challenge y el Quadruple Bop Missile del Guntank es TL 3 / Strength 5
 - ✅ Habilidades Response con coste de Energy (Toss Away, Blitzing Slash, Coordinated Payload, Stunning Shot…): se usan solas si hay Energy, salvo que el jugador desactive las Response automáticas de esa unidad
 - ✅ Se conservan las 6 unidades de la demo (DM01)
 

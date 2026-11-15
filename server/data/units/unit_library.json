@@ -1034,15 +1034,6 @@
             "accuracy": 1,
             "strength": 1
           }
-        },
-        {
-          "name": "Challenge",
-          "effect": "[Before Attack Roll] If this unit is not defending, swap it with a defending ally within [Range 2]. This unit becomes the defender.",
-          "type": "RSP",
-          "abilityData": {
-            "type": "challenge",
-            "range": 2
-          }
         }
       ],
       "statsSource": "https://gundamassemble.wiki.gg/wiki/Guncannon_(In_Position)"
@@ -1083,9 +1074,9 @@
           "name": "Quadruple Bop Missile",
           "effect": "This attack also targets each enemy adjacent to the target.",
           "crit": "[Damage +1].",
-          "tlCost": 4,
+          "tlCost": 3,
           "range": 3,
-          "strength": 4,
+          "strength": 5,
           "critData": {
             "trigger": "after_attack_roll",
             "type": "bonus_damage",
