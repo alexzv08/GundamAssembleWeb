@@ -120,6 +120,12 @@ un test falla si quedan desincronizadas.
 
 Conviene revisar ambos ficheros con las cartas físicas: la wiki tiene alguna errata.
 
+## Aviso legal
+
+Proyecto de fans **no oficial**, gratuito y en fase **beta**, sin licencia ni relación con Bandai ni con la marca Gundam.
+Todos los nombres, diseños, ilustraciones y marcas de Gundam y de Gundam Assemble son propiedad de ©SOTSU·SUNRISE,
+©SOTSU·MBS y BANDAI SPIRITS. Apoya el juego oficial en <https://global.bandai-hobby.net/en-us/site/gundam-assemble/>.
+
 ## Autor
 
 Alejandro de la Torre Ruiz · [GitHub](https://github.com/alexzv08) · [LinkedIn](https://www.linkedin.com/in/alejandrodelatorreruiz/)

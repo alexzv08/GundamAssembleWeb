@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Disclaimer } from './Disclaimer'
 import { supabase } from '../../lib/supabase'
 
 const SITE_URL = window.location.origin
@@ -56,7 +57,7 @@ export function AuthScreen() {
 
   return (
     <div style={{
-      width: '100vw', height: '100dvh', padding: 16,
+      width: '100vw', minHeight: '100dvh', padding: 16, flexDirection: 'column', overflowY: 'auto',
       background: 'radial-gradient(900px 520px at 25% 30%, #0d3b5788, transparent 70%), radial-gradient(700px 420px at 85% 100%, #4a141866, transparent 70%), #0a0f1e',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
@@ -208,6 +209,7 @@ export function AuthScreen() {
           No compartimos tus datos con terceros.
         </div>
       </div>
+      <Disclaimer style={{ marginTop: 18 }} />
     </div>
   )
 }

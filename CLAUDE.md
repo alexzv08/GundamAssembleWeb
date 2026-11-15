@@ -428,3 +428,7 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - `client/src/game/explain.ts`: `attackBlockers` (motivo por enemigo cercano: fuera de alcance, sin línea de visión y por qué, Engagement), `movementSummary` (movimiento disponible y sus penalizaciones) y `engagementNote` (con qué está trabada la unidad). Se muestran al pulsar Avanzar / Dash / un arma; el motivo de no poder atacar también como aviso flotante. La barra de estado muestra el mensaje completo al pasar el ratón.
 - Archivos: `client/src/game/explain.ts`, `client/src/App.tsx`, `client/src/components/ui/GameStatusBar.tsx`, `CLAUDE.md`.
 
+### 2026-11-15 — Aviso legal y etiqueta Beta
+- `client/src/components/ui/Disclaimer.tsx`: aviso de proyecto de fans no oficial, gratuito y en beta, con los titulares de los derechos (©SOTSU·SUNRISE, ©SOTSU·MBS, BANDAI SPIRITS) y enlace a la web oficial de Gundam Assemble. Pie de la pantalla de login y del lobby; etiqueta `BetaBadge` bajo el título del lobby. Sección "Aviso legal" en el README.
+- Archivos: `client/src/components/ui/{Disclaimer,AuthScreen}.tsx`, `client/src/screens/LobbyScreen.tsx`, `README.md`, `CLAUDE.md`.
+

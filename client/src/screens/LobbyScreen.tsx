@@ -6,6 +6,7 @@ import { MapThumb } from '../components/ui/MapThumb'
 import { UnitModelViewer } from '../components/ui/UnitCardPreview'
 import { C, FONT, eyebrow, button } from '../theme'
 import { useIsMobile } from '../game/useIsMobile'
+import { Disclaimer, BetaBadge } from '../components/ui/Disclaimer'
 
 interface LobbyScreenProps {
   user: User
@@ -77,6 +78,7 @@ export function LobbyScreen({
         <span style={{ ...eyebrow, color: C.ally, letterSpacing: '0.4em' }}>Gundam</span>
         <h1 style={{ fontSize: mobile ? 44 : 76, lineHeight: 0.95, fontWeight: 700, letterSpacing: '0.04em' }}>ASSEMBLE</h1>
         <span style={{ fontFamily: FONT.mono, fontSize: 12, color: C.textSoft, letterSpacing: '0.18em', textTransform: 'uppercase' }}>Simulador táctico · Core Rulebook v1.2</span>
+        <BetaBadge />
         {!mobile && (
           <div style={{ width: '100%', maxWidth: 560, height: 420, marginTop: 8 }} aria-hidden>
             <UnitModelViewer cardId="ST01-U01" distance={2.75} />
@@ -231,6 +233,8 @@ export function LobbyScreen({
           </>
         )}
       </div>
+
+      <Disclaimer style={{ gridColumn: '1 / -1', alignSelf: 'end', paddingTop: 8 }} />
     </div>
   )
 }
