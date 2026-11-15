@@ -1291,7 +1291,7 @@ export default function App() {
           }}>
             <span>
               <b style={{ color: C.enemy }}>{areaWeapon.name}</b>: {!currentAim
-                ? (areaWeapon.area === 'cone' ? 'apunta la plantilla hacia los enemigos' : 'elige el hex central (a alcance)')
+                ? (areaWeapon.area === 'cone' ? 'apunta la plantilla hacia los enemigos' : areaWeapon.areaOnTarget ? 'elige el enemigo objetivo: también alcanza a sus enemigos adyacentes' : 'elige el hex central (a alcance)')
                 : aimInfo?.primary
                   ? `${aimInfo.hexes.filter(k => myPlayerId && targetAt(gameState, k, myPlayerId)).length} objetivo(s) dentro · clic dentro para atacar`
                   : 'ningún objetivo válido dentro'}

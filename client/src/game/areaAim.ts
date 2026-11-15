@@ -27,7 +27,12 @@ export function aimToward(state: GameState, unitId: string, weapon: Weapon, key:
   const from = state.units[unitId]?.position
   if (!from || !weapon.area || !state.board[key]) return null
   const to = keyToHex(key)
-  if (weapon.area === 'flower') return gridDistance(from, to) <= weapon.range ? { center: to } : null
+  if (weapon.area === 'flower') {
+    if (gridDistance(from, to) > weapon.range) return null
+    // Quadruple Bop Missile: la flor va siempre sobre el objetivo
+    if (weapon.areaOnTarget && !targetAt(state, key, state.units[unitId].playerId)) return null
+    return { center: to }
+  }
   if (gridDistance(from, to) === 0) return null
   const dir = angleTo(from, to)
   let best = 0, bestDiff = Infinity

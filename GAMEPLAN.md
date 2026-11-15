@@ -77,7 +77,8 @@ Fuentes oficiales:
 - ✅ **Ventanas de Response durante el ataque**: antes y después de la tirada (primero el atacante, luego el defensor); el ataque se pausa solo si alguien tiene una carta jugable
 - ✅ **Plantillas de área "SP" colocadas a mano**: el jugador orienta la cuña con el ratón o la gira (6 orientaciones) y centra la flor en cualquier hex a alcance; el servidor valida la colocación (`aim` en ATTACK / PLAY_CARD) y, sin ella, elige la que más enemigos alcanza
   - Cuña comprobada con los diagramas: War Edge (fondo 2: 2 + 3 hexes) y Twin Buster Rifle (fondo 3: 2 + 3 + 4)
-  - ⚠️ 240mm Low-Recoil Cannon y Quadruple Bop Missile: modelados como flor (hex central + 6 vecinos) según la wiki; no hay imagen de su diagrama para comprobarlo
+  - ✅ Quadruple Bop Missile: flor centrada siempre en el objetivo ("also targets each enemy adjacent to the target", `areaOnTarget`)
+  - ⚠️ 240mm Low-Recoil Cannon: modelado como flor centrable en cualquier hex a alcance 3 según la wiki; falta su diagrama para comprobarlo
 - ✅ **Elección del jugador** en Push/Pull: quien empuja o atrae elige cada hex entre los válidos y puede parar antes, incluso sin mover (Q&A 7). Si no hay hex libre, la colisión es automática
 - ✅ Push/Pull hacia un hex más bajo: la unidad cae sin daño (Q&A 10)
 

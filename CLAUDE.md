@@ -396,3 +396,9 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **Plantillas de área a mano**: cuña de 60° con la forma de los diagramas (War Edge, Twin Buster Rifle) y flor centrable en un hex vacío; banner con giro y previsión con todos los objetivos alcanzados.
 - **Tests**: 148; self-play 100/100 con repeticiones exactas; smoke con espectador, repetición y revancha.
 - Archivos: `server/src/game/{bot,combat,replay,queries,hexGrid,actions,effects,damage,engine,victory,timeline}.ts`, `server/src/rooms/{roomManager,gameStore}.ts`, `server/src/socket/gameEvents.ts`, `server/src/types/*`, `server/scripts/{self-play,socket-smoke}.ts`, `server/supabase/migrations/*`, `.github/workflows/ci.yml`, `client/src/App.tsx`, `client/src/game/{areaAim,links,followUp}.ts`, `client/src/components/ui/{ReplayBar,AttackPreviewBox,GameStatusBar,GameOverModal}.tsx`, `client/src/screens/{LobbyScreen,WaitingScreen,SquadSelectionScreen}.tsx`, `client/src/three/*`, copias compartidas, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.
+
+### 2026-11-15 — Quadruple Bop Missile centrado en el objetivo
+- Texto de la carta aportado por el autor: "This attack also targets each enemy adjacent to the target". La flor ya no se puede poner en un hex vacío: va siempre sobre el enemigo elegido (`Weapon.areaOnTarget`, comprobado en `checkAttackTargetWith` / `resolveAim`; en el cliente la plantilla solo aparece sobre enemigos). 3 tests nuevos (151).
+- El 240mm Low-Recoil Cannon sigue como flor libre a alcance 3, pendiente de su diagrama.
+- Archivos: `server/data/units/unit_library.json`, `server/src/types/units.ts` (+ copia), `server/src/game/queries.ts` (+ copia), `server/src/game/__tests__/engine.test.ts`, `client/src/game/areaAim.ts`, `client/src/App.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
+

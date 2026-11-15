@@ -1082,7 +1082,8 @@
             "type": "bonus_damage",
             "amount": 1
           },
-          "area": "flower"
+          "area": "flower",
+          "areaOnTarget": true
         }
       ],
       "abilities": [

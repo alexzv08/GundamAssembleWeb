@@ -1467,3 +1467,27 @@ describe('Plantillas de área colocadas a mano', () => {
     expect(card.weapon).toMatchObject({ area: 'cone', range: 2 })
   })
 })
+
+describe('Quadruple Bop Missile', () => {
+  const bop = weapon({ name: 'Quadruple Bop Missile', range: 3, strength: 3, area: 'flower', areaOnTarget: true })
+  const units = () => [
+    makeUnit('a', 'player1', { q: 1, r: 3 }, { weapons: [bop] }),
+    makeUnit('e1', 'player2', { q: 3, r: 2 }),
+    makeUnit('e2', 'player2', { q: 3, r: 4 }),
+    makeUnit('e3', 'player2', { q: 4, r: 2 }),   // adyacente a e1
+  ]
+  it('alcanza al objetivo y a los enemigos adyacentes a él', () => {
+    const s = applyAttack(makeGame(units()), 'a', 0, 'e1', 'player1', dice(5, 5, 5, 5, 5, 5)).newState!
+    expect(s.units.e1.currentHp).toBe(7)
+    expect(s.units.e3.currentHp).toBe(7)
+    expect(s.units.e2.currentHp).toBe(10)   // no es adyacente a e1
+  })
+  it('no se puede centrar en un hex vacío', () => {
+    const r = applyAction(makeGame(units()), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e1', aim: { center: { q: 3, r: 3 } } }, 'player1', dice())
+    expect(r.error).toBe('Esta plantilla se centra en el objetivo')
+  })
+  it('los datos de la carta lo marcan así', () => {
+    const w = loadUnitCatalog().find(u => u.cardId === 'PA01-U03')!.weapons.find(w => w.name === 'Quadruple Bop Missile')!
+    expect(w).toMatchObject({ area: 'flower', areaOnTarget: true, tlCost: 3, strength: 5 })
+  })
+})

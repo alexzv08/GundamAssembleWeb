@@ -149,6 +149,8 @@ export interface Weapon {
     // Plantilla de área ("Range: SP"): cono o "flor" (hex elegido + sus 6 vecinos).
     // La forma exacta sale de un diagrama de la carta; aquí es una aproximación.
     area?: 'cone' | 'flower'
+    /** Flor centrada siempre en el objetivo ("also targets each enemy adjacent to the target") */
+    areaOnTarget?: boolean
 }
 
 // ─── ABILITY ──────────────────────────────────────────────────────────────────

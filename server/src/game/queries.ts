@@ -238,7 +238,7 @@ export function templateHexes(state: GameState, from: HexCoord, weapon: Weapon, 
 // Colocación usada: la indicada o, si falta (bot, contraataques, llamadas
 // antiguas), la que incluye el objetivo y alcanza más enemigos.
 export function resolveAim(state: GameState, from: HexCoord, weapon: Weapon, targetKey: string, aim?: AreaAim): AreaAim {
-  if (weapon.area === 'flower') return { center: aim?.center ?? keyToHex(targetKey) }
+  if (weapon.area === 'flower') return { center: weapon.areaOnTarget ? keyToHex(targetKey) : aim?.center ?? keyToHex(targetKey) }
   if (weapon.area !== 'cone') return {}
   if (aim?.facing !== undefined) return { facing: ((aim.facing % 6) + 6) % 6 }
   const player = state.units[state.board[targetKey]?.occupiedBy ?? '']?.playerId
@@ -294,6 +294,7 @@ export function checkAttackTargetWith(state: GameState, unitId: string, weapon: 
   if (weapon.area && aim) {
     if (aim.facing !== undefined && (!Number.isInteger(aim.facing) || aim.facing < 0 || aim.facing > 5)) return { ok: false, reason: 'Orientación de la plantilla no válida' }
     if (aim.center && !state.board[hexKey(aim.center)]) return { ok: false, reason: 'Centro de la plantilla fuera del tablero' }
+    if (aim.center && weapon.areaOnTarget && hexKey(aim.center) !== targetKey) return { ok: false, reason: 'Esta plantilla se centra en el objetivo' }
     if (!areaHexes(state, from, weapon, targetKey, aim).includes(targetKey)) return { ok: false, reason: 'El objetivo no está dentro de la plantilla' }
   }
   const to = weapon.area === 'flower' && aim?.center ? aim.center : keyToHex(targetKey)
