@@ -423,3 +423,8 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - `TOKEN_REFRESHED` ya no corta y reabre el socket (avisaba al rival de una desconexión cada hora); el servidor solo valida el token al conectar y el socket pide el token actual en cada reconexión.
 - Archivos: `client/src/App.tsx`, `CLAUDE.md`.
 
+### 2026-11-15 — El juego explica por qué no se puede mover o atacar
+- Revisado a raíz de una partida: la distancia (comparada con un BFS en los 41.209 pares del mapa) y el coste de subir (nivel 2 → 3 = 2) son correctos. Lo que confundía era el Engagement con **Garrisons enemigas**, que según las reglas oficiales traban como una unidad (−1 de movimiento y obligación de atacar a lo que te traba), y el aviso genérico "No hay enemigos en rango", que también salía por falta de línea de visión.
+- `client/src/game/explain.ts`: `attackBlockers` (motivo por enemigo cercano: fuera de alcance, sin línea de visión y por qué, Engagement), `movementSummary` (movimiento disponible y sus penalizaciones) y `engagementNote` (con qué está trabada la unidad). Se muestran al pulsar Avanzar / Dash / un arma; el motivo de no poder atacar también como aviso flotante. La barra de estado muestra el mensaje completo al pasar el ratón.
+- Archivos: `client/src/game/explain.ts`, `client/src/App.tsx`, `client/src/components/ui/GameStatusBar.tsx`, `CLAUDE.md`.
+

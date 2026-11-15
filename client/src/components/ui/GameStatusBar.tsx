@@ -56,7 +56,7 @@ export function GameStatusBar({ gameState, myPlayerId, isMyTurn, message, onSurr
         </button>
       )}
       {message && (
-        <span style={{ color: C.textSoft, marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{message}</span>
+        <span title={message} style={{ color: C.textSoft, marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{message}</span>
       )}
       {!isFinished && gameState.turnClock && (
         <ClockBadge clock={gameState.turnClock} mine={gameState.turnClock.playerId === myPlayerId} style={{ marginLeft: message ? 0 : 'auto' }} />

@@ -5,6 +5,7 @@ import type { GameState, AttackPreview, ReplaySummary } from './types/gameState'
 import type { Unit, Weapon } from './types/units'
 import type { AreaAim } from './types/gameState'
 import { aimToward, aimTargets, rotateAim, aimKey } from './game/areaAim'
+import { attackBlockers, movementSummary, engagementNote } from './game/explain'
 import { hexKey, gridDistance } from './game/hexGrid'
 import { targetAt, baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
 import { getNeighbors, keyToHex } from './game/hexGrid'
@@ -753,17 +754,26 @@ export default function App() {
   const handleAttackMode = useCallback((weaponIndex: number) => {
     if (!gameState || !selectedUnitId) return
     const attackable = calcAttackable(selectedUnitId, gameState, weaponIndex)
-    if (attackable.size === 0) { setMessage('No hay enemigos en rango'); return }
+    if (attackable.size === 0) {
+      // Decir el motivo de cada enemigo cercano (alcance, línea de visión, Engagement…)
+      const w = gameState.units[selectedUnitId]?.weapons[weaponIndex]
+      const why = w ? attackBlockers(gameState, selectedUnitId, w) : []
+      const text = why.length ? `${w?.name}: no puedes atacar a nadie — ${why.join(' · ')}` : 'No hay enemigos en el tablero'
+      setMessage(text)
+      addToast(text, C.warn, 7000)
+      return
+    }
     setSelectedWeaponIndex(weaponIndex)
     setSelectionMode('attacking')
     setAttackableHexes(attackable)
     setReachableHexes(new Set())
     setAimLock(null)
     const weapon = gameState.units[selectedUnitId]?.weapons[weaponIndex]
-    setMessage(weapon?.area
+    const engaged = engagementNote(gameState, selectedUnitId)
+    setMessage((weapon?.area
       ? `${weapon.name} — ${weapon.area !== 'flower' ? 'orienta la plantilla con el ratón (o gírala)' : 'centra la plantilla en un hex a alcance'} y haz clic para atacar`
-      : `${weapon?.name} — Selecciona un enemigo (rango ${weapon?.range})`)
-  }, [gameState, selectedUnitId, calcAttackable])
+      : `${weapon?.name} — Selecciona un enemigo (rango ${weapon?.range})`) + (engaged ? ` · ${engaged}` : ''))
+  }, [gameState, selectedUnitId, calcAttackable, addToast])
 
   const handleUseAbility = useCallback((abilityIndex: number) => {
     if (!gameState || !selectedUnitId || !myPlayerId) return
@@ -1210,7 +1220,7 @@ export default function App() {
         setSelectionMode('moving')
         setReachableHexes(calcReachable(id, gameState))
         setAttackableHexes(new Set())
-        setMessage('Avanzar: elige un hex resaltado')
+        setMessage(`Avanzar: ${movementSummary(gameState, id, 'advance')} — elige un hex resaltado`)
       }}
       onDash={() => {
         const id = gameState.activeUnitId
@@ -1219,7 +1229,7 @@ export default function App() {
         setSelectionMode('dashing')
         setReachableHexes(calcReachable(id, gameState, 'dash'))
         setAttackableHexes(new Set())
-        setMessage('Dash: elige un hex resaltado')
+        setMessage(`Dash: ${movementSummary(gameState, id, 'dash')} — elige un hex resaltado`)
       }}
       onAttack={handleAttackMode}
       onUseAbility={handleUseAbility}
