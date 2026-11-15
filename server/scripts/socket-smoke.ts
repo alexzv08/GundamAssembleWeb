@@ -25,7 +25,7 @@ const rm = new RoomManager()
 io.use((socket, next) => { socket.data.userId = socket.handshake.auth.userId; socket.data.userName = socket.handshake.auth.userId; next() })
 io.on('connection', s => { registerGameEvents(io, s, rm); s.on('disconnect', () => rm.handleDisconnect(s.id, io)) })
 
-setTimeout(() => { console.error('FALLO: timeout de 60 s'); process.exit(1) }, 60000).unref()
+setTimeout(() => { console.error('FALLO: timeout de 90 s'); process.exit(1) }, 90000).unref()
 http.listen(0, async () => {
     console.log('servidor de prueba escuchando')
     const port = (http.address() as { port: number }).port
@@ -145,5 +145,22 @@ http.listen(0, async () => {
     const botMoves = bs!.log.filter(l => l.playerId === 'player2').length
     if (botMoves === 0) fail('el bot no hizo nada')
     console.log(`✓ partida contra el bot terminada (${botMoves} entradas del bot en el registro). Ganador: ${bs!.winner}`)
+
+    // ── Reloj de turno: un jugador que no hace nada pasa solo y, a la tercera, pierde ──
+    const idle = ioc(url, { auth: { userId: 'dormido' } })
+    idle.emit('PLAY_BOT', { playerName: 'Dormido', squadSize: 3 })
+    await wait(idle, 'SQUAD_SELECTION_STARTED')
+    idle.emit('SELECT_SQUAD', { unitCardIds: squadH, cardIds: deck(squadH) })
+    await wait(idle, 'GAME_STARTED')
+    let sawTimeout = false
+    idle.on('GAME_STATE_UPDATE', (p: any) => { if (p.gameState.log.some((l: any) => l.message.includes('Tiempo agotado'))) sawTimeout = true })
+    const idleOver = new Promise<any>(res => idle.once('GAME_OVER', res))
+    idle.emit('CONFIRM_SETUP')
+    const first = await wait(idle, 'GAME_STATE_UPDATE')
+    if (!first.gameState.turnClock && first.gameState.activePlayerId === 'player1') fail('no llegó el reloj de turno')
+    const end = await idleOver
+    if (!sawTimeout) fail('no se pasó el turno automáticamente')
+    if (end.winner !== 'player2' || !String(end.reason).includes('agotar el tiempo')) fail(`fin inesperado: ${end.reason}`)
+    console.log(`✓ reloj de turno: pase automático y derrota tras 3 tiempos agotados (${end.reason})`)
     process.exit(0)
 })

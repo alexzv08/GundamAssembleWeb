@@ -75,3 +75,16 @@ export function decideWinner(state: GameState): { winner: PlayerId; reason: stri
     const winner = state.lastActivePlayer ?? state.activePlayerId
     return { winner, reason: `Empate a ${vp1} VP — gana quien actuó en último lugar` }
 }
+
+// Fin de partida anticipado: rendición, abandono o demasiados turnos agotados.
+// MUTA el estado que recibe.
+export function forfeit(state: GameState, loser: PlayerId, reason: string): void {
+    state.phase = 'finished'
+    state.winner = otherPlayer(loser)
+    state.winReason = reason
+    state.pendingResponse = null
+    state.pendingAttack = null
+    state.pendingForcedMove = null
+    state.turnClock = null
+    pushLog(state, loser, reason, 'end')
+}

@@ -12,6 +12,7 @@ import { applyAction } from './actions'
 import { endActivation } from './activation'
 import { cloneState, pushLog, withForcedChoices, NeedForcedChoice } from './damage'
 import { rollD10, type Rng } from './combat'
+import { forfeit } from './victory'
 
 export interface ProcessResult {
     success: boolean
@@ -33,6 +34,13 @@ export function processAction(
 ): ProcessResult {
     if (state.phase === 'setup') return no('La partida aún está en fase de preparación')
     if (state.phase === 'finished') return no('La partida ha terminado')
+
+    // Rendirse se puede en cualquier momento, también fuera de turno
+    if (action.type === 'SURRENDER') {
+        const s = cloneState(state)
+        forfeit(s, playerId, `${s.players[playerId].name} se rinde`)
+        return { success: true, state: s, phaseChanged: false, gameOver: true }
+    }
 
     const pf = state.pendingForcedMove
     if (action.type === 'CHOOSE_FORCED_MOVE') {

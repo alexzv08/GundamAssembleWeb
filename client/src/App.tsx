@@ -1010,7 +1010,8 @@ export default function App() {
 
       <TimelineBar gameState={gameState} myPlayerId={myPlayerId} compact={isMobile} />
 
-      <GameStatusBar gameState={gameState} myPlayerId={myPlayerId} isMyTurn={isMyTurn} message={statusMessage} />
+      <GameStatusBar gameState={gameState} myPlayerId={myPlayerId} isMyTurn={isMyTurn} message={statusMessage}
+        onSurrender={() => socket.emit('GAME_ACTION', { action: { type: 'SURRENDER' } })} />
 
       <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0 }}>

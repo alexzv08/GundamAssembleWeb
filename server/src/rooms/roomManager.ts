@@ -5,6 +5,7 @@ import { startGame } from '../game/activation'
 import { createServerGame } from '../game/createServerGame'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from '../game/catalog'
 import { mapExists, randomMapId } from '../game/maps'
+import { forfeit } from '../game/victory'
 import { randomSquad, randomDeck } from '../game/bot'
 
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
@@ -30,6 +31,7 @@ export class RoomManager {
     private rooms = new Map<string, Room>()
     private socketToRoom = new Map<string, string>()
     private cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>()
+    constructor(private reconnectTimeoutMs = RECONNECT_TIMEOUT_MS) {}
     private matchmakingQueue: { socketId: string; userId: string; playerName: string }[] = []
 
     private newRoomId(): string {
@@ -201,11 +203,19 @@ export class RoomManager {
         const timerKey = `${room.id}:${disconnectedPlayer.playerId}`
         const timer = setTimeout(() => {
             this.cleanupTimers.delete(timerKey)
+            // En mitad de una partida, quien se queda gana por abandono
+            const gs = room.gameState
+            if (room.status === 'playing' && gs && gs.phase !== 'finished' && gs.phase !== 'setup') {
+                forfeit(gs, disconnectedPlayer.playerId, `${gs.players[disconnectedPlayer.playerId].name} abandona la partida`)
+                room.status = 'finished'
+                io.to(room.id).emit('GAME_OVER', { gameState: gs, winner: gs.winner, reason: gs.winReason ?? '', diceRolls: null })
+            } else {
+                io.to(room.id).emit('OPPONENT_ABANDONED', {
+                    message: 'El oponente abandonó la partida'
+                })
+            }
             this.cleanupRoom(room.id)
-            io.to(room.id).emit('OPPONENT_ABANDONED', {
-                message: 'El oponente abandonó la partida'
-            })
-        }, RECONNECT_TIMEOUT_MS)
+        }, this.reconnectTimeoutMs)
         this.cleanupTimers.set(timerKey, timer)
     }
 

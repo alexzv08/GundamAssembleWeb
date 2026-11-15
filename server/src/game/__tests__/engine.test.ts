@@ -12,7 +12,7 @@ import { processAction } from '../engine'
 import { beginActivation, newActivation, startGame } from '../activation'
 import { contestObjectives, scoreObjectives, decideWinner } from '../victory'
 import { forceMove } from '../damage'
-import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize } from '../catalog'
+import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize, eligibleCards } from '../catalog'
 import { createServerGame } from '../createServerGame'
 import { RoomManager } from '../../rooms/roomManager'
 import { listMaps, randomMapId } from '../maps'
@@ -1046,4 +1046,59 @@ describe('Datos de unidades contra las cartas oficiales', () => {
       expect(u.abilities.map(a => [a.name, a.type, a.energyCost ?? 0])).toEqual(card.abilities)
     })
   }
+})
+
+describe('Rendición', () => {
+  it('cualquiera de los dos puede rendirse, también fuera de su turno', () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 6, r: 6 })])
+    const r = processAction(g, { type: 'SURRENDER' }, 'player2')
+    expect(r.success).toBe(true)
+    expect(r.gameOver).toBe(true)
+    expect(r.state!.phase).toBe('finished')
+    expect(r.state!.winner).toBe('player1')
+    expect(r.state!.winReason).toContain('se rinde')
+  })
+  it('no se puede rendir en una partida terminada', () => {
+    const g = makeGame([makeUnit('a', 'player1', A)])
+    const done = processAction(g, { type: 'SURRENDER' }, 'player1').state!
+    expect(processAction(done, { type: 'SURRENDER' }, 'player2').success).toBe(false)
+  })
+})
+
+describe('Abandono', () => {
+  const units = loadUnitCatalog(), tactics = loadTacticsCatalog()
+  const squad = ['ST01-U01', 'ST01-U02', 'ST01-U03']
+  const deck = (sq: string[]) => eligibleCards(sq, units, tactics).slice(0, requiredDeckSize(sq, units, tactics)).map(c => c.id)
+  const fakeIo = () => {
+    const sent: { ev: string; data: { winner?: string; reason?: string } }[] = []
+    const io = { to: () => ({ emit: (ev: string, data: { winner?: string; reason?: string }) => sent.push({ ev, data }) }) }
+    return { io: io as unknown as import('socket.io').Server, sent }
+  }
+
+  it('si un jugador no vuelve a tiempo en mitad de la partida, gana el otro', async () => {
+    const rm = new RoomManager(20)
+    const room = rm.createBotRoom('h', 'Humano', 'u1')
+    expect('error' in rm.submitSquad('h', squad, deck(squad))).toBe(false)
+    rm.confirmSetup('h')
+    expect(room.status).toBe('playing')
+    const { io, sent } = fakeIo()
+    rm.handleDisconnect('h', io)
+    await new Promise(r => setTimeout(r, 60))
+    const over = sent.find(e => e.ev === 'GAME_OVER')
+    expect(over?.data.winner).toBe('player2')
+    expect(over?.data.reason).toContain('abandona')
+  })
+
+  it('si vuelve antes de tiempo, la partida sigue', async () => {
+    const rm = new RoomManager(40)
+    const room = rm.createBotRoom('h', 'Humano', 'u1')
+    rm.submitSquad('h', squad, deck(squad))
+    rm.confirmSetup('h')
+    const { io, sent } = fakeIo()
+    rm.handleDisconnect('h', io)
+    expect(rm.reconnect(room.id, 'player1', 'h2', 'u1')).not.toBeNull()
+    await new Promise(r => setTimeout(r, 80))
+    expect(sent.find(e => e.ev === 'GAME_OVER')).toBeUndefined()
+    expect(room.gameState!.phase).not.toBe('finished')
+  })
 })

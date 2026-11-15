@@ -71,6 +71,16 @@ export interface GameState {
   pendingAttack: PendingAttack | null
   /** Push / Pull esperando a que el jugador elija el siguiente hex (ver engine.ts) */
   pendingForcedMove?: PendingForcedMove | null
+  /** Reloj del jugador que debe actuar (lo pone el servidor de salas, no el motor) */
+  turnClock?: TurnClock | null
+}
+
+export interface TurnClock {
+  playerId: PlayerId
+  kind: 'activation' | 'response' | 'choice'
+  /** Duración total y tiempo que quedaba al enviar el estado */
+  seconds: number
+  remainingMs: number
 }
 
 /** Paso de un Push / Pull que elige el jugador que lo causa */
@@ -126,3 +136,4 @@ export type GameAction =
   | { type: 'PLAY_RESPONSE'; cardId: string; targetId?: string }
   | { type: 'PASS_RESPONSE' }
   | { type: 'CHOOSE_FORCED_MOVE'; to: HexCoord | null }
+  | { type: 'SURRENDER' }
