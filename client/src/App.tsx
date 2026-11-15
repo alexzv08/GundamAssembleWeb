@@ -177,25 +177,28 @@ export default function App() {
       if (session?.user) {
         await applySession(session.user)
         socket.connect()
-        setScreen('lobby')
+        // Solo desde la pantalla de login: si ya se está reconectando a una partida, no se toca
+        setScreen(s => s === 'auth' ? 'lobby' : s)
       }
       setAuthLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Supabase vuelve a emitir SIGNED_IN al volver a la pestaña: solo se va al lobby
+      // si se venía de la pantalla de login (antes sacaba al jugador de la partida)
       if (event === 'SIGNED_IN' && session?.user) {
         await applySession(session.user)
         if (!socket.connected) socket.connect()
-        setScreen('lobby')
+        setScreen(s => s === 'auth' ? 'lobby' : s)
         setAuthLoading(false)
       } else if (event === 'SIGNED_OUT') {
         setUser(null)
         socket.disconnect()
         setScreen('auth')
-      } else if (event === 'TOKEN_REFRESHED' && socket.connected) {
-        socket.disconnect()
-        socket.connect()
       }
+      // TOKEN_REFRESHED: no hace falta reconectar. El servidor solo comprueba el token
+      // al conectar y el socket pide el token actual en cada reconexión (auth callback);
+      // cortar la conexión avisaba al rival de una desconexión cada hora.
     })
 
     return () => subscription.unsubscribe()

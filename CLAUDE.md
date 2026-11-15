@@ -418,3 +418,8 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - Comprobado: compilación y arranque como en la imagen (solo dependencias de producción), `/health`, `/api/*` y CORS (dominio, vista previa y origen ajeno).
 - Archivos: `DEPLOY.md`, `README.md`, `railway.toml`, `.dockerignore`, `.gitignore`, `server/Dockerfile`, `server/src/index.ts`, `server/.env.example`, `client/.env.example`, `client/vercel.json`, `CLAUDE.md`.
 
+### 2026-11-15 — No sacar al jugador de la partida al volver a la pestaña
+- Supabase vuelve a emitir `SIGNED_IN` al recuperar el foco de la pestaña y el cliente respondía con `setScreen('lobby')`, sacando al jugador de la partida. Ahora solo pasa al lobby desde la pantalla de login (también al cargar la página, para no pisar la reconexión).
+- `TOKEN_REFRESHED` ya no corta y reabre el socket (avisaba al rival de una desconexión cada hora); el servidor solo valida el token al conectar y el socket pide el token actual en cada reconexión.
+- Archivos: `client/src/App.tsx`, `CLAUDE.md`.
+
