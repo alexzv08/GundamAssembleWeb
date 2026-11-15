@@ -408,3 +408,13 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - `checkAttackTargetWith` comprueba siempre que el objetivo esté dentro de la plantilla (también sin `aim`). Cliente: giro y aviso para todas las plantillas que no son flor; la ficha muestra "SP".
 - Tests: 152 (formas de los dos diagramas en las 6 orientaciones, ataque del 240mm a dos enemigos, rechazo a distancia 3, Beam Rifle con also_target_adjacent).
 - Archivos: `server/data/units/unit_library.json`, `server/src/types/units.ts`, `server/src/game/{hexGrid,queries}.ts` (+ copias), tests, `client/src/game/areaAim.ts`, `client/src/App.tsx`, `client/src/components/ui/UnitPanel.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
+
+### 2026-11-15 — Despliegue con Supabase, Vercel y Railway
+- `DEPLOY.md`: guía paso a paso (Supabase: SQL, claves, OAuth y URLs de redirección; Railway: variables y dominio; Vercel: raíz `client` y variables `VITE_*`), comprobaciones y problemas habituales. Vercel no puede alojar el servidor (WebSockets y estado en memoria), por eso va en Railway.
+- `server/Dockerfile` (multi-etapa, solo dependencias de producción) y `.dockerignore`; `railway.toml` construye con él desde la raíz, comprueba `/health` y fija una réplica (antes ejecutaba `npm install` en la raíz, donde no hay package.json).
+- `client/vercel.json` (Vite, reescritura SPA, caché de `assets`, `models` y `cards`).
+- CORS: `CLIENT_URL` admite varias URLs separadas por comas y `CLIENT_URL_PATTERN` una expresión regular para las vistas previas de Vercel.
+- `client/.env.example` y `server/.env.example`.
+- Comprobado: compilación y arranque como en la imagen (solo dependencias de producción), `/health`, `/api/*` y CORS (dominio, vista previa y origen ajeno).
+- Archivos: `DEPLOY.md`, `README.md`, `railway.toml`, `.dockerignore`, `.gitignore`, `server/Dockerfile`, `server/src/index.ts`, `server/.env.example`, `client/.env.example`, `client/vercel.json`, `CLAUDE.md`.
+

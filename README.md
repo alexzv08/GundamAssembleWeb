@@ -47,6 +47,8 @@ Los tipos de TypeScript se comparten entre cliente y servidor, y cada acción tr
 
 ## Puesta en marcha
 
+Para publicarlo (Supabase + Vercel + Railway), sigue [DEPLOY.md](DEPLOY.md). En local:
+
 Requisitos: Node.js 20 o superior y un proyecto de Supabase.
 
 1. Variables de entorno (no se suben al repositorio):

@@ -1,0 +1,10 @@
+.git
+.github
+**/node_modules
+**/dist
+client
+assets-src
+tools
+server/data/runtime
+server/.env
+**/*.log

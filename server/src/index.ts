@@ -14,9 +14,14 @@ import { supabaseAdmin } from './lib/supabase'
 
 const app = express()
 const http = createServer(app)
-const ALLOWED_ORIGINS = process.env.CLIENT_URL
-    ? [process.env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5174']
-    : ['http://localhost:5173', 'http://localhost:5174']
+// Orígenes permitidos: CLIENT_URL (una o varias URLs separadas por comas, p. ej. el
+// dominio de Vercel) y, opcional, CLIENT_URL_PATTERN (expresión regular para las
+// URLs de vista previa de Vercel, p. ej. ^https://gundam-assemble-.*\.vercel\.app$).
+const ALLOWED_ORIGINS: (string | RegExp)[] = [
+    ...(process.env.CLIENT_URL ?? '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean),
+    ...(process.env.CLIENT_URL_PATTERN ? [new RegExp(process.env.CLIENT_URL_PATTERN)] : []),
+    'http://localhost:5173', 'http://localhost:5174',
+]
 
 const io = new Server(http, {
     cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] }
