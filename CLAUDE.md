@@ -481,3 +481,7 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - Cliente: `DrawPicker` con el arte de las cartas de tu mazo (hoja inferior en móvil), se abre solo al robar; "Más tarde" lo cierra y la barra de la mesa muestra "Elegir N cartas robadas". La mano del rival sigue siendo todo lo que podría llevar.
 - Tests: 168 (2 nuevos: robo apuntado y elegido, y rechazos). Probado en el navegador en iPhone 13.
 - Archivos: `server/src/game/{damage,activation,combat,effects,engine}.ts`, `server/src/types/{tactics,gameState}.ts` (+ copias), `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, tests, `client/src/App.tsx`, `client/src/components/ui/{DrawPicker,MesaBar}.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
+
+### 2026-11-17 — Modo mesa desactivado por ahora
+- El servidor rechaza `CREATE_MESA` salvo con `MESA_ENABLED=1` y el lobby no enseña la opción salvo con `VITE_MESA_ENABLED=1` (añadidas a los `.env.example`). En producción queda oculto; el código y sus tests siguen (la prueba de conexión activa la variable).
+- Archivos: `server/src/socket/gameEvents.ts`, `server/scripts/socket-smoke.ts`, `server/.env.example`, `client/src/screens/LobbyScreen.tsx`, `client/.env.example`, `GAMEPLAN.md`, `CLAUDE.md`.

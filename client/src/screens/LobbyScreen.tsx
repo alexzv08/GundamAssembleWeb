@@ -40,6 +40,9 @@ interface LobbyScreenProps {
   onOpenReplay: (id: string) => void
 }
 
+// Modo mesa: desactivado por ahora; se enseña solo con VITE_MESA_ENABLED=1
+const MESA_ENABLED = import.meta.env.VITE_MESA_ENABLED === '1'
+
 const input: React.CSSProperties = {
   width: '100%', padding: '10px 12px', background: C.bgDeep, border: `1px solid ${C.lineStrong}`,
   borderRadius: 8, color: C.text, fontSize: 14,
@@ -196,8 +199,10 @@ export function LobbyScreen({
                   title="Buscar partida" text="Contra otro jugador conectado. Escuadras de 3." />
                 <ModeOption disabled={!canPlay} onClick={() => setBotSetup(true)} icon="◎"
                   title="Contra la máquina" text="Práctica contra la IA: eliges tamaño de escuadra y dificultad." />
-                <ModeOption disabled={!canPlay} onClick={() => setMesaSetup(true)} icon="▦"
-                  title="Modo mesa" text="Juegas en una mesa real: apuntas la partida y el consejero te dice la mejor jugada." />
+                {MESA_ENABLED && (
+                  <ModeOption disabled={!canPlay} onClick={() => setMesaSetup(true)} icon="▦"
+                    title="Modo mesa" text="Juegas en una mesa real: apuntas la partida y el consejero te dice la mejor jugada." />
+                )}
                 <ModeOption disabled={!canPlay} onClick={() => onSetLobbyMode('private')} icon="⌂"
                   title="Sala privada" text="Crea una sala y comparte el enlace, o únete con un código." />
                 <ModeOption disabled={!connected || loadingReplays} onClick={openReplays} icon="▶" compact

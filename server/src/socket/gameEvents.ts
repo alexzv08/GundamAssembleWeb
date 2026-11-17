@@ -227,6 +227,8 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
 
     // ── Modo mesa: partida real apuntada en la app ─────────────────────────────
     socket.on('CREATE_MESA', ({ playerName, rivalName, mapId, squadSize }: { playerName?: string; rivalName?: string; mapId?: string; squadSize?: number } = {}) => {
+        // Desactivado por ahora: solo con MESA_ENABLED=1 (pruebas y desarrollo)
+        if (process.env.MESA_ENABLED !== '1') return socket.emit('ACTION_ERROR', { message: 'El modo mesa no está disponible por ahora' })
         for (const id of mesaHistory.keys()) if (!roomManager.getRoom(id)) mesaHistory.delete(id)   // salas ya cerradas
         const room = roomManager.createMesaRoom(socket.id, cleanName(playerName, defaultName), userId, { mapId, squadSize, rivalName })
         socket.join(room.id)

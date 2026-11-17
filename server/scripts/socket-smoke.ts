@@ -6,6 +6,7 @@
  * Uso: cd server && npx tsx scripts/socket-smoke.ts
  * (necesita socket.io-client, que está en client/node_modules)
  */
+process.env.MESA_ENABLED = '1'   // la prueba cubre también el modo mesa (desactivado en producción)
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import path from 'path'
