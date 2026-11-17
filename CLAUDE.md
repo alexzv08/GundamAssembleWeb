@@ -449,3 +449,8 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - `conditionMet` en `bot.ts` comprueba el umbral y `requiresActiveTrait` antes de elegir la carta. En 300 partidas de prueba el motor ya no rechaza ninguna acción del bot.
 - Test nuevo (157).
 - Archivos: `server/src/game/bot.ts`, `server/src/game/__tests__/engine.test.ts`, `CLAUDE.md`.
+
+### 2026-11-17 — Resultados del primer torneo de estrategias
+- 141.000 partidas, 0 errores. Velocidad 54,9 %, control 49,5 %, agresión 45,6 %. Mejor unidad Guncannon (56 %), peores Wing Zero y Unicorn (~45 %).
+- Guardados en `server/data/torneos/2026-11-17/` (`summary.json`, `meta.json` y todas las partidas en `partidas.jsonl.gz`). Jugado antes de arreglar el bot con Hero's Might, Systematic Elimination y Full System Burn: los datos de esas cartas no valen.
+- Archivos: `server/data/torneos/2026-11-17/*`, `CLAUDE.md`.

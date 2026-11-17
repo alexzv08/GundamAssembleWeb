@@ -1,0 +1,13 @@
+{
+  "games": 100,
+  "workers": 4,
+  "level": "dificil",
+  "squads": 470,
+  "strategies": [
+    "agresion",
+    "control",
+    "velocidad"
+  ],
+  "total": 141000,
+  "started": "2026-11-17T07:58:25.629Z"
+}
