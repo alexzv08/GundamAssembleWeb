@@ -1529,3 +1529,31 @@ describe('Plantillas fijas del 240mm Low-Recoil Cannon y el Quadruple Bop Missil
     expect(cells('PA01-U02', 'Beam Rifle')).toMatchObject({ tlCost: 4, range: 4, strength: 7, effectData: { type: 'also_target_adjacent' } })
   })
 })
+
+describe('Estrategias del bot', () => {
+  // Ataque flojo a alcance y un Objetivo de 8 VP cerca: agresión dispara, control va a por el Objetivo
+  const setup = () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', A, { weapons: [weapon({ name: 'Rifle flojo', range: 4, strength: 2, tlCost: 3 })] }),
+      makeUnit('e', 'player2', { q: 6, r: 2 }),
+    ])
+    g.board[hexKey({ q: 2, r: 4 })].objectiveToken = { id: 'o', vpValue: 8, controlledBy: null }
+    return g
+  }
+  it('agresión ataca aunque el ataque sea flojo', () => {
+    expect(chooseBotAction(setup(), 'player1', () => 0.5, 'dificil', 'agresion').type).toBe('ATTACK')
+  })
+  it('control prefiere ir al Objetivo antes que un ataque flojo', () => {
+    const act = chooseBotAction(setup(), 'player1', () => 0.5, 'dificil', 'control')
+    expect(act.type).toBe('ADVANCE')
+    const to = (act as { to: { q: number; r: number } }).to
+    expect(gridDistance(to, { q: 2, r: 4 })).toBeLessThanOrEqual(1)
+  })
+  it('velocidad elige el arma más barata si las dos alcanzan', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', A, { weapons: [weapon({ name: 'Cara', range: 3, strength: 5, tlCost: 4 }), weapon({ name: 'Barata', range: 3, strength: 4, tlCost: 2 })] }),
+      makeUnit('e', 'player2', B),
+    ])
+    expect(chooseBotAction(g, 'player1', () => 0.5, 'dificil', 'velocidad')).toMatchObject({ type: 'ATTACK', weaponIndex: 1 })
+  })
+})

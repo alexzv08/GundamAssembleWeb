@@ -437,3 +437,9 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - Lobby: los modos de juego son una lista de opciones neutras con su explicación (antes "Buscar partida" y "Contra la máquina" parecían botones ya pulsados); se iluminan solo al pasar el ratón o con el teclado. El selector de mapa (`MapPicker`) es solo informativo cuando hay un único mapa; títulos "Tamaño de escuadra" y "Dificultad" en la partida contra la máquina.
 - Archivos: `server/data/maps/DemoMap.json`, `server/data/maps/MyMap.json` (borrado), `server/src/game/__tests__/engine.test.ts`, `client/src/screens/LobbyScreen.tsx`, `client/src/App.tsx`, `GAMEPLAN.md`, `CLAUDE.md`.
 
+### 2026-11-17 — Estrategias del bot y torneo automático
+- `bot.ts`: tres estrategias (`BotStrategy`: agresion, control, velocidad) como perfiles de pesos sobre la IA por puntuación (daño, derrotas, Garrisons, coste de TL, umbral para atacar, Objetivos y quedarse junto a los propios, acercarse, peligro, rescates, margen para Dash). `chooseBotAction(s, p, rand, level, strategy)`; por defecto `equilibrada` (la de antes). Los Objetivos pesan según su valor (8 VP más que 5). 3 tests nuevos.
+- `scripts/tournament.ts` (`npm run torneo`): cada una de las 470 escuadras legales de 3 juega N partidas con cada estrategia contra rivales, estrategias y mazos legales al azar (reproducible por tarea), alternando el bando; varios procesos, resultados en JSONL según terminan y reanudable. `scripts/tournament-report.ts` (`npm run torneo:informe`) resume en `summary.json` (% de victorias con intervalo del 95 %, por estrategia, cruce de estrategias, unidad, unidad × estrategia, escuadra, escuadra × estrategia, carta y bando).
+- Primer torneo: 141.000 partidas (100 por escuadra y estrategia, nivel difícil), ~3,2 h con 4 procesos.
+- Archivos: `server/src/game/bot.ts`, `server/scripts/{tournament,tournament-report}.ts`, `server/package.json`, tests, `CLAUDE.md`.
+

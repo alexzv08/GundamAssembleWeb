@@ -57,6 +57,29 @@ export function followUpReady(s: GameState): boolean {
 export type BotLevel = 'facil' | 'normal' | 'dificil'
 export const BOT_LEVELS: BotLevel[] = ['facil', 'normal', 'dificil']
 
+// ─── ESTRATEGIAS ──────────────────────────────────────────────────────────────
+// Perfiles de pesos sobre la misma IA por puntuación (niveles normal y difícil).
+// Todas juegan con las mismas reglas; cambia lo que priorizan:
+//  - agresion:  daño y derrotas, acercarse al enemigo, poco miedo al peligro.
+//  - control:   Objetivos (tomarlos y quedarse al lado de los propios), Garrisons
+//               y rescates; ataca sobre todo si el ataque es bueno; prudente.
+//  - velocidad: gastar poco Timeline (armas y acciones baratas) para activar más
+//               veces, y correr hacia los Objetivos lejanos (Dash si no hay ataque).
+export type BotStrategy = 'equilibrada' | 'agresion' | 'control' | 'velocidad'
+export const BOT_STRATEGIES: BotStrategy[] = ['agresion', 'control', 'velocidad']
+
+interface Profile {
+    damage: number; kill: number; garrison: number; tlCost: number
+    attackThreshold: number; objective: number; objectiveDistance: number; holdObjective: number
+    inRange: number; approach: number; threat: number; rescue: number; dashMargin: number
+}
+const PROFILES: Record<BotStrategy, Profile> = {
+    equilibrada: { damage: 1, kill: 1, garrison: 1, tlCost: 1, attackThreshold: 2, objective: 1, objectiveDistance: 1, holdObjective: 0, inRange: 1, approach: 1, threat: 1, rescue: 1, dashMargin: 1.5 },
+    agresion: { damage: 1.5, kill: 1.6, garrison: 0.6, tlCost: 0.4, attackThreshold: 0.5, objective: 0.4, objectiveDistance: 0.4, holdObjective: 0, inRange: 1.8, approach: 2.5, threat: 0.25, rescue: 0.5, dashMargin: 1.5 },
+    control: { damage: 0.8, kill: 1, garrison: 1.8, tlCost: 1, attackThreshold: 3, objective: 2, objectiveDistance: 2, holdObjective: 3, inRange: 0.7, approach: 0.4, threat: 1.6, rescue: 1.8, dashMargin: 1 },
+    velocidad: { damage: 1, kill: 1, garrison: 1, tlCost: 3, attackThreshold: 1.5, objective: 1.2, objectiveDistance: 1.6, holdObjective: 0, inRange: 0.8, approach: 0.6, threat: 0.8, rescue: 1, dashMargin: 0.3 },
+}
+
 // ─── IA POR PUNTUACIÓN (normal y difícil) ─────────────────────────────────────
 // Puntúa cada ataque posible con la misma previsión que ve el jugador (daño
 // esperado, probabilidad de derrota, VP del objetivo, coste de TL) y cada casilla
@@ -65,7 +88,7 @@ export const BOT_LEVELS: BotLevel[] = ['facil', 'normal', 'dificil']
 // y el peligro.
 interface Scored { action: GameAction; score: number }
 
-function bestAttack(s: GameState, player: PlayerId, level: BotLevel, noise: () => number): Scored | null {
+function bestAttack(s: GameState, player: PlayerId, level: BotLevel, noise: () => number, P: Profile = PROFILES.equilibrada): Scored | null {
     const id = s.activeUnitId!
     const unit = s.units[id]
     const act = s.activation!
@@ -78,11 +101,11 @@ function bestAttack(s: GameState, player: PlayerId, level: BotLevel, noise: () =
             if (!t || !p) continue
             const anyHit = 1 - (1 - p.hitChance) ** p.dice
             let score = t.kind === 'unit'
-                ? p.expectedDamage + p.killChance * (s.units[t.id].vp + 4)
-                : anyHit * (t.kind === 'garrison' ? 2.5 : (s.rws[t.id]?.vp ?? 2))
+                ? p.expectedDamage * P.damage + p.killChance * (s.units[t.id].vp + 4) * P.kill
+                : anyHit * (t.kind === 'garrison' ? 2.5 * P.garrison : (s.rws[t.id]?.vp ?? 2))
             score += (p.targets - 1) * 1.5
             const free = s.hasUsedPrimaryAction && act.freeAttacks.includes(wi)
-            if (!free) score -= w.tlCost * (level === 'dificil' ? 0.45 : 0.25)
+            if (!free) score -= w.tlCost * (level === 'dificil' ? 0.45 : 0.25) * P.tlCost
             score += noise()
             const action: GameAction = t.kind === 'unit' ? { type: 'ATTACK', unitId: id, weaponIndex: wi, targetId: t.id }
                 : t.kind === 'rws' ? { type: 'ATTACK_RWS', unitId: id, weaponIndex: wi, rwsId: t.id }
@@ -94,21 +117,21 @@ function bestAttack(s: GameState, player: PlayerId, level: BotLevel, noise: () =
 }
 
 // Mejor ataque si la unidad activa estuviera en `key` (se mueve y se deshace sin copiar el estado)
-function attackFrom(s: GameState, player: PlayerId, level: BotLevel, key: string): Scored | null {
+function attackFrom(s: GameState, player: PlayerId, level: BotLevel, key: string, P: Profile): Scored | null {
     const unit = s.units[s.activeUnitId!]
     const from = unit.position!
     const fromKey = hexKey(from)
     s.board[fromKey].occupiedBy = null
     s.board[key].occupiedBy = unit.id
     unit.position = keyToHex(key)
-    try { return bestAttack(s, player, level, () => 0) } finally {
+    try { return bestAttack(s, player, level, () => 0, P) } finally {
         s.board[key].occupiedBy = null
         s.board[fromKey].occupiedBy = unit.id
         unit.position = from
     }
 }
 
-function scoreHex(s: GameState, player: PlayerId, unitId: string, key: string, level: BotLevel): number {
+function scoreHex(s: GameState, player: PlayerId, unitId: string, key: string, level: BotLevel, P: Profile = PROFILES.equilibrada): number {
     const unit = s.units[unitId]
     const pos = keyToHex(key)
     const hex = s.board[key]
@@ -120,42 +143,47 @@ function scoreHex(s: GameState, player: PlayerId, unitId: string, key: string, l
     let nearest = Infinity
     for (const o of objectives) {
         const d = gridDistance(pos, o.coord)
-        if (o.objectiveToken!.controlledBy === player) continue
+        const vp = o.objectiveToken!.vpValue / 5   // los Objetivos de 8 VP pesan más que los de 5
+        if (o.objectiveToken!.controlledBy === player) {
+            // Control: quedarse junto a los propios para que no los neutralicen
+            if (d <= 1) score += P.holdObjective * vp
+            continue
+        }
         nearest = Math.min(nearest, d)
-        if (d <= 1) score += o.objectiveToken!.controlledBy ? 6 : 5
+        if (d <= 1) score += (o.objectiveToken!.controlledBy ? 6 : 5) * vp * P.objective
     }
-    if (nearest !== Infinity) score -= 0.45 * nearest
+    if (nearest !== Infinity) score -= 0.45 * nearest * P.objectiveDistance
     // Ataque: enemigos a alcance de alguna arma desde aquí
     const enemies = Object.values(s.units).filter(u => u.playerId !== player && u.position)
     const maxRange = Math.max(...unit.weapons.map(w => w.range))
     const inRange = enemies.filter(e => gridDistance(pos, e.position!) <= maxRange)
-    if (inRange.length) score += 3 + Math.max(...inRange.map(e => (1 - e.currentHp / e.maxHp) * 3))
-    else if (enemies.length) score -= 0.25 * Math.min(...enemies.map(e => gridDistance(pos, e.position!)))
+    if (inRange.length) score += (3 + Math.max(...inRange.map(e => (1 - e.currentHp / e.maxHp) * 3))) * P.inRange
+    else if (enemies.length) score -= 0.25 * Math.min(...enemies.map(e => gridDistance(pos, e.position!))) * P.approach
     // Garrisons propias que rescatar
-    if (!s.hasUsedPrimaryAction && Object.values(s.board).some(h => h.garrisonToken?.owner === player && gridDistance(h.coord, pos) === 1)) score += 3
+    if (!s.hasUsedPrimaryAction && Object.values(s.board).some(h => h.garrisonToken?.owner === player && gridDistance(h.coord, pos) === 1)) score += 3 * P.rescue
     // Peligro: enemigos que podrían alcanzarle en su turno (más pesado en difícil)
     const threat = enemies.filter(e => gridDistance(pos, e.position!) <= 3 + Math.max(...e.weapons.map(w => w.range))).length
-    score -= threat * (level === 'dificil' ? 0.9 : 0.4) * (unit.currentHp / unit.maxHp < 0.4 ? 2 : 1)
+    score -= threat * (level === 'dificil' ? 0.9 : 0.4) * P.threat * (unit.currentHp / unit.maxHp < 0.4 ? 2 : 1)
     return score
 }
 
-function smartAction(s: GameState, player: PlayerId, rand: () => number, level: BotLevel): GameAction | null {
+function smartAction(s: GameState, player: PlayerId, rand: () => number, level: BotLevel, P: Profile): GameAction | null {
     const id = s.activeUnitId!
     const unit = s.units[id]
     const act = s.activation!
     if (!unit.position) return null
     const noise = () => (level === 'normal' ? rand() * 1.5 : rand() * 0.05)
-    const attack = (!s.hasUsedPrimaryAction || act.freeAttacks.length > 0) ? bestAttack(s, player, level, noise) : null
+    const attack = (!s.hasUsedPrimaryAction || act.freeAttacks.length > 0) ? bestAttack(s, player, level, noise, P) : null
     // Un buen ataque desde aquí, o ya no se puede mover: atacar
-    if (attack && (attack.score >= 2 || act.advanced)) return attack.action
+    if (attack && (attack.score >= P.attackThreshold || act.advanced)) return attack.action
     // Moverse a la mejor casilla (Advance)
     if (!act.advanced) {
-        const here = scoreHex(s, player, id, hexKey(unit.position), level)
+        const here = scoreHex(s, player, id, hexKey(unit.position), level, P)
         let bestKey: string | null = null, bestScore = -Infinity
         for (const k of reachableFor(s, id, { kind: 'advance' }).keys()) {
-            let sc = scoreHex(s, player, id, k, level) + noise()
+            let sc = scoreHex(s, player, id, k, level, P) + noise()
             // Difícil mira un paso más: el mejor ataque que tendría desde esa casilla
-            if (level === 'dificil' && (!s.hasUsedPrimaryAction || act.freeAttacks.length)) sc += 0.8 * Math.max(0, attackFrom(s, player, level, k)?.score ?? 0)
+            if (level === 'dificil' && (!s.hasUsedPrimaryAction || act.freeAttacks.length)) sc += 0.8 * Math.max(0, attackFrom(s, player, level, k, P)?.score ?? 0)
             if (sc > bestScore) { bestScore = sc; bestKey = k }
         }
         const onBase = baseOwnerAt(s, hexKey(unit.position)) !== null
@@ -166,9 +194,9 @@ function smartAction(s: GameState, player: PlayerId, rand: () => number, level: 
         const rescue = Object.values(s.board).find(h => h.garrisonToken?.owner === player && gridDistance(h.coord, unit.position!) === 1)
         if (rescue) return { type: 'RESCUE', unitId: id, garrisonId: rescue.garrisonToken!.id }
         // Dash si mejora claramente la posición; si no, Energize
-        let bestKey: string | null = null, bestScore = scoreHex(s, player, id, hexKey(unit.position), level) + 1.5
+        let bestKey: string | null = null, bestScore = scoreHex(s, player, id, hexKey(unit.position), level, P) + P.dashMargin
         for (const k of reachableFor(s, id, { kind: 'dash' }).keys()) {
-            const sc = scoreHex(s, player, id, k, level)
+            const sc = scoreHex(s, player, id, k, level, P)
             if (sc > bestScore) { bestScore = sc; bestKey = k }
         }
         return bestKey ? { type: 'DASH', unitId: id, to: keyToHex(bestKey) } : { type: 'ENERGIZE', unitId: id }
@@ -179,7 +207,7 @@ function smartAction(s: GameState, player: PlayerId, rand: () => number, level: 
 // Bot: en "fácil" ataca si puede o avanza hacia el enemigo más cercano (casi al
 // azar); en "normal" y "difícil" usa la IA por puntuación de arriba.
 // Respeta "no terminar sobre la Base".
-export function chooseBotAction(s: GameState, player: PlayerId, rand: () => number = Math.random, level: BotLevel = 'facil'): GameAction {
+export function chooseBotAction(s: GameState, player: PlayerId, rand: () => number = Math.random, level: BotLevel = 'facil', strategy: BotStrategy = 'equilibrada'): GameAction {
     const pickOne = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)]
     const shuffle = <T>(xs: T[]): T[] => shuffleWith(xs, rand)
     // Push / Pull: casi siempre el máximo, a veces para antes
@@ -213,7 +241,7 @@ export function chooseBotAction(s: GameState, player: PlayerId, rand: () => numb
             const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type))
             if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
         }
-        const smart = smartAction(s, player, rand, level)
+        const smart = smartAction(s, player, rand, level, PROFILES[strategy])
         if (smart) return smart
         if (s.hasUsedPrimaryAction && !act.freeAttacks.length) return { type: 'END_ACTIVATION', unitId: id }
     }

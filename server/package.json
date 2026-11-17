@@ -12,7 +12,9 @@
     "selfplay": "tsx scripts/self-play.ts",
     "sync-shared": "node ../scripts/sync-shared.mjs",
     "check-shared": "node ../scripts/sync-shared.mjs --check",
-    "smoke": "BOT_DELAY_MS=0 TURN_SECONDS=2 RESPONSE_SECONDS=2 tsx scripts/socket-smoke.ts"
+    "smoke": "BOT_DELAY_MS=0 TURN_SECONDS=2 RESPONSE_SECONDS=2 tsx scripts/socket-smoke.ts",
+    "torneo": "tsx scripts/tournament.ts",
+    "torneo:informe": "tsx scripts/tournament-report.ts"
   },
   "keywords": [],
   "author": "",
