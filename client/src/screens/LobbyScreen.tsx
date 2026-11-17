@@ -29,6 +29,7 @@ interface LobbyScreenProps {
   onCreateRoom: () => void
   onJoinRoom: () => void
   onPlayBot: (level: 'facil' | 'normal' | 'dificil' | 'experto') => void
+  onCreateMesa: (rivalName: string) => void
   maps: { id: string; name: string; description?: string }[]
   mapId: string
   onMapIdChange: (id: string) => void
@@ -49,13 +50,16 @@ const input: React.CSSProperties = {
 export function LobbyScreen({
   user, profile, connected, playerName, onPlayerNameChange, isSearching, lobbyMode, onSetLobbyMode,
   lobbyError, onClearLobbyError, roomInput, onRoomInputChange, showProfile, onShowProfile, onProfileUpdated,
-  onFindMatch, onCancelMatch, onCreateRoom, onJoinRoom, onPlayBot, maps, mapId, onMapIdChange, squadSize, onSquadSizeChange,
+  onFindMatch, onCancelMatch, onCreateRoom, onJoinRoom, onPlayBot, onCreateMesa, maps, mapId, onMapIdChange, squadSize, onSquadSizeChange,
   onSpectate, onListReplays, onOpenReplay,
 }: LobbyScreenProps) {
   const mobile = useIsMobile()
   // Contra la máquina también deja elegir mapa y tamaño antes de empezar
   const [botSetup, setBotSetup] = useState(false)
   const [botLevel, setBotLevel] = useState<'facil' | 'normal' | 'dificil' | 'experto'>('normal')
+  // Modo mesa: apuntar una partida real y recibir consejos
+  const [mesaSetup, setMesaSetup] = useState(false)
+  const [rivalName, setRivalName] = useState('')
   const canPlay = playerName.trim().length > 0 && connected
   const [replays, setReplays] = useState<ReplaySummary[] | null>(null)
   const [loadingReplays, setLoadingReplays] = useState(false)
@@ -136,6 +140,27 @@ export function LobbyScreen({
                 </div>
                 <button onClick={() => setReplays(null)} style={button('ghost')}>Volver</button>
               </div>
+            ) : lobbyMode === 'main' && mesaSetup ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Modo mesa</span>
+                <span style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.5 }}>
+                  Para una partida con miniaturas en una mesa real. Eliges tu escuadra y tu mazo y la escuadra del rival (su mazo no se ve).
+                  Durante la partida apuntas lo que hacéis los dos y los dados que salen, y el consejero te dice la mejor jugada en cada momento.
+                </span>
+                <label htmlFor="rival-name" style={eyebrow}>Nombre del rival</label>
+                <input id="rival-name" value={rivalName} onChange={e => setRivalName(e.target.value)} placeholder="Rival" maxLength={32} style={input} />
+                <span style={eyebrow}>Mapa</span>
+                <MapPicker maps={maps} mapId={mapId} onChange={onMapIdChange} />
+                <span style={eyebrow}>Tamaño de escuadra</span>
+                <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Tamaño de escuadra">
+                  {[3, 5].map(n => (
+                    <button key={n} type="button" role="radio" aria-checked={squadSize === n} onClick={() => onSquadSizeChange(n)}
+                      style={{ ...button(squadSize === n ? 'primary' : 'subtle'), flex: 1 }}>Escuadras de {n}</button>
+                  ))}
+                </div>
+                <button disabled={!canPlay} onClick={() => onCreateMesa(rivalName.trim() || 'Rival')} style={{ ...button('amber', !canPlay), padding: 12, fontWeight: 600 }}>Preparar la partida</button>
+                <button onClick={() => setMesaSetup(false)} style={button('ghost')}>Volver</button>
+              </div>
             ) : lobbyMode === 'main' && botSetup ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Partida contra la máquina</span>
@@ -171,6 +196,8 @@ export function LobbyScreen({
                   title="Buscar partida" text="Contra otro jugador conectado. Escuadras de 3." />
                 <ModeOption disabled={!canPlay} onClick={() => setBotSetup(true)} icon="◎"
                   title="Contra la máquina" text="Práctica contra la IA: eliges tamaño de escuadra y dificultad." />
+                <ModeOption disabled={!canPlay} onClick={() => setMesaSetup(true)} icon="▦"
+                  title="Modo mesa" text="Juegas en una mesa real: apuntas la partida y el consejero te dice la mejor jugada." />
                 <ModeOption disabled={!canPlay} onClick={() => onSetLobbyMode('private')} icon="⌂"
                   title="Sala privada" text="Crea una sala y comparte el enlace, o únete con un código." />
                 <ModeOption disabled={!connected || loadingReplays} onClick={openReplays} icon="▶" compact

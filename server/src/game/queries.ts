@@ -461,3 +461,17 @@ export function protectiveShooters(state: GameState, player: PlayerId, card: Tac
   }
   return out
 }
+
+// ─── QUIÉN DECIDE ─────────────────────────────────────────────────────────────
+
+// Hay un movimiento y ataque pendientes listos para resolverse (ya no hay ataque en curso)
+export function followUpReady(s: GameState): boolean {
+  return !!s.pendingFollowUp && !s.pendingAttack && !s.pendingResponse && !s.pendingForcedMove && !s.pendingDice
+}
+
+// Jugador que debe actuar ahora: el que tira los dados pendientes (modo mesa), el que
+// elige un Push / Pull, el que responde si hay una ventana abierta, o el activo.
+export function actingPlayer(s: GameState): PlayerId {
+  return s.pendingDice?.forPlayerId ?? s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId
+    ?? (followUpReady(s) ? s.pendingFollowUp!.playerId : null) ?? s.activePlayerId
+}

@@ -1624,3 +1624,53 @@ describe('Planificador (bot experto y consejero)', () => {
     for (const p of planActivation(g, 'player1')) expect(baseOwnerAt(g, p.end)).toBeNull()
   })
 })
+
+describe('Modo mesa: dados introducidos a mano', () => {
+  const mesa = { choosePushes: true, manualDice: true }
+  const setup = (over: Partial<Unit> = {}) => makeGame([
+    makeUnit('a', 'player1', A, { weapons: [weapon({ name: 'Rifle', range: 4, strength: 4, tlCost: 3 })], ...over }),
+    makeUnit('e', 'player2', { q: 5, r: 2 }),
+  ])
+  it('el ataque se para pidiendo tantos dados como su Strength y se resuelve con los que se introducen', () => {
+    const r = processAction(setup(), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e' }, 'player1', undefined, mesa)
+    expect(r.success).toBe(true)
+    const pd = r.state!.pendingDice!
+    expect(pd.count).toBe(4)
+    expect(pd.reason).toContain('Rifle')
+    expect(r.state!.units.e.currentHp).toBe(10)
+    // Mientras falten los dados no se puede hacer otra cosa, y la cantidad tiene que cuadrar
+    expect(processAction(r.state!, { type: 'END_ACTIVATION', unitId: 'a' }, 'player1', undefined, mesa).error).toBe('Faltan los dados de la tirada')
+    expect(processAction(r.state!, { type: 'SUBMIT_DICE', values: [5, 5] }, 'player1', undefined, mesa).success).toBe(false)
+    expect(processAction(r.state!, { type: 'SUBMIT_DICE', values: [5, 5, 5, 11] }, 'player1', undefined, mesa).success).toBe(false)
+    const done = processAction(r.state!, { type: 'SUBMIT_DICE', values: [5, 5, 5, 1] }, 'player1', undefined, mesa)
+    expect(done.success).toBe(true)
+    expect(done.state!.pendingDice).toBeFalsy()
+    expect(done.state!.units.e.currentHp).toBe(7)
+    expect(done.state!.lastAttack!.rolls).toEqual([5, 5, 5, 1])
+  })
+  it('pide los dados extra cuando hacen falta (Disarm repite los impactos) y quién tira es quien decide', () => {
+    const r = processAction(setup({ statusEffects: [{ type: 'disarm' }] }), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e' }, 'player1', undefined, mesa)
+    expect(actingPlayer(r.state!)).toBe('player1')
+    const more = processAction(r.state!, { type: 'SUBMIT_DICE', values: [5, 5, 1, 1] }, 'player1', undefined, mesa)
+    expect(more.state!.pendingDice!.count).toBe(2)
+    expect(more.state!.pendingDice!.reason).toContain('Disarmed')
+    const done = processAction(more.state!, { type: 'SUBMIT_DICE', values: [1, 6] }, 'player1', undefined, mesa)
+    expect(done.state!.units.e.currentHp).toBe(9)
+  })
+  it('si el ataque arranca al pasar el rival su Response, los dados los tira el atacante', () => {
+    const g = setup()
+    g.players.player2.tactics.hand = [structuredClone(loadTacticsCatalog().find(c => c.name === 'Interference')!)]
+    const r = processAction(g, { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e' }, 'player1', undefined, mesa)
+    expect(r.state!.pendingResponse?.forPlayerId).toBe('player2')
+    const passed = processAction(r.state!, { type: 'PASS_RESPONSE' }, 'player2', undefined, mesa)
+    expect(passed.state!.pendingDice!.count).toBe(4)
+    expect(passed.state!.pendingDice!.forPlayerId).toBe('player1')
+    expect(actingPlayer(passed.state!)).toBe('player1')
+  })
+  it('sin el modo mesa no se piden dados', () => {
+    const r = processAction(setup(), { type: 'ATTACK', unitId: 'a', weaponIndex: 0, targetId: 'e' }, 'player1', dice(5, 5, 5, 5), { choosePushes: true })
+    expect(r.state!.pendingDice).toBeFalsy()
+    expect(r.state!.units.e.currentHp).toBe(6)
+    expect(processAction(r.state!, { type: 'SUBMIT_DICE', values: [1] }, 'player1').error).toBe('No hay ninguna tirada pendiente')
+  })
+})

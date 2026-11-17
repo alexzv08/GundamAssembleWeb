@@ -12,7 +12,8 @@ import path from 'path'
 import { RoomManager } from '../src/rooms/roomManager'
 import { MemoryReplayStore } from '../src/rooms/gameStore'
 import { registerGameEvents } from '../src/socket/gameEvents'
-import { reachableFor } from '../src/game/queries'
+import { reachableFor, actingPlayer } from '../src/game/queries'
+import { chooseBotAction } from '../src/game/bot'
 import { keyToHex } from '../src/game/hexGrid'
 import type { GameState } from '../src/types'
 import { loadUnitCatalog, loadTacticsCatalog, eligibleCards, requiredDeckSize } from '../src/game/catalog'
@@ -187,6 +188,57 @@ http.listen(0, async () => {
     const again = await wait(h, 'SQUAD_SELECTION_STARTED')
     if (!again.vsBot) fail('la revancha no es contra la máquina')
     console.log('✓ revancha')
+
+    // ── Modo mesa: un solo cliente lleva los dos bandos y mete los dados a mano ──
+    const table = ioc(url, { auth: { userId: 'mesera' } })
+    table.emit('CREATE_MESA', { playerName: 'Yo', rivalName: 'Pepe', squadSize: 3 })
+    const ms = await wait(table, 'SQUAD_SELECTION_STARTED')
+    if (!ms.mesa) fail('la sala de mesa no se marcó como tal')
+    table.emit('MESA_RIVAL', { unitCardIds: ['ST01-U04', 'ST01-U05', 'ST01-U06'], first: 'player2' })
+    await wait(table, 'MESA_RIVAL_ACCEPTED')
+    table.emit('SELECT_SQUAD', { unitCardIds: squadH, cardIds: deck(squadH) })
+    const mStart = await wait(table, 'GAME_STARTED')
+    if (!mStart.gameState.mesa || mStart.gameState.players.player2.tactics.hand.length < 9) fail('el rival de la mesa debería tener todas sus cartas posibles')
+    table.emit('CONFIRM_SETUP')
+    let ts: GameState = (await wait(table, 'GAME_STATE_UPDATE')).gameState
+    let mesaOver = false, diceAsked = 0, undone = false, rivalAdvice = false, sides = new Set<string>()
+    table.on('GAME_OVER', (p: any) => { ts = p.gameState; mesaOver = true })
+    const send = (ev: string, payload: object) => new Promise<any>(res => {
+        const done = (p: any) => { table.off('GAME_STATE_UPDATE', done); table.off('PHASE_TRANSITION', done); table.off('GAME_OVER', done); table.off('ACTION_ERROR', done); res(p) }
+        table.on('GAME_STATE_UPDATE', done); table.on('PHASE_TRANSITION', done); table.on('GAME_OVER', done); table.on('ACTION_ERROR', done)
+        table.emit(ev, payload)
+    })
+    let seedM = 5
+    const randM = () => { seedM = (seedM * 1103515245 + 12345) & 0x7fffffff; return seedM / 0x7fffffff }
+    for (let i = 0; i < 4000 && !mesaOver; i++) {
+        let r: any
+        if (ts.pendingDice) {
+            diceAsked++
+            r = await send('GAME_ACTION', { action: { type: 'SUBMIT_DICE', values: Array.from({ length: ts.pendingDice.count }, () => 1 + Math.floor(randM() * 10)) } })
+        } else {
+            const p = actingPlayer(ts)
+            sides.add(p)
+            if (!rivalAdvice && p === 'player2' && ts.activePlayerId === 'player2' && !ts.pendingResponse && !ts.pendingForcedMove && !ts.pendingAttack && !ts.hasUsedPrimaryAction) {
+                const adv: any = await new Promise(res => table.emit('SUGGEST_PLAYS', {}, res))
+                if (adv.error || !adv.plays.length) fail(`el consejero no analizó al rival: ${adv.error}`)
+                rivalAdvice = true
+            }
+            r = await send('GAME_ACTION', { action: chooseBotAction(ts, p, randM, 'normal') })
+            if (!undone && r?.gameState && ts.activePlayerId === 'player1' && r.gameState.log.length > ts.log.length) {
+                const back = await send('MESA_UNDO', {})
+                if (JSON.stringify(back.gameState.units) !== JSON.stringify(ts.units)) fail('Deshacer no devolvió el estado anterior')
+                undone = true
+                r = back
+            }
+        }
+        if (r?.gameState) ts = r.gameState
+    }
+    if (!mesaOver) fail('la partida en modo mesa no terminó')
+    if (!diceAsked) fail('el modo mesa no pidió dados')
+    if (sides.size < 2) fail('el modo mesa no dejó actuar por los dos bandos')
+    if (!undone || !rivalAdvice) fail('no se probaron Deshacer o el consejero del rival')
+    console.log(`✓ modo mesa: partida completa con dados a mano (${diceAsked} tiradas), Deshacer y consejero para el rival. Ganador: ${ts.winner}`)
+    table.disconnect()
     viewer.disconnect()
 
     // ── Reloj de turno: un jugador que no hace nada pasa solo y, a la tercera, pierde ──

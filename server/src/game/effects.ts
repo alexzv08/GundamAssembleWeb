@@ -2,6 +2,7 @@
 // Tactics. Las funciones que reciben `state` lo MUTAN (el llamador clona).
 import type { AreaAim } from '../types'
 import type { GameState, PlayerId, HexCoord, AbilityEffect } from '../types'
+import { rollMany, type Rng } from './dice'
 import type { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
 import { upgradeCount, enemyHexes, moveOptionsFor, rwsDeployHexes, alliedRws, rwsAdjacentTo, isEmptyHex, targetAt } from './queries'
@@ -283,7 +284,7 @@ function redistribute(state: GameState, selfId: string, allyId: string, choices:
 
 export function applyCommandAbility(
     state: GameState, unitId: string, abilityIndex: number, playerId: PlayerId,
-    targetId: string | undefined, targetHex: HexCoord | undefined, rng: () => number, pick: Choice = {},
+    targetId: string | undefined, targetHex: HexCoord | undefined, rng: Rng, pick: Choice = {},
 ): EffectResult {
     const unit = state.units[unitId]
     const ability = unit.abilities[abilityIndex]
@@ -376,7 +377,7 @@ export function applyCommandAbility(
         case 'saturated_fire': {
             // "Roll 5 dice. For each [Crit], deal 1 [Damage] to each enemy unit within [Range 4]."
             if (!unit.position) return fail('La unidad no está en el tablero')
-            const rolls = Array.from({ length: d.dice ?? 5 }, rng)
+            const rolls = rollMany(rng, d.dice ?? 5, ability.name, playerId)
             const crits = rolls.filter(r => r >= 9).length
             pushLog(state, playerId, `${ability.name}: [${rolls.join(', ')}] → ${crits} crit`, 'ability')
             if (crits > 0) {
@@ -765,7 +766,7 @@ function unitById(state: GameState, id: string) {
 
 export function applyResponseCardEffect(
     state: GameState, playerId: PlayerId, effect: CardEffect, context: PendingResponse,
-    rng: () => number,
+    rng: Rng,
 ): EffectResult {
     switch (effect.type) {
         case 'reduce_incoming_damage': {
@@ -784,8 +785,7 @@ export function applyResponseCardEffect(
             const weapon = defender.weapons.find(w => gridDistance(defender.position!, attacker.position!) <= w.range)
             if (!weapon) return fail('El atacante está fuera del alcance de todas sus armas')
             let hits = 0
-            for (let i = 0; i < weapon.strength; i++) {
-                const r = rng()
+            for (const r of rollMany(rng, weapon.strength, `${defender.name} devuelve el ataque con ${weapon.name}`, defender.playerId)) {
                 if (r !== 1 && r >= 4) hits++
             }
             damageUnit(state, attacker.id, hits, { combat: true })

@@ -7,7 +7,7 @@ import type { AreaAim } from './types/gameState'
 import { aimToward, aimTargets, rotateAim, aimKey } from './game/areaAim'
 import { attackBlockers, movementSummary, engagementNote } from './game/explain'
 import { hexKey, gridDistance } from './game/hexGrid'
-import { targetAt, baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
+import { actingPlayer, targetAt, baseOwnerAt, reachableFor, attackableHexes as calcAttackableHexes, attackableHexesWith, canPlayResponseCard, rwsAt, rwsDeployHexes, rwsAdjacentTo, alliedRws, isEmptyHex, responseAbilityOptions } from './game/queries'
 import { getNeighbors, keyToHex } from './game/hexGrid'
 import { getUnitRound } from './game/timeline'
 import { useGameData } from './game/useGameData'
@@ -21,6 +21,9 @@ import { SideRail } from './components/ui/SideRail'
 import { DiceTray } from './components/ui/DiceTray'
 import { AttackPreviewBox } from './components/ui/AttackPreviewBox'
 import { AdvisorPanel } from './components/ui/AdvisorPanel'
+import { DiceEntry } from './components/ui/DiceEntry'
+import { MesaBar } from './components/ui/MesaBar'
+import { mesaHand } from './game/mesa'
 import { useIsMobile } from './game/useIsMobile'
 import { myFollowUp, followUpMoveHexes, followUpAttackHexes } from './game/followUp'
 import { C, button } from './theme'
@@ -69,10 +72,17 @@ export default function App() {
   const [playerName, setPlayerName] = useState('')
   const [roomId, setRoomId] = useState('')
   const [roomInput, setRoomInput] = useState('')
-  const [myPlayerId, setMyPlayerId] = useState<'player1' | 'player2' | null>(null)
+  // Asiento del jugador (su bando). En el modo mesa lleva los dos: `myPlayerId` es el
+  // bando que debe decidir ahora; los colores y "Tú" siguen siendo los de su asiento.
+  const [seatId, setMyPlayerId] = useState<'player1' | 'player2' | null>(null)
   const [connected, setConnected] = useState(false)
   const [lobbyError, setLobbyError] = useState('')
   const [gameState, setGameState] = useState<GameState | null>(null)
+  const myPlayerId = gameState?.mesa && seatId && gameState.phase !== 'setup' && gameState.phase !== 'finished' ? actingPlayer(gameState) : seatId
+  // Modo mesa: preparación (escuadra del rival y la tuya) y quién gana la iniciativa si empatan
+  const [mesaPhase, setMesaPhase] = useState<'rival' | 'mine' | null>(null)
+  const [rivalFirst, setRivalFirst] = useState<'player1' | 'player2'>('player1')
+  const [mesaRivalName, setMesaRivalName] = useState('Rival')
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [panelUnitId, setPanelUnitId] = useState<string | null>(null)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('none')
@@ -103,6 +113,18 @@ export default function App() {
   const [advisorState, setAdvisor] = useState<{ sig: string; plays: PlaySuggestion[] | null; error: string | null } | null>(null)
   const [advisorHoverState, setAdvisorHover] = useState<PlaySuggestion | null>(null)
   const advisorSig = gameState ? `${gameState.activeUnitId}|${gameState.log.length}|${gameState.hasUsedPrimaryAction}|${gameState.activation?.advanced}` : ''
+  // Modo mesa, "Nadie responde": pasa solas las ventanas de Response de la acción en curso
+  const passSig = gameState ? `${gameState.activeUnitId}|${gameState.hasUsedPrimaryAction}|${gameState.activation?.attacksMade.length ?? 0}|${gameState.activation?.cardPlayed}` : ''
+  const [autoPassSig, setAutoPassSig] = useState<string | null>(null)
+  const lastAutoPass = useRef('')
+  useEffect(() => {
+    const pr = gameState?.pendingResponse
+    if (!gameState?.mesa || !pr || gameState.pendingDice || autoPassSig !== passSig) return
+    const key = `${passSig}|${pr.trigger}|${pr.forPlayerId}|${gameState.log.length}`
+    if (lastAutoPass.current === key) return
+    lastAutoPass.current = key
+    socket.emit('GAME_ACTION', { action: { type: 'PASS_RESPONSE' } })
+  }, [gameState, autoPassSig, passSig])
   const advisor = advisorState?.sig === advisorSig ? advisorState : null
   const advisorHover = advisor ? advisorHoverState : null
   const [selectedSquad, setSelectedSquad] = useState<string[]>([])
@@ -138,7 +160,7 @@ export default function App() {
   const { toasts, addToast } = useToasts()
 
   useEffect(() => { gameStateRef.current = gameState }, [gameState])
-  useEffect(() => { myPlayerIdRef.current = myPlayerId }, [myPlayerId])
+  useEffect(() => { myPlayerIdRef.current = seatId }, [seatId])
 
   const clearSelection = useCallback(() => {
     setSelectedUnitId(null)
@@ -270,8 +292,10 @@ export default function App() {
     socket.on('MATCH_SEARCHING', () => setIsSearching(true))
     socket.on('MATCH_CANCELLED', () => setIsSearching(false))
 
-    socket.on('SQUAD_SELECTION_STARTED', ({ playerId, roomId: rId, squadSize: size }: { playerId: 'player1' | 'player2'; roomId: string; squadSize?: number }) => {
+    socket.on('SQUAD_SELECTION_STARTED', ({ playerId, roomId: rId, squadSize: size, mesa }: { playerId: 'player1' | 'player2'; roomId: string; squadSize?: number; mesa?: boolean }) => {
       setMyPlayerId(playerId)
+      setMesaPhase(mesa ? 'rival' : null)
+      setRivalFirst('player1')
       setRoomId(rId)
       setSquadSize(size ?? 3)
       setSelectedSquad([])
@@ -290,6 +314,8 @@ export default function App() {
     })
 
     socket.on('SQUAD_ACCEPTED', () => setSquadSubmitted(true))
+    // Modo mesa: escuadra del rival aceptada → ahora la tuya
+    socket.on('MESA_RIVAL_ACCEPTED', () => { setMesaPhase('mine'); setSelectedSquad([]); setSelectedDeck([]); setSquadStep('units') })
     socket.on('CHAT_MESSAGE', (m: ChatMessage) => { setChat(prev => [...prev.slice(-99), m]); sfx.chat() })
 
     socket.on('GAME_STARTED', ({ gameState, playerId }: { gameState: GameState; playerId: 'player1' | 'player2' }) => {
@@ -371,7 +397,7 @@ export default function App() {
           setSelectionMode('none')
           setSelectedWeaponIndex(null)
           setPanelUnitId(null)
-          return newState.activePlayerId === myPlayerIdRef.current ? newState.activeUnitId : null
+          return newState.activePlayerId === myPlayerIdRef.current || newState.mesa ? newState.activeUnitId : null
         }
         return prev
       })
@@ -440,7 +466,7 @@ export default function App() {
     return () => {
       socket.off('connect'); socket.off('disconnect'); socket.off('connect_error')
       socket.off('ROOM_CREATED'); socket.off('JOIN_ERROR'); socket.off('MATCH_SEARCHING')
-      socket.off('MATCH_CANCELLED'); socket.off('SQUAD_SELECTION_STARTED'); socket.off('SQUAD_ACCEPTED'); socket.off('GAME_STARTED')
+      socket.off('MATCH_CANCELLED'); socket.off('SQUAD_SELECTION_STARTED'); socket.off('SQUAD_ACCEPTED'); socket.off('MESA_RIVAL_ACCEPTED'); socket.off('GAME_STARTED')
       socket.off('CHAT_MESSAGE')
       socket.off('GAME_STATE_UPDATE'); socket.off('GAME_OVER'); socket.off('ACTION_ERROR')
       socket.off('OPPONENT_DISCONNECTED'); socket.off('OPPONENT_RECONNECTED'); socket.off('OPPONENT_ABANDONED')
@@ -1086,6 +1112,7 @@ export default function App() {
         onCancelMatch={() => socket.emit('CANCEL_MATCH')}
         onCreateRoom={() => socket.emit('CREATE_ROOM', { playerName: playerName.trim(), mapId, squadSize })}
         onPlayBot={level => socket.emit('PLAY_BOT', { playerName: playerName.trim(), mapId, squadSize, level })}
+        onCreateMesa={rivalName => { setMesaRivalName(rivalName); socket.emit('CREATE_MESA', { playerName: playerName.trim(), rivalName, mapId, squadSize }) }}
         maps={maps}
         mapId={mapId}
         onMapIdChange={setMapId}
@@ -1134,7 +1161,11 @@ export default function App() {
       squadStep={squadStep}
       onSetSquadStep={setSquadStep}
       squadSubmitted={squadSubmitted}
-      onConfirm={(unitCardIds, cardIds) => socket.emit('SELECT_SQUAD', { unitCardIds, cardIds })}
+      onConfirm={(unitCardIds, cardIds) => mesaPhase === 'rival'
+        ? socket.emit('MESA_RIVAL', { unitCardIds, first: rivalFirst })
+        : socket.emit('SELECT_SQUAD', { unitCardIds, cardIds })}
+      mesa={mesaPhase !== null}
+      rivalStep={mesaPhase === 'rival' ? { name: mesaRivalName, first: rivalFirst, onFirst: setRivalFirst } : undefined}
     />
   )
 
@@ -1182,7 +1213,7 @@ export default function App() {
   const handStrip = hasHandStrip && myPlayerId && (
     <div style={{ height: isMobile ? 132 : HAND_STRIP_H, flexShrink: 0, background: `linear-gradient(180deg, ${C.bg}, ${C.bgDeep})`, borderTop: `1px solid ${C.line}`, position: 'relative', zIndex: 20 }}>
       <TacticsHand
-        hand={gameState.players[myPlayerId].tactics.hand}
+        hand={mesaHand(gameState, myPlayerId, seatId)}
         isMyTurn={isMyTurn}
         selectedCardId={pendingCardId}
         deckCount={gameState.players[myPlayerId].tactics.deck.length}
@@ -1209,6 +1240,7 @@ export default function App() {
       isActive={gameState.activeUnitId === panelUnit.id}
       // Sin bando propio (espectador, repetición) los colores siguen la vista del jugador 1, como sideColor
       isMyUnit={panelUnit.playerId === (myPlayerId ?? 'player1')}
+      ally={panelUnit.playerId === (seatId ?? 'player1')}
       isMyTurn={isMyTurn}
       isSelected={panelUnit.id === selectedUnitId}
       advanced={gameState.activation?.advanced ?? false}
@@ -1264,9 +1296,9 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', color: C.text }}>
 
-      <TimelineBar gameState={gameState} myPlayerId={myPlayerId} compact={isMobile} />
+      <TimelineBar gameState={gameState} myPlayerId={seatId} compact={isMobile} />
 
-      <GameStatusBar gameState={gameState} myPlayerId={myPlayerId} isMyTurn={isMyTurn}
+      <GameStatusBar gameState={gameState} myPlayerId={seatId} isMyTurn={gameState.activePlayerId === seatId}
         message={replay ? gameState.log[gameState.log.length - 1]?.message ?? '' : statusMessage}
         badge={replay ? 'Repetición' : spectating ? 'Espectador' : undefined}
         spectators={replay ? 0 : spectators}
@@ -1274,11 +1306,17 @@ export default function App() {
         onLeave={spectating ? leaveSpectating : undefined}
         onSurrender={myPlayerId ? () => socket.emit('GAME_ACTION', { action: { type: 'SURRENDER' } }) : undefined} />
 
+      {gameState.mesa && seatId && myPlayerId && !isFinished && (
+        <MesaBar gameState={gameState} seatId={seatId} acting={myPlayerId} compact={isMobile}
+          onUndo={() => socket.emit('MESA_UNDO')}
+          onNobodyResponds={() => setAutoPassSig(passSig)} />
+      )}
+
       <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0 }}>
           <GameScene
             gameState={gameState}
-            myPlayerId={myPlayerId}
+            myPlayerId={seatId}
             selectedUnitId={selectedUnitId}
             reachableHexes={forcedHexes ?? fuMove ?? (myFU ? EMPTY_SET : reachableHexes)}
             attackableHexes={forcedHexes ? EMPTY_SET : fuAttack ?? (myFU ? EMPTY_SET : aimInfo ? new Set(aimInfo.hexes) : attackableHexes)}
@@ -1292,7 +1330,7 @@ export default function App() {
           />
         </div>
 
-        <DiceTray gameState={gameState} myPlayerId={myPlayerId} />
+        <DiceTray gameState={gameState} myPlayerId={seatId} />
         {preview && preview.key === previewSig && (areaWeapon || attackableHexes.has(hoverKey ?? '')) && (selectionMode === 'attacking' || selectionMode === 'playing_card') && (
           <AttackPreviewBox preview={preview.data}
             targetName={(() => {
@@ -1333,10 +1371,19 @@ export default function App() {
         )}
         <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
 
-        {gameState.vsBot && myPlayerId && isMyTurn && !replay && !isFinished && activeUnit?.playerId === myPlayerId && !myFU && !areaWeapon
-          && !gameState.pendingAttack && !gameState.pendingResponse && !gameState.pendingForcedMove && (
+        {gameState.mesa && gameState.pendingDice && seatId && (
+          <DiceEntry key={`${gameState.pendingDice.reason}|${gameState.pendingDice.rolls.length}|${gameState.log.length}`}
+            pending={gameState.pendingDice} compact={isMobile}
+            mine={gameState.pendingDice.forPlayerId === seatId}
+            rollerName={gameState.players[gameState.pendingDice.forPlayerId].name}
+            onSubmit={values => socket.emit('GAME_ACTION', { action: { type: 'SUBMIT_DICE', values } })} />
+        )}
+
+        {(gameState.vsBot || gameState.mesa) && myPlayerId && isMyTurn && !replay && !isFinished && activeUnit?.playerId === myPlayerId && !myFU && !areaWeapon
+          && !gameState.pendingAttack && !gameState.pendingResponse && !gameState.pendingForcedMove && !gameState.pendingDice && (
           advisor
             ? <AdvisorPanel plays={advisor.plays} error={advisor.error} compact={isMobile}
+                subtitle={gameState.mesa && activeUnit.playerId !== seatId ? `Lo más peligroso que puede hacer ${gameState.players[activeUnit.playerId].name}` : undefined}
                 onHover={setAdvisorHover} onClose={() => { setAdvisor(null); setAdvisorHover(null) }} />
             : <button type="button" title="Las mejores jugadas para esta unidad, según el bot experto"
                 onClick={() => {
@@ -1345,7 +1392,7 @@ export default function App() {
                   socket.emit('SUGGEST_PLAYS', {}, (r: { plays: PlaySuggestion[]; error?: string }) => setAdvisor({ sig, plays: r.plays, error: r.error ?? null }))
                 }}
                 style={{ ...button('amber'), position: 'absolute', top: 12, zIndex: 31, ...(isMobile ? { left: '50%', transform: 'translateX(-50%)' } : { left: 324 }) }}>
-                ¿Qué haría el experto?
+                {gameState.mesa ? (activeUnit.playerId === seatId ? 'Mejor jugada' : '¿Qué puede hacer el rival?') : '¿Qué haría el experto?'}
               </button>
         )}
 
@@ -1393,7 +1440,7 @@ export default function App() {
           <>
             {unitPanel && <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 15, maxHeight: 'calc(100% - 24px)', display: 'flex' }}>{unitPanel}</div>}
             <div style={{ position: 'absolute', top: 12, right: 12, bottom: 12, width: 300, zIndex: 15, display: 'flex', flexDirection: 'column' }}>
-              <SideRail gameState={gameState} myPlayerId={myPlayerId} chat={chat}
+              <SideRail gameState={gameState} myPlayerId={seatId} chat={chat}
                 onSendChat={text => socket.emit('CHAT', { text })}
                 onHoverHexes={hexes => setLogHoveredHexes(hexes ? new Set(hexes) : new Set())}
                 muted={muted} onToggleMute={() => { setMuted(!muted); setMutedState(!muted) }} />
@@ -1410,7 +1457,7 @@ export default function App() {
             </div>
             {mobileSheet === 'info' && (
               <div style={{ position: 'absolute', top: 50, left: 10, right: 10, bottom: 10, zIndex: 25, display: 'flex', flexDirection: 'column' }}>
-                <SideRail gameState={gameState} myPlayerId={myPlayerId} chat={chat}
+                <SideRail gameState={gameState} myPlayerId={seatId} chat={chat}
                   onSendChat={text => socket.emit('CHAT', { text })}
                   onHoverHexes={hexes => setLogHoveredHexes(hexes ? new Set(hexes) : new Set())}
                   muted={muted} onToggleMute={() => { setMuted(!muted); setMutedState(!muted) }} />
@@ -1449,7 +1496,7 @@ export default function App() {
       {isFinished && !replay && (
         <GameOverModal
           gameState={gameState}
-          myPlayerId={myPlayerId}
+          myPlayerId={seatId}
           rematch={rematch}
           onRematch={myPlayerId ? () => { setRematch('sent'); socket.emit('REMATCH') } : undefined}
           onWatchReplay={replayId ? () => openReplay(replayId) : undefined}

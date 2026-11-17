@@ -1,7 +1,7 @@
 // IA sencilla para el rival automático y las partidas de prueba (self-play).
 // Elige acciones legales con unas reglas simples; el motor valida todo igualmente.
 import type { GameState, GameAction, PlayerId } from '../types'
-import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes, baseOwnerAt } from './queries'
+import { followUpReady, reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes, baseOwnerAt } from './queries'
 import { previewAttack } from './combat'
 import { keyToHex, gridDistance, hexKey } from './hexGrid'
 import { planActivation } from './planner'
@@ -54,16 +54,8 @@ function conditionMet(s: GameState, player: PlayerId, card: { effectData?: { typ
     return true
 }
 
-// Jugador que debe actuar ahora (el que responde, si hay una ventana abierta).
-export function actingPlayer(s: GameState): PlayerId {
-    return s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId
-        ?? (followUpReady(s) ? s.pendingFollowUp!.playerId : null) ?? s.activePlayerId
-}
-
-// Hay un movimiento y ataque pendientes listos para resolverse (ya no hay ataque en curso)
-export function followUpReady(s: GameState): boolean {
-    return !!s.pendingFollowUp && !s.pendingAttack && !s.pendingResponse && !s.pendingForcedMove
-}
+// Quién decide ahora y si hay un Iron-Blooded listo: viven en queries.ts (compartido)
+export { actingPlayer, followUpReady } from './queries'
 
 export type BotLevel = 'facil' | 'normal' | 'dificil' | 'experto'
 export const BOT_LEVELS: BotLevel[] = ['facil', 'normal', 'dificil', 'experto']

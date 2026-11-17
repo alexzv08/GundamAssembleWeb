@@ -8,6 +8,7 @@ Proyecto personal de Alejandro de la Torre Ruiz. Fan project sin ánimo de lucro
 
 - **Multijugador en tiempo real** con Socket.IO: salas privadas con código y emparejamiento aleatorio.
 - **Partida contra la máquina** con cuatro niveles de dificultad (el experto planifica cada activación completa) y un **consejero** que propone las mejores jugadas y explica por qué.
+- **Modo mesa**: para partidas con miniaturas en una mesa real. Apuntas lo que hacéis los dos y los dados que salen (el mazo del rival queda oculto) y el consejero te dice la mejor jugada.
 - **Revancha, enlaces para invitar, modo espectador y repeticiones** de cada partida.
 - **Reloj de turno, rendición y partidas guardadas** que sobreviven a un reinicio del servidor.
 - **Mapas y escuadras de 3 o 5 unidades** a elegir al crear la sala.

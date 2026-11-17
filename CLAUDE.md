@@ -83,6 +83,7 @@ server/src/
     actions.ts            — apply* de cada acción + applyAction (dispatcher)
     activation.ts         — beginActivation (despliegue, Shields), endActivation, cambio de fase, fin de partida, startGame
     combat.ts             — resolveAttack: secuencia oficial de ataque (antes/después de la tirada, crits, daño)
+    dice.ts               — Rng, rollMany y dados a mano del modo mesa (manualDice, NeedDice)
     damage.ts             — cloneState, damageUnit, defeatUnit, Garrisons, Push/Pull con colisiones, Shields
     effects.ts            — modificadores Ongoing, habilidades Command, Response automáticas, cartas de Tactics
     victory.ts            — disputa de Objetivos, puntuación por fase, ganador
@@ -93,9 +94,9 @@ server/src/
     replay.ts             — repeticiones: estado inicial + acciones + dados (recordedAction) y reconstrucción (replayFrames)
     maps.ts               — lista de mapas y validación de ids (sin rutas)
     __tests__/            — tests del motor
-  rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId), abandono, revancha, espectadores
+  rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId), abandono, revancha, espectadores, modo mesa
   rooms/gameStore.ts      — partidas en curso y repeticiones en disco o Supabase (GAME_STORE=file|supabase|none)
-  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION → recordedAction (processAction + registro); reloj de turno; PREVIEW_ATTACK; SUGGEST_PLAYS; REMATCH, SPECTATE, REPLAY_*
+  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION → recordedAction (processAction + registro); reloj de turno; PREVIEW_ATTACK; SUGGEST_PLAYS; REMATCH, SPECTATE, REPLAY_*; CREATE_MESA, MESA_RIVAL, MESA_UNDO
   routes/                 — /api/maps, /api/units, /api/cards, /api/auth
 server/data/
   units/unit_library.json — 15 unidades oficiales + 6 de la demo (formato v2)
@@ -152,6 +153,7 @@ io.emit GAME_STATE_UPDATE | PHASE_TRANSITION | GAME_OVER  (con lastAttack.rolls 
 - **Objetivos**: se disputan al terminar la activación; mayoría captura (neutral) o neutraliza (rival). Puntúan al final de cada fase.
 - **Fin**: tras la Fase 2; empate → gana el último que actuó. También por `SURRENDER`, por abandono (5 min) o por agotar el reloj 3 veces seguidas (`forfeit` en victory.ts).
 - **Plantillas de área**: `aim: { facing }` (cuña, `coneHexes`) o `aim: { center }` (flor) en ATTACK / PLAY_CARD; `resolveAim` elige la mejor si falta y queda fija en `pendingAttack.aim`.
+- **Modo mesa** (`GameState.mesa`): partida real apuntada en la app. Un jugador lleva los dos bandos (actúa `actingPlayer`, en queries.ts) y los dados se introducen a mano: con `processAction(..., { manualDice: true })` la acción se para en `pendingDice` (cuántos dados y para qué) y `SUBMIT_DICE` la vuelve a resolver desde el mismo estado. Toda tirada nueva va con `rollMany(rng, n, motivo, jugador)` (dice.ts), nunca con `rng()` suelto en bucle.
 - **Repeticiones**: toda acción que llega al motor desde la sala pasa por `recordedAction`; nada de `Math.random` en el motor fuera del `rng` (si no, las repeticiones dejan de ser exactas: el self-play lo comprueba).
 
 ---
@@ -465,3 +467,11 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - **Consejero**: evento `SUGGEST_PLAYS` (solo en partidas contra la máquina, `GameState.vsBot`, y en tu activación) → `suggestPlays` + `toSuggestion` (`PlaySuggestion`: pasos en texto, acciones, valor y de dónde sale). `AdvisorPanel` junto a la ficha de la unidad, botón "¿Qué haría el experto?"; al pasar el ratón por una jugada se marcan su casilla final y su objetivo. Las jugadas se descartan en cuanto cambia la partida.
 - Tests: 162 (5 nuevos: fuego concentrado, apartarse de un enemigo que puede derribarla, capturar un Objetivo, consejero con 3 jugadas distintas sin tocar el estado, nunca terminar en la Base). Self-play 100/100 (fácil y experto contra experto); smoke con partida contra el experto y el consejero.
 - Archivos: `server/src/game/{planner,bot}.ts`, `server/src/types/gameState.ts` (+ copia), `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `server/scripts/{bot-match,socket-smoke}.ts`, `server/package.json`, tests, `client/src/App.tsx`, `client/src/components/ui/AdvisorPanel.tsx`, `client/src/screens/LobbyScreen.tsx`, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.
+
+### 2026-11-17 — Modo mesa: apuntar una partida real con dados a mano y consejero
+- **Para qué**: jugar en una mesa real con miniaturas y llevar la partida en la app (móvil, tablet u ordenador). Se eligen tu escuadra y tu mazo y la escuadra del rival (su mazo es oculto: cuenta con todas las cartas oficiales que puede llevar y las va quitando según las juega). Se apunta lo que hacéis los dos y los dados que salen; el consejero dice la mejor jugada (y, en el turno del rival, lo más peligroso que puede hacer).
+- **Motor**: `dice.ts` (`Rng` con `need`, `NeedDice`, `rollMany`, `manualDice`). Cada tirada avisa antes de cuántos dados necesita y quién tira (ataque, repetir fallos, Disarm, dados extra de crítico, Inspiring Presence, cartas que repiten, Saturated Fire y el contraataque de la Response). Con `manualDice` la acción se descarta y el estado queda con `pendingDice` (como `pendingForcedMove`); `SUBMIT_DICE { values }` la vuelve a resolver con todos los dados dados. Valida cantidad y valores 1-10. `actingPlayer` y `followUpReady` pasan a `queries.ts` (compartido) y tienen en cuenta la tirada pendiente.
+- **Sala** (`createMesaRoom`, `submitMesaRival`): el rival no tiene socket; el que actúa es `actingPlayer`; sin reloj, sin repetición guardada; si empatan en iniciativa gana quien diga el jugador (sin inventar tirada). La mano de los dos son todas sus cartas (no se sabe cuáles se han robado en la mesa). `MESA_UNDO` deshace la última acción (300 estados en memoria). El consejero (`SUGGEST_PLAYS`) funciona para el bando activo.
+- **Cliente**: opción "Modo mesa" en el lobby (nombre del rival, mapa, tamaño); pasos Rival → Tu escuadra → Tu mazo (`SquadSelectionScreen` con `rivalStep`); en partida `myPlayerId` es el bando que decide y `seatId` el asiento (colores, "Tú", resultado). `MesaBar` (quién decide y qué, "Nadie responde" para pasar todas las ventanas de Response de la acción, Deshacer), `DiceEntry` (teclado grande 1-10, también con teclado físico; hoja inferior en móvil) y mano del rival filtrada a lo jugable ahora (`game/mesa.ts`).
+- **Tests**: 166 (4 nuevos: tirada pedida y resuelta con los dados dados, dados extra por Disarm, quién tira cuando el ataque arranca al pasar el rival, sin modo mesa no se piden). Smoke con una partida completa en modo mesa (≈30 tiradas a mano, Deshacer y consejero del rival). Self-play 100/100. Probado en el navegador en escritorio y en iPhone 13.
+- Archivos: `server/src/game/{dice,combat,effects,engine,queries,bot}.ts`, `server/src/types/gameState.ts` (+ copias), `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `server/scripts/socket-smoke.ts`, tests, `client/src/App.tsx`, `client/src/game/mesa.ts`, `client/src/components/ui/{DiceEntry,MesaBar,AdvisorPanel,UnitPanel}.tsx`, `client/src/screens/{LobbyScreen,SquadSelectionScreen}.tsx`, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.

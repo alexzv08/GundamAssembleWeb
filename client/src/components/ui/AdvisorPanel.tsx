@@ -7,6 +7,7 @@ interface AdvisorPanelProps {
   onHover: (play: PlaySuggestion | null) => void
   onClose: () => void
   compact?: boolean
+  subtitle?: string
 }
 
 const fmt = (n: number) => `${n > 0 ? '+' : ''}${n.toLocaleString('es-ES', { maximumFractionDigits: 1 })}`
@@ -14,7 +15,7 @@ const fmt = (n: number) => `${n > 0 ? '+' : ''}${n.toLocaleString('es-ES', { max
 // Consejero: las 3 mejores activaciones según el bot experto, con de dónde sale su
 // valor. Al pasar el ratón por una jugada se marcan en el tablero su casilla final y
 // su objetivo. Solo informa: el jugador decide y hace las acciones él mismo.
-export function AdvisorPanel({ plays, error, onHover, onClose, compact = false }: AdvisorPanelProps) {
+export function AdvisorPanel({ plays, error, onHover, onClose, compact = false, subtitle = 'Lo que haría el bot experto con esta unidad' }: AdvisorPanelProps) {
   return (
     <div role="dialog" aria-label="Consejero" style={{
       // Junto a la ficha de la unidad (escritorio), para dejar a la vista el centro del tablero
@@ -26,7 +27,7 @@ export function AdvisorPanel({ plays, error, onHover, onClose, compact = false }
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ ...eyebrow, color: C.amber }}>Consejero</span>
-        <span style={{ fontSize: 12, color: C.textDim, flex: 1 }}>Lo que haría el bot experto con esta unidad</span>
+        <span style={{ fontSize: 12, color: C.textDim, flex: 1 }}>{subtitle}</span>
         <button type="button" onClick={onClose} style={button('ghost')} aria-label="Cerrar el consejero">Cerrar</button>
       </div>
       {error && <div style={{ fontSize: 13, color: C.textSoft }}>{error}</div>}

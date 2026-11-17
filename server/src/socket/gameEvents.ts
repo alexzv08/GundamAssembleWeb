@@ -10,12 +10,17 @@ import { previewAttack } from '../game/combat'
 import { suggestPlays, toSuggestion } from '../game/planner'
 import { cloneState, pushLog } from '../game/damage'
 import { forfeit } from '../game/victory'
-import { recordedAction, recordForfeit, replayFrames, type Replay } from '../game/replay'
+import { recordedAction, recordForfeit, replayFrames, REPLAY_OPTS, type Replay } from '../game/replay'
+import { rollD10 } from '../game/combat'
 
 const ACTION_TYPES = new Set<GameAction['type']>([
     'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON', 'ATTACK_RWS',
-    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY', 'SURRENDER', 'FOLLOW_UP',
+    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY', 'SURRENDER', 'FOLLOW_UP', 'SUBMIT_DICE',
 ])
+
+// Modo mesa: estados anteriores para Deshacer (en memoria, no se guardan con la sala)
+const MESA_UNDO_LIMIT = 300
+const mesaHistory = new Map<string, GameState[]>()
 
 function isGameAction(value: unknown): value is GameAction {
     return typeof value === 'object' && value !== null && ACTION_TYPES.has((value as { type: GameAction['type'] }).type)
@@ -87,7 +92,7 @@ function armClock(io: Server, room: Room): void {
     const actor = actingPlayer(s)
     const kind = clockKind(s)
     const seconds = kind === 'activation' ? TURN_SECONDS : RESPONSE_SECONDS
-    if ((room.vsBot && actor === 'player2') || seconds <= 0) { stopClock(room.id); s.turnClock = null; return }
+    if ((room.vsBot && actor === 'player2') || room.mesa || seconds <= 0) { stopClock(room.id); s.turnClock = null; return }
     const key = clockKey(s)
     const cur = clocks.get(room.id)
     if (cur?.key === key) {
@@ -220,6 +225,30 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         socket.emit('SQUAD_SELECTION_STARTED', { playerId: 'player1', roomId: room.id, mapId: room.mapId, squadSize: room.squadSize, vsBot: true })
     })
 
+    // ── Modo mesa: partida real apuntada en la app ─────────────────────────────
+    socket.on('CREATE_MESA', ({ playerName, rivalName, mapId, squadSize }: { playerName?: string; rivalName?: string; mapId?: string; squadSize?: number } = {}) => {
+        for (const id of mesaHistory.keys()) if (!roomManager.getRoom(id)) mesaHistory.delete(id)   // salas ya cerradas
+        const room = roomManager.createMesaRoom(socket.id, cleanName(playerName, defaultName), userId, { mapId, squadSize, rivalName })
+        socket.join(room.id)
+        socket.emit('SQUAD_SELECTION_STARTED', { playerId: 'player1', roomId: room.id, mapId: room.mapId, squadSize: room.squadSize, mesa: true })
+    })
+
+    socket.on('MESA_RIVAL', ({ unitCardIds, first }: { unitCardIds?: string[]; first?: string } = {}) => {
+        const result = roomManager.submitMesaRival(socket.id, Array.isArray(unitCardIds) ? unitCardIds : [], first)
+        if ('error' in result) return socket.emit('ACTION_ERROR', { message: result.error })
+        socket.emit('MESA_RIVAL_ACCEPTED')
+    })
+
+    socket.on('MESA_UNDO', () => {
+        const room = roomManager.getRoomBySocket(socket.id)
+        const prev = room?.mesa ? mesaHistory.get(room.id)?.pop() : null
+        if (!room || !prev) return socket.emit('ACTION_ERROR', { message: 'No hay nada que deshacer' })
+        room.gameState = prev
+        room.status = 'playing'
+        persistRoom(room)
+        io.to(room.id).emit('GAME_STATE_UPDATE', { gameState: prev, action: null, actionType: 'UNDO' })
+    })
+
     // ── Emparejamiento aleatorio ───────────────────────────────────────────────
     socket.on('FIND_MATCH', ({ playerName }: { playerName?: string } = {}) => {
         const result = roomManager.joinQueue(socket.id, cleanName(playerName, defaultName), userId)
@@ -296,10 +325,22 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
             return
         }
 
-        const result = recordedAction(room.record, room.gameState, action, playerId)
+        // Modo mesa: el jugador lleva los dos bandos (actúa quien deba decidir ahora)
+        // y los dados son los de la mesa real
+        const actor = room.mesa ? (action.type === 'SURRENDER' ? playerId : actingPlayer(room.gameState)) : playerId
+        const before = room.gameState
+        const result = room.mesa
+            ? recordedAction(room.record, before, action, actor, rollD10, { ...REPLAY_OPTS, manualDice: true })
+            : recordedAction(room.record, before, action, actor)
         if (!result.success || !result.state) {
             socket.emit('ACTION_ERROR', { message: result.error })
             return
+        }
+        if (room.mesa) {
+            const h = mesaHistory.get(room.id) ?? []
+            h.push(before)
+            if (h.length > MESA_UNDO_LIMIT) h.shift()
+            mesaHistory.set(room.id, h)
         }
         strikes.delete(`${room.id}:${playerId}`)
         publish(io, room, result, action)
@@ -331,9 +372,11 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         const playerId = roomManager.getPlayerIdBySocket(socket.id)
         const s = room?.gameState
         if (!s || !playerId) return ack({ plays: [], error: 'No estás en una partida' })
-        if (!room!.vsBot) return ack({ plays: [], error: 'El consejero solo está en las partidas contra la máquina' })
-        if (s.activePlayerId !== playerId || s.pendingAttack || s.pendingResponse || s.pendingForcedMove || s.pendingFollowUp) return ack({ plays: [], error: 'Ahora no es tu activación' })
-        ack({ plays: suggestPlays(s, playerId, 3).map(p => toSuggestion(s, p)) })
+        if (!room!.vsBot && !room!.mesa) return ack({ plays: [], error: 'El consejero solo está en las partidas contra la máquina y en el modo mesa' })
+        // En el modo mesa también para el rival: lo que más daño puede hacerte
+        const side = room!.mesa ? s.activePlayerId : playerId
+        if (s.activePlayerId !== side || s.pendingAttack || s.pendingResponse || s.pendingForcedMove || s.pendingFollowUp || s.pendingDice) return ack({ plays: [], error: 'Ahora no es tu activación' })
+        ack({ plays: suggestPlays(s, side, 3).map(p => toSuggestion(s, p)) })
     })
 
     // ── Chat de la sala ────────────────────────────────────────────────────────

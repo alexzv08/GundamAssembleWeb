@@ -3,7 +3,7 @@ import { GameState } from '../types/gameState'
 import { randomInt } from 'crypto'
 import { startGame } from '../game/activation'
 import { createServerGame } from '../game/createServerGame'
-import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck } from '../game/catalog'
+import { loadUnitCatalog, loadTacticsCatalog, validateSquad, validateDeck, eligibleCards } from '../game/catalog'
 import { mapExists, randomMapId } from '../game/maps'
 import { forfeit } from '../game/victory'
 import type { GameStore, ReplayStore } from './gameStore'
@@ -27,7 +27,11 @@ export interface Room {
     record?: ReplayRecord | null       // acciones de la partida en curso (para la repetición)
     replayId?: string | null           // repetición guardada al terminar
     rematch?: ('player1' | 'player2')[] // quién ha pedido la revancha
+    mesa?: boolean                     // modo mesa: un jugador apunta una partida real y lleva los dos bandos
+    mesaFirst?: 'player1' | 'player2'  // modo mesa: quién gana la tirada si empatan en iniciativa
 }
+
+export const MESA_USER_ID = 'mesa'
 
 export const BOT_USER_ID = 'bot'
 
@@ -82,6 +86,31 @@ export class RoomManager {
         return room
     }
 
+    // Modo mesa: el jugador apunta en la app una partida que juega en una mesa real.
+    // Lleva los dos bandos; el del rival no tiene socket propio y su mazo es oculto.
+    createMesaRoom(socketId: string, playerName: string, userId: string, opts: RoomOptions & { rivalName?: string } = {}): Room {
+        const room = this.createRoom(socketId, playerName, userId, opts)
+        const rival = typeof opts.rivalName === 'string' && opts.rivalName.trim() ? opts.rivalName.trim().slice(0, 32) : 'Rival'
+        room.players.push({ socketId: '', userId: MESA_USER_ID, playerId: 'player2', name: rival })
+        room.status = 'squad_selection'
+        room.mesa = true
+        return room
+    }
+
+    // Escuadra del rival en el modo mesa. Su mazo no se conoce: cuenta con todas las
+    // cartas oficiales que puede llevar (y las va quitando según las juega).
+    submitMesaRival(socketId: string, unitCardIds: string[], first: unknown): { room: Room } | { error: string } {
+        const room = this.getRoomBySocket(socketId)
+        if (!room?.mesa || room.status !== 'squad_selection') return { error: 'No estás preparando una partida en modo mesa' }
+        const units = loadUnitCatalog()
+        const squadError = validateSquad(unitCardIds, units, room.squadSize)
+        if (squadError) return { error: `Escuadra del rival: ${squadError}` }
+        room.squadSelections.player2 = unitCardIds
+        room.deckSelections.player2 = eligibleCards(unitCardIds, units, loadTacticsCatalog()).filter(c => c.source !== 'demo').map(c => c.id)
+        room.mesaFirst = first === 'player2' ? 'player2' : 'player1'
+        return { room }
+    }
+
     joinRoom(roomId: string, socketId: string, playerName: string, userId: string): Room | null {
         const room = this.rooms.get(roomId)
         if (!room || room.players.length >= 2 || room.status !== 'waiting') return null
@@ -123,9 +152,22 @@ export class RoomManager {
                 room.squadSelections.player2!,
                 room.deckSelections.player1!,
                 room.deckSelections.player2!,
-                { mapId: room.mapId },
+                // Modo mesa: si empatan en iniciativa gana quien dijo el jugador (tirada de la mesa)
+                room.mesa ? { mapId: room.mapId, rng: mesaInitiative(room.mesaFirst ?? 'player1') } : { mapId: room.mapId },
             )
             if (room.vsBot) room.gameState.vsBot = true
+            if (room.mesa) {
+                room.gameState.mesa = true
+                // La tirada de iniciativa (si hubo empate) se hizo en la mesa: no inventar números
+                const g = room.gameState
+                for (const l of g.log) if (l.message.startsWith('Iniciativa:')) l.message = `Iniciativa: empate en TL; empieza ${g.players[room.mesaFirst ?? 'player1'].name} (tirada de la mesa)`
+                // La mano real de cada uno no se conoce: se puede jugar cualquier carta del mazo
+                for (const p of ['player1', 'player2'] as const) {
+                    const t = room.gameState.players[p].tactics
+                    t.hand = [...t.hand, ...t.deck]
+                    t.deck = []
+                }
+            }
             room.status = 'playing'
         }
 
@@ -138,7 +180,7 @@ export class RoomManager {
         if (!room || !playerId || !room.gameState || room.gameState.phase !== 'setup') return null
 
         room.setupConfirmed[playerId] = true
-        if (room.vsBot) room.setupConfirmed.player2 = true   // el bot confirma siempre
+        if (room.vsBot || room.mesa) room.setupConfirmed.player2 = true   // el bot (o el rival de la mesa) confirma siempre
         const bothConfirmed = room.setupConfirmed.player1 && room.setupConfirmed.player2
 
         if (bothConfirmed) {
@@ -356,6 +398,7 @@ export class RoomManager {
         if (ft) clearTimeout(ft)
         this.finishedTimers.set(room.id, setTimeout(() => { if (room.status === 'finished') this.cleanupRoom(room.id) }, 30 * 60_000))
         if (room.replayId) return room.replayId
+        if (room.mesa) return null      // las partidas de mesa no se guardan como repetición
         const final = room.gameState
         if (!room.record || !final || !this.replays) return null
         const id = Array.from({ length: 12 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[randomInt(32)]).join('')
@@ -411,3 +454,10 @@ export class RoomManager {
 }
 
 export const roomManager = new RoomManager()
+
+// Tirada de iniciativa del modo mesa: la gana el jugador indicado
+function mesaInitiative(first: 'player1' | 'player2'): () => number {
+    const seq = first === 'player1' ? [10, 1] : [1, 10]
+    let i = 0
+    return () => seq[i++ % 2]
+}

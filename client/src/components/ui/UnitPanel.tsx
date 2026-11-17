@@ -7,6 +7,8 @@ interface UnitPanelProps {
     unit: Unit
     isActive: boolean
     isMyUnit: boolean
+    /** Color del bando si no coincide con isMyUnit (modo mesa: colores del asiento, no de quien decide) */
+    ally?: boolean
     isMyTurn: boolean
     isSelected: boolean
     advanced: boolean
@@ -40,11 +42,11 @@ const UPGRADE_LABEL: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = { disarm: 'Disarm', fracture: 'Fracture', slow: 'Slow' }
 
 export function UnitPanel({
-    unit, isActive, isMyUnit, isMyTurn, advanced, usedCommands, freeDashes, freeAttacks, hasUsedPrimary,
+    unit, isActive, isMyUnit, ally, isMyTurn, advanced, usedCommands, freeDashes, freeAttacks, hasUsedPrimary,
     selectedWeaponIndex, currentTlRound, canRescue = false, mustLeaveBase = false, mode, compact = false,
     onMove, onDash, onAttack, onUseAbility, onEnergize, onRescue, onEndTurn, onCancel, onToggleAutoResponses, onClose,
 }: UnitPanelProps) {
-    const side = isMyUnit ? C.ally : C.enemy
+    const side = (ally ?? isMyUnit) ? C.ally : C.enemy
     const hpPercent = unit.currentHp / unit.maxHp
     const hpColor = hpPercent > 0.5 ? C.ok : hpPercent > 0.25 ? C.warn : C.danger
     // H1: en tu turno, la unidad activa enseña sus acciones sin tener que pulsar el modelo

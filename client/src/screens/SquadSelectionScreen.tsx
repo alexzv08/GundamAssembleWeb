@@ -29,6 +29,10 @@ interface SquadSelectionScreenProps {
   onSetSquadStep: (step: 'units' | 'deck') => void
   squadSubmitted: boolean
   onConfirm: (unitCardIds: string[], cardIds: string[]) => void
+  /** Modo mesa, primer paso: escuadra del rival (sin mazo, que es oculto) */
+  rivalStep?: { name: string; first: 'player1' | 'player2'; onFirst: (p: 'player1' | 'player2') => void }
+  /** Modo mesa: muestra los tres pasos (rival, tu escuadra, tu mazo) */
+  mesa?: boolean
 }
 
 type TypeFilter = 'all' | 'attack' | 'command' | 'response'
@@ -40,7 +44,7 @@ type TypeFilter = 'all' | 'attack' | 'command' | 'response'
 export function SquadSelectionScreen({
   squadSize: MAX_SQUAD = DEFAULT_SQUAD_SIZE, playerName,
   availableUnitCards, availableTacticsCards, selectedSquad, onToggleUnit, selectedDeck, onToggleCard,
-  squadStep, onSetSquadStep, squadSubmitted, onConfirm,
+  squadStep, onSetSquadStep, squadSubmitted, onConfirm, rivalStep, mesa = false,
 }: SquadSelectionScreenProps) {
   const mobile = useIsMobile()
   const [focusUnit, setFocusUnit] = useState<string | null>(null)
@@ -73,15 +77,18 @@ export function SquadSelectionScreen({
   const header = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
       <div>
-        <h1 style={{ fontSize: 24, color: C.text }}>{squadStep === 'units' ? 'Elige tu escuadra' : 'Mazo de Tactics'}</h1>
-        <div style={{ ...eyebrow, color: C.ally }}>{playerName}</div>
+        <h1 style={{ fontSize: 24, color: C.text }}>{rivalStep ? 'Escuadra del rival' : squadStep === 'units' ? 'Elige tu escuadra' : 'Mazo de Tactics'}</h1>
+        <div style={{ ...eyebrow, color: rivalStep ? C.enemy : C.ally }}>{rivalStep ? `${rivalStep.name} · su mazo queda oculto` : playerName}</div>
       </div>
       <ol style={{ marginLeft: 'auto', display: 'flex', gap: 6, listStyle: 'none' }} aria-label="Pasos">
-        {(['units', 'deck'] as const).map((s, i) => (
-          <li key={s} style={{ ...chip(squadStep === s ? C.amber : C.textDim), padding: '3px 8px', fontSize: 10.5 }}>
-            {i + 1} · {s === 'units' ? 'Escuadra' : 'Mazo'}
-          </li>
-        ))}
+        {(mesa ? ['rival', 'units', 'deck'] as const : ['units', 'deck'] as const).map((s, i) => {
+          const current = rivalStep ? s === 'rival' : s === squadStep
+          return (
+            <li key={s} style={{ ...chip(current ? C.amber : C.textDim), padding: '3px 8px', fontSize: 10.5 }}>
+              {i + 1} · {s === 'rival' ? 'Rival' : s === 'units' ? (mesa ? 'Tu escuadra' : 'Escuadra') : (mesa ? 'Tu mazo' : 'Mazo')}
+            </li>
+          )
+        })}
       </ol>
     </div>
   )
@@ -243,10 +250,26 @@ export function SquadSelectionScreen({
               ))}
             </div>
             {squadError && selectedSquad.length === MAX_SQUAD && <span style={{ color: C.warn, fontSize: 12.5 }}>{squadError}</span>}
-            <button disabled={squadError !== null} onClick={() => onSetSquadStep('deck')}
-              style={{ ...button('amber', squadError !== null), padding: '10px 22px', fontSize: 14, fontWeight: 600 }}>
-              Elegir mazo
-            </button>
+            {rivalStep ? (
+              <>
+                <div role="radiogroup" aria-label="Si empatáis en iniciativa, gana la tirada" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: C.textSoft }} title="Solo cuenta si las dos escuadras empiezan con el mismo TL más bajo">Si empatáis en iniciativa, gana la tirada:</span>
+                  {(['player1', 'player2'] as const).map(p => (
+                    <button key={p} type="button" role="radio" aria-checked={rivalStep.first === p} onClick={() => rivalStep.onFirst(p)}
+                      style={{ ...button(rivalStep.first === p ? 'primary' : 'subtle'), padding: '6px 10px' }}>{p === 'player1' ? 'Yo' : rivalStep.name}</button>
+                  ))}
+                </div>
+                <button disabled={squadError !== null || squadSubmitted} onClick={() => onConfirm(selectedSquad, [])}
+                  style={{ ...button('amber', squadError !== null || squadSubmitted), padding: '10px 22px', fontSize: 14, fontWeight: 600 }}>
+                  Siguiente: tu escuadra
+                </button>
+              </>
+            ) : (
+              <button disabled={squadError !== null} onClick={() => onSetSquadStep('deck')}
+                style={{ ...button('amber', squadError !== null), padding: '10px 22px', fontSize: 14, fontWeight: 600 }}>
+                Elegir mazo
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -254,7 +277,7 @@ export function SquadSelectionScreen({
             <span style={{ flex: 1 }} />
             <button onClick={() => onSetSquadStep('units')} disabled={squadSubmitted} style={{ ...button('ghost', squadSubmitted), padding: '10px 18px' }}>Volver a la escuadra</button>
             {squadSubmitted
-              ? <span style={{ color: C.ok, fontSize: 13.5 }}>Selección confirmada. Esperando al rival…</span>
+              ? <span style={{ color: C.ok, fontSize: 13.5 }}>{mesa ? 'Selección confirmada. Preparando la mesa…' : 'Selección confirmada. Esperando al rival…'}</span>
               : <button disabled={!canConfirm} onClick={() => onConfirm(selectedSquad, selectedDeck)}
                   style={{ ...button('amber', !canConfirm), padding: '10px 22px', fontSize: 14, fontWeight: 600 }}>Confirmar y entrar</button>}
           </>

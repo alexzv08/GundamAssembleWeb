@@ -72,6 +72,8 @@ export interface GameState {
   pendingAttack: PendingAttack | null
   /** Push / Pull esperando a que el jugador elija el siguiente hex (ver engine.ts) */
   pendingForcedMove?: PendingForcedMove | null
+  pendingDice?: PendingDice | null
+  mesa?: boolean             // modo mesa: partida real apuntada en la app (dados a mano, un jugador lleva los dos bandos)
   /** Acción que una unidad hace fuera de turno al acabar el ataque en curso (Iron-Blooded Tenacity) */
   pendingFollowUp?: PendingFollowUp | null
   /** Reloj del jugador que debe actuar (lo pone el servidor de salas, no el motor) */
@@ -147,6 +149,19 @@ export interface PendingForcedMove {
   request: ForcedMoveRequest
 }
 
+/** Modo mesa: la acción espera los dados que el jugador ha tirado en la mesa real */
+export interface PendingDice {
+  forPlayerId: PlayerId      // quién tira (el que envió la acción)
+  action: GameAction
+  actorId: PlayerId
+  /** Dados ya introducidos para esta acción (se reutilizan al volver a resolverla) */
+  rolls: number[]
+  /** Elecciones de Push / Pull ya hechas en esta acción */
+  plans: (HexCoord | null)[][] | null
+  count: number              // cuántos dados faltan
+  reason: string             // para qué ("Zaku ataca con Zaku Bazooka")
+}
+
 export interface PlayerState {
   id: PlayerId
   name: string
@@ -174,6 +189,7 @@ export type GameAction =
   | { type: 'PLAY_RESPONSE'; cardId: string; targetId?: string }
   | { type: 'PASS_RESPONSE' }
   | { type: 'CHOOSE_FORCED_MOVE'; to: HexCoord | null }
+  | { type: 'SUBMIT_DICE'; values: number[] }
   | { type: 'SURRENDER' }
   | { type: 'FOLLOW_UP'; to: HexCoord | null; targetId: string | null }
 

@@ -28,7 +28,13 @@ import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, useResponse
 import { advanceToken } from './timeline'
 import { captureObjective } from './victory'
 
-export type Rng = () => number   // devuelve un d10 (1–10)
+export { NeedDice, rollMany, type Rng } from './dice'
+import { rollMany, type Rng } from './dice'
+
+// Avisa de cuántos dados va a pedir el código que sigue (tiradas de uno en uno)
+function needDice(rng: Rng, n: number, reason: string, player?: PlayerId): void {
+    if (n > 0) rng.need?.(n, reason, player)
+}
 
 export function rollD10(): number {
     return Math.floor(Math.random() * 10) + 1
@@ -188,11 +194,12 @@ function rollDice(state: GameState, pa: PendingAttack, rng: Rng): void {
     const payload = useResponseAbility(state, pa.attackerId, 'strength_per_ally_nearby')
     if (payload) strength += (payload.amount ?? 2) * nearbyAllies(payload.range ?? 3)
 
-    pa.rolls = Array.from({ length: Math.max(0, strength) }, rng)
+    pa.rolls = rollMany(rng, Math.max(0, strength), `${attacker.name} ataca con ${pa.weapon.name}`, attacker.playerId)
     pa.critThreshold = mods.critThreshold
     const acc = accuracyFor(state, pa, pa.primaryKey)
 
     if (mods.rerollMisses > 0) {
+        needDice(rng, Math.min(mods.rerollMisses, pa.rolls.filter(r => !isHit(r, acc, pa.critThreshold)).length), 'Repetir fallos', attacker.playerId)
         let left = mods.rerollMisses
         for (let i = 0; i < pa.rolls.length && left > 0; i++) {
             if (!isHit(pa.rolls[i], acc, pa.critThreshold)) { pa.rolls[i] = rng(); pa.rerolled.push(i); left-- }
@@ -201,6 +208,7 @@ function rollDice(state: GameState, pa: PendingAttack, rng: Rng): void {
 
     pa.disarmed = attacker.statusEffects.some(e => e.type === 'disarm')
     if (pa.disarmed) {
+        needDice(rng, pa.rolls.filter(r => isHit(r, acc, pa.critThreshold)).length, `${attacker.name} está Disarmed: repite los impactos`, attacker.playerId)
         for (let i = 0; i < pa.rolls.length; i++) {
             if (isHit(pa.rolls[i], acc, pa.critThreshold)) { pa.rolls[i] = rng(); pa.rerolled.push(i) }
         }
@@ -211,7 +219,7 @@ function rollDice(state: GameState, pa: PendingAttack, rng: Rng): void {
     // Crit "Roll N additional dice" (los dados extra no vuelven a activar el crit, Q&A 13)
     const crit = weapon.critData
     if (!pa.disarmed && crit?.type === 'extra_dice' && pa.rolls.some(r => r >= pa.critThreshold)) {
-        for (let i = 0; i < (crit.amount ?? 2); i++) pa.rolls.push(rng())
+        pa.rolls.push(...rollMany(rng, crit.amount ?? 2, `Crítico de ${pa.weapon.name}: dados adicionales`, attacker.playerId))
     }
 }
 
@@ -229,6 +237,7 @@ function finishAttack(state: GameState, rng: Rng): void {
     if (inspirer && useResponseAbility(state, inspirer.id, 'inspiring_presence')) {
         const acc = accuracyFor(state, pa, pa.primaryKey)
         let left = 3
+        needDice(rng, Math.min(3, pa.rolls.filter(r => !isHit(r, acc, pa.critThreshold)).length), `${inspirer.name} (Inspiring Presence): repite hasta 3 fallos`, player)
         pa.rolls = pa.rolls.map((r, i) => {
             if (left <= 0 || isHit(r, acc, pa.critThreshold)) return r
             left--; pa.rerolled.push(i)
@@ -565,6 +574,7 @@ export function applyAttackResponse(state: GameState, player: PlayerId, card: Ta
         case 'reroll_misses': {
             const acc = accuracyFor(state, pa, pa.primaryKey)
             let n = 0
+            needDice(rng, pa.rolls.filter(r => !isHit(r, acc, pa.critThreshold)).length, `${card.name}: repite los fallos`, player)
             pa.rolls = pa.rolls.map((r, i) => {
                 if (isHit(r, acc, pa.critThreshold)) return r
                 n++; pa.rerolled.push(i)
