@@ -43,6 +43,16 @@ export function botFallback(s: GameState): GameAction {
         : { type: 'ENERGIZE', unitId: s.activeUnitId! }
 }
 
+// Cartas con condición (Hero's Might, Systematic Elimination): si no se cumple, el
+// motor las rechaza y el bot acabaría haciendo Energize en vez de actuar.
+function conditionMet(s: GameState, player: PlayerId, card: { effectData?: { type: string; threshold?: number; requiresActiveTrait?: string } | null }): boolean {
+    const e = card.effectData
+    if (e?.requiresActiveTrait && !s.units[s.activeUnitId!]?.traits.includes(e.requiresActiveTrait)) return false
+    if (e?.type === 'energy_if_rescued') return s.players[player].garrisonsRescued >= (e.threshold ?? 3)
+    if (e?.type === 'strength_if_garrisons_defeated') return (s.players[player].garrisonsDefeated ?? 0) >= (e.threshold ?? 3)
+    return true
+}
+
 // Jugador que debe actuar ahora (el que responde, si hay una ventana abierta).
 export function actingPlayer(s: GameState): PlayerId {
     return s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId
@@ -238,7 +248,7 @@ export function chooseBotAction(s: GameState, player: PlayerId, rand: () => numb
         if (!act.cardPlayed && rand() < 0.5) {
             const hand = s.players[player].tactics.hand.filter(c => !c.signature || c.signature === unit.signature)
             const simple = new Set(['gain_upgrade', 'repair', 'activation_move_buff', 'heal_per_upgrade', 'energy_if_rescued', 'strength_if_garrisons_defeated'])
-            const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type))
+            const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type) && conditionMet(s, player, c))
             if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
         }
         const smart = smartAction(s, player, rand, level, PROFILES[strategy])
@@ -270,7 +280,7 @@ export function chooseBotAction(s: GameState, player: PlayerId, rand: () => numb
             return { type: 'PLAY_CARD', unitId: id, cardId: atk.id, targetId: t.id }
         }
         const simple = new Set(['gain_upgrade', 'repair', 'activation_move_buff', 'aoe_status', 'free_attack', 'heal_per_upgrade', 'energy_if_rescued', 'rws_damage', 'rws_timeline_push', 'free_dash_and_attack', 'strength_if_garrisons_defeated'])
-        const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type))
+        const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type) && conditionMet(s, player, c))
         if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
     }
 

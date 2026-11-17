@@ -443,3 +443,9 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - Primer torneo: 141.000 partidas (100 por escuadra y estrategia, nivel difícil), ~3,2 h con 4 procesos.
 - Archivos: `server/src/game/bot.ts`, `server/scripts/{tournament,tournament-report}.ts`, `server/package.json`, tests, `CLAUDE.md`.
 
+
+### 2026-11-17 — El bot ya no pierde activaciones con cartas que no puede jugar
+- Encontrado con el torneo: el bot intentaba jugar Hero's Might y Systematic Elimination sin haber rescatado o derrotado 3 Garrisons, y Full System Burn con unidades sin el rasgo Londo Bell. El motor las rechazaba y el plan B del bot (`botFallback`) era Energize, así que perdía la activación. También pasaba con el bot de la web.
+- `conditionMet` en `bot.ts` comprueba el umbral y `requiresActiveTrait` antes de elegir la carta. En 300 partidas de prueba el motor ya no rechaza ninguna acción del bot (antes, 116 en 300 partidas, todas de estas cartas).
+- Test nuevo (157).
+- Archivos: `server/src/game/bot.ts`, `server/src/game/__tests__/engine.test.ts`, `CLAUDE.md`.

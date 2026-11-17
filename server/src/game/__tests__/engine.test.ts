@@ -1531,6 +1531,7 @@ describe('Plantillas fijas del 240mm Low-Recoil Cannon y el Quadruple Bop Missil
 })
 
 describe('Estrategias del bot', () => {
+  const card = (name: string) => structuredClone(loadTacticsCatalog().find(c => c.name === name)!)
   // Ataque flojo a alcance y un Objetivo de 8 VP cerca: agresión dispara, control va a por el Objetivo
   const setup = () => {
     const g = makeGame([
@@ -1555,5 +1556,14 @@ describe('Estrategias del bot', () => {
       makeUnit('e', 'player2', B),
     ])
     expect(chooseBotAction(g, 'player1', () => 0.5, 'dificil', 'velocidad')).toMatchObject({ type: 'ATTACK', weaponIndex: 1 })
+  })
+  it('no juega cartas cuya condición no se cumple (si no, el motor las rechaza y el bot pierde la activación)', () => {
+    const g = setup()
+    g.players.player1.tactics.hand = [card("Hero's Might")]
+    expect(chooseBotAction(g, 'player1', () => 0.1, 'dificil', 'agresion').type).not.toBe('PLAY_CARD')
+    g.players.player1.garrisonsRescued = 3
+    expect(chooseBotAction(g, 'player1', () => 0.1, 'dificil', 'agresion')).toMatchObject({ type: 'PLAY_CARD' })
+    g.players.player1.tactics.hand = [card('Full System Burn')]   // exige una unidad Londo Bell
+    expect(chooseBotAction(g, 'player1', () => 0.1, 'dificil', 'agresion').type).not.toBe('PLAY_CARD')
   })
 })
