@@ -88,13 +88,14 @@ server/src/
     victory.ts            — disputa de Objetivos, puntuación por fase, ganador
     catalog.ts            — carga unit_library.json / card_library.json y construye las unidades
     createServerGame.ts   — GameState inicial (tablero, unidades en Reserva, Timeline, iniciativa, mazos)
-    bot.ts                — IA del rival automático con niveles facil/normal/dificil (salas contra la máquina y self-play)
+    bot.ts                — IA del rival automático con niveles facil/normal/dificil/experto y estrategias (salas contra la máquina y self-play)
+    planner.ts            — bot experto y consejero: planifica la activación completa y la puntúa en VP (planActivation, suggestPlays)
     replay.ts             — repeticiones: estado inicial + acciones + dados (recordedAction) y reconstrucción (replayFrames)
     maps.ts               — lista de mapas y validación de ids (sin rutas)
     __tests__/            — tests del motor
   rooms/roomManager.ts    — salas, cola, validación de escuadra, reconexión (solo el mismo userId), abandono, revancha, espectadores
   rooms/gameStore.ts      — partidas en curso y repeticiones en disco o Supabase (GAME_STORE=file|supabase|none)
-  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION → recordedAction (processAction + registro); reloj de turno; PREVIEW_ATTACK; REMATCH, SPECTATE, REPLAY_*
+  socket/gameEvents.ts    — eventos Socket.IO; GAME_ACTION → recordedAction (processAction + registro); reloj de turno; PREVIEW_ATTACK; SUGGEST_PLAYS; REMATCH, SPECTATE, REPLAY_*
   routes/                 — /api/maps, /api/units, /api/cards, /api/auth
 server/data/
   units/unit_library.json — 15 unidades oficiales + 6 de la demo (formato v2)
@@ -102,6 +103,8 @@ server/data/
   maps/                   — mapas
 server/scripts/
   self-play.ts            — partidas bot contra bot (npm run selfplay)
+  bot-match.ts            — enfrenta dos niveles de bot y da el % de victorias (npm run duelo)
+  tournament.ts           — torneo de estrategias por escuadra (npm run torneo / torneo:informe)
   socket-smoke.ts         — prueba de la capa Socket.IO sin Supabase (npm run smoke)
   seed-catalog.ts         — vuelca el catálogo a Supabase
 
@@ -454,3 +457,11 @@ Offset **odd-r** (pointy-top): `q` = columna, `r` = fila; las filas impares se d
 - 141.000 partidas, 0 errores. Velocidad 54,9 %, control 49,5 %, agresión 45,6 %. Mejor unidad Guncannon (56 %), peores Wing Zero y Unicorn (~45 %).
 - Guardados en `server/data/torneos/2026-11-17/` (`summary.json`, `meta.json` y todas las partidas en `partidas.jsonl.gz`). Jugado antes de arreglar el bot con Hero's Might, Systematic Elimination y Full System Burn: los datos de esas cartas no valen.
 - Archivos: `server/data/torneos/2026-11-17/*`, `CLAUDE.md`.
+
+### 2026-11-17 — Bot experto que planifica la activación completa y consejero en partida
+- `server/src/game/planner.ts`: `planActivation` prueba las activaciones completas de la unidad activa (atacar desde aquí y luego moverse, avanzar y atacar, rescatar, Energize, Dash + Advance, terminar) y las puntúa en VP equivalentes: daño (vale más contra unidades tocadas: fuego concentrado), probabilidad de derrota × (VP + 2), Garrisons y RWS, mayoría en cada Objetivo (capturar, neutralizar, no dejar uno propio desprotegido), daño esperado de los enemigos que activan antes de que vuelva a hacerlo (con su Advance, alcance y línea de visión, y menos si los derriba antes), no quedarse pegada a aliados ante armas de área, tener enemigos a tiro y el Timeline gastado. Mueve la unidad de forma virtual y la devuelve (no copia el estado). Sin dados: valores esperados de `previewAttack`.
+- Nivel `experto` en `bot.ts` (hace el primer paso del mejor plan y vuelve a planificar tras cada acción) y en el lobby, con una línea que explica cada nivel.
+- Pesos afinados con `scripts/bot-match.ts` (`npm run duelo -- --a experto --b dificil --games N [--w '{"tl":0.5}']`). El primer intento perdía el 80 %: valoraba el daño muy por debajo del Timeline y casi no atacaba. Con los pesos finales gana al difícil el **73,5 % de 400 partidas** (58,7 VP de media contra 47), sin acciones rechazadas.
+- **Consejero**: evento `SUGGEST_PLAYS` (solo en partidas contra la máquina, `GameState.vsBot`, y en tu activación) → `suggestPlays` + `toSuggestion` (`PlaySuggestion`: pasos en texto, acciones, valor y de dónde sale). `AdvisorPanel` junto a la ficha de la unidad, botón "¿Qué haría el experto?"; al pasar el ratón por una jugada se marcan su casilla final y su objetivo. Las jugadas se descartan en cuanto cambia la partida.
+- Tests: 162 (5 nuevos: fuego concentrado, apartarse de un enemigo que puede derribarla, capturar un Objetivo, consejero con 3 jugadas distintas sin tocar el estado, nunca terminar en la Base). Self-play 100/100 (fácil y experto contra experto); smoke con partida contra el experto y el consejero.
+- Archivos: `server/src/game/{planner,bot}.ts`, `server/src/types/gameState.ts` (+ copia), `server/src/rooms/roomManager.ts`, `server/src/socket/gameEvents.ts`, `server/scripts/{bot-match,socket-smoke}.ts`, `server/package.json`, tests, `client/src/App.tsx`, `client/src/components/ui/AdvisorPanel.tsx`, `client/src/screens/LobbyScreen.tsx`, `GAMEPLAN.md`, `README.md`, `CLAUDE.md`.

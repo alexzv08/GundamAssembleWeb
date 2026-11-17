@@ -115,7 +115,7 @@ http.listen(0, async () => {
 
     // ── Partida contra la máquina ──
     const h = ioc(url, { auth: { userId: 'humano' } })
-    h.emit('PLAY_BOT', { playerName: 'Humano', squadSize: 3 })
+    h.emit('PLAY_BOT', { playerName: 'Humano', squadSize: 3, level: 'experto' })
     lastBotRoom = (await wait(h, 'SQUAD_SELECTION_STARTED')).roomId
     const squadH = ['ST01-U01', 'ST01-U02', 'ST01-U03']
     h.emit('SELECT_SQUAD', { unitCardIds: squadH, cardIds: deck(squadH) })
@@ -140,11 +140,19 @@ http.listen(0, async () => {
     await wait(viewer, 'ACTION_ERROR')
     console.log('✓ espectador dentro (y sin poder actuar)')
     let botActions = 0
+    let advised = false
     for (let i = 0; i < 3000 && !botOver; i++) {
         const s: GameState = bs!
         const mine = (s.pendingForcedMove?.forPlayerId ?? s.pendingResponse?.forPlayerId ?? (s.pendingFollowUp && !s.pendingAttack ? s.pendingFollowUp.playerId : null) ?? s.activePlayerId) === 'player1'
         if (!mine) { await new Promise(r => setTimeout(r, 5)); botActions++; continue }
         const id = s.activeUnitId!
+        // Consejero: la primera vez que es nuestra activación, pide las mejores jugadas
+        if (!advised && !s.pendingResponse && !s.pendingAttack && !s.pendingForcedMove && !s.hasUsedPrimaryAction) {
+            const r: any = await new Promise(res => h.emit('SUGGEST_PLAYS', {}, res))
+            if (r.error || !r.plays?.length || !r.plays[0].steps.length) fail(`el consejero no propuso jugadas: ${r.error ?? 'vacío'}`)
+            console.log(`✓ consejero: ${r.plays.length} jugadas; la mejor: ${r.plays[0].steps.join(' → ')}`)
+            advised = true
+        }
         let action: object
         if (s.pendingFollowUp && !s.pendingAttack && !s.pendingResponse) action = { type: 'FOLLOW_UP', to: null, targetId: null }
         else if (s.pendingResponse) action = { type: 'PASS_RESPONSE' }
@@ -158,6 +166,7 @@ http.listen(0, async () => {
         await next
     }
     if (!botOver) fail('la partida contra el bot no terminó')
+    if (!advised) fail('no se probó el consejero')
     const botMoves = bs!.log.filter(l => l.playerId === 'player2').length
     if (botMoves === 0) fail('el bot no hizo nada')
     console.log(`✓ partida contra el bot terminada (${botMoves} entradas del bot en el registro). Ganador: ${bs!.winner}`)

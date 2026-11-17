@@ -7,7 +7,7 @@ Proyecto personal de Alejandro de la Torre Ruiz. Fan project sin ánimo de lucro
 ## Funcionalidades
 
 - **Multijugador en tiempo real** con Socket.IO: salas privadas con código y emparejamiento aleatorio.
-- **Partida contra la máquina** con tres niveles de dificultad.
+- **Partida contra la máquina** con cuatro niveles de dificultad (el experto planifica cada activación completa) y un **consejero** que propone las mejores jugadas y explica por qué.
 - **Revancha, enlaces para invitar, modo espectador y repeticiones** de cada partida.
 - **Reloj de turno, rendición y partidas guardadas** que sobreviven a un reinicio del servidor.
 - **Mapas y escuadras de 3 o 5 unidades** a elegir al crear la sala.
@@ -98,6 +98,7 @@ cd server
 npm test              # tests unitarios del motor (reglas del Core Rulebook v1.2)
 npm run typecheck     # tipos de servidor, tests y scripts
 npm run selfplay      # 100 partidas bot contra bot de principio a fin
+npm run duelo         # enfrenta dos niveles de bot (por defecto experto contra difícil)
 npm run smoke         # prueba de humo de la capa Socket.IO (sin Supabase), incluida una partida contra el bot
 ```
 

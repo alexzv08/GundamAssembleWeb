@@ -125,6 +125,7 @@ export class RoomManager {
                 room.deckSelections.player2!,
                 { mapId: room.mapId },
             )
+            if (room.vsBot) room.gameState.vsBot = true
             room.status = 'playing'
         }
 

@@ -4,6 +4,7 @@ import type { GameState, GameAction, PlayerId } from '../types'
 import { reachableFor, attackableHexes, attackableHexesWith, targetAt, canPlayResponseCard, rwsDeployHexes, baseOwnerAt } from './queries'
 import { previewAttack } from './combat'
 import { keyToHex, gridDistance, hexKey } from './hexGrid'
+import { planActivation } from './planner'
 import { loadUnitCatalog, loadTacticsCatalog, validateSquad, eligibleCards, requiredDeckSize } from './catalog'
 
 function shuffleWith<T>(xs: T[], rand: () => number): T[] {
@@ -64,8 +65,8 @@ export function followUpReady(s: GameState): boolean {
     return !!s.pendingFollowUp && !s.pendingAttack && !s.pendingResponse && !s.pendingForcedMove
 }
 
-export type BotLevel = 'facil' | 'normal' | 'dificil'
-export const BOT_LEVELS: BotLevel[] = ['facil', 'normal', 'dificil']
+export type BotLevel = 'facil' | 'normal' | 'dificil' | 'experto'
+export const BOT_LEVELS: BotLevel[] = ['facil', 'normal', 'dificil', 'experto']
 
 // ─── ESTRATEGIAS ──────────────────────────────────────────────────────────────
 // Perfiles de pesos sobre la misma IA por puntuación (niveles normal y difícil).
@@ -237,7 +238,7 @@ export function chooseBotAction(s: GameState, player: PlayerId, rand: () => numb
     }
     if (s.pendingResponse?.forPlayerId === player) {
         const card = s.players[player].tactics.hand.find(c => canPlayResponseCard(s, player, c))
-        return card && (level === 'dificil' || rand() < 0.7) ? { type: 'PLAY_RESPONSE', cardId: card.id } : { type: 'PASS_RESPONSE' }
+        return card && (level === 'dificil' || level === 'experto' || rand() < 0.7) ? { type: 'PLAY_RESPONSE', cardId: card.id } : { type: 'PASS_RESPONSE' }
     }
     const id = s.activeUnitId!
     const unit = s.units[id]
@@ -251,7 +252,12 @@ export function chooseBotAction(s: GameState, player: PlayerId, rand: () => numb
             const cmdCard = hand.find(c => c.type === 'command' && c.effectData && simple.has(c.effectData.type) && conditionMet(s, player, c))
             if (cmdCard) return { type: 'PLAY_CARD', unitId: id, cardId: cmdCard.id }
         }
-        const smart = smartAction(s, player, rand, level, PROFILES[strategy])
+        // Experto: planifica la activación completa (planner.ts) y hace su primer paso
+        if (level === 'experto') {
+            const plan = planActivation(s, player)[0]
+            if (plan) return plan.steps[0]
+        }
+        const smart = smartAction(s, player, rand, level === 'experto' ? 'dificil' : level, PROFILES[strategy])
         if (smart) return smart
         if (s.hasUsedPrimaryAction && !act.freeAttacks.length) return { type: 'END_ACTIVATION', unitId: id }
     }

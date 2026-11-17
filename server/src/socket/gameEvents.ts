@@ -5,8 +5,9 @@ import { chooseBotAction, botFallback, actingPlayer, followUpReady } from '../ga
 import { reachableFor, checkAttackTargetWith } from '../game/queries'
 import { keyToHex } from '../game/hexGrid'
 import { reorderSlotTokens } from '../game/timeline'
-import type { GameAction, GameState, TurnClock, AttackPreview, AreaAim } from '../types'
+import type { GameAction, GameState, TurnClock, AttackPreview, AreaAim, PlaySuggestion } from '../types'
 import { previewAttack } from '../game/combat'
+import { suggestPlays, toSuggestion } from '../game/planner'
 import { cloneState, pushLog } from '../game/damage'
 import { forfeit } from '../game/victory'
 import { recordedAction, recordForfeit, replayFrames, type Replay } from '../game/replay'
@@ -321,6 +322,18 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
         const aim = req.aim && typeof req.aim === 'object' ? req.aim : undefined
         if (aim && !checkAttackTargetWith(s, unit.id, weapon, req.targetKey, aim).ok) return ack(null)
         ack(previewAttack(s, unit.id, weapon, req.targetKey, aim))
+    })
+
+    // ── Consejero: las mejores jugadas para la unidad activa (solo contra el bot) ──
+    socket.on('SUGGEST_PLAYS', (_req: unknown, ack?: (r: { plays: PlaySuggestion[]; error?: string }) => void) => {
+        if (typeof ack !== 'function') return
+        const room = roomManager.getRoomBySocket(socket.id)
+        const playerId = roomManager.getPlayerIdBySocket(socket.id)
+        const s = room?.gameState
+        if (!s || !playerId) return ack({ plays: [], error: 'No estás en una partida' })
+        if (!room!.vsBot) return ack({ plays: [], error: 'El consejero solo está en las partidas contra la máquina' })
+        if (s.activePlayerId !== playerId || s.pendingAttack || s.pendingResponse || s.pendingForcedMove || s.pendingFollowUp) return ack({ plays: [], error: 'Ahora no es tu activación' })
+        ack({ plays: suggestPlays(s, playerId, 3).map(p => toSuggestion(s, p)) })
     })
 
     // ── Chat de la sala ────────────────────────────────────────────────────────

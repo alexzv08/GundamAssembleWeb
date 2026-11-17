@@ -47,6 +47,7 @@ export interface AttackReport {
 
 export interface GameState {
   gameId: string
+  vsBot?: boolean            // partida contra la máquina (el consejero solo está disponible en ellas)
   phase: GamePhase
   activePlayerId: PlayerId
   activeUnitId: string | null
@@ -99,6 +100,17 @@ export interface AttackPreview {
   expectedDamage: number
   killChance: number         // probabilidad de derrotar al objetivo principal (sin efectos de crítico)
   targets: number            // objetivos que alcanza el ataque (áreas, ataques a adyacentes)
+}
+
+/** Jugada recomendada por el consejero (planner.ts): la activación completa y por qué */
+export interface PlaySuggestion {
+  steps: string[]            // pasos en texto ("Avanza a 4,7", "Ataca a Zaku con Beam Rifle")
+  actions: GameAction[]      // las mismas acciones, por si el jugador quiere hacerlas
+  score: number              // valor en "VP equivalentes" (solo para comparar jugadas)
+  parts: { label: string; value: number }[]   // de dónde sale el valor
+  end: string                // hex donde termina la unidad
+  target: string | null      // hex atacado
+  tl: number                 // Timeline que gasta
 }
 
 export interface TurnClock {

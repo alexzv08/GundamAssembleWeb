@@ -2,11 +2,11 @@
 // del Core Rulebook v1.2 que comprueba.
 import { describe, it, expect } from 'vitest'
 import type { BoardMap, GameState, Unit, Weapon, Ability } from '../../types'
-import { hexDistance, getNeighbors, hexKey, checkLineOfSight, getReachableHexes, coneHexes, patternHexes, gridDistance } from '../hexGrid'
+import { hexDistance, getNeighbors, hexKey, keyToHex, checkLineOfSight, getReachableHexes, coneHexes, patternHexes, gridDistance } from '../hexGrid'
 import {
   createEmptyTimeline, placeInitialToken, getNextActivation, advanceToken, getUnitRound, reorderSlotForTie, retreatToken,
 } from '../timeline'
-import { reachableFor, checkAttackTarget, checkAttackTargetWith, isEngaged } from '../queries'
+import { reachableFor, checkAttackTarget, checkAttackTargetWith, isEngaged, baseOwnerAt } from '../queries'
 import { applyAction, applyAdvance, applyAttack, applyAttackGarrison, applyEndActivation, applyUseAbility, applyDash } from '../actions'
 import { processAction } from '../engine'
 import { beginActivation, newActivation, startGame } from '../activation'
@@ -23,6 +23,7 @@ import os from 'os'
 import path from 'path'
 import { listMaps, randomMapId } from '../maps'
 import { randomSquad, randomDeck, chooseBotAction, actingPlayer, botFallback } from '../bot'
+import { planActivation, suggestPlays, toSuggestion } from '../planner'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1565,5 +1566,61 @@ describe('Estrategias del bot', () => {
     expect(chooseBotAction(g, 'player1', () => 0.1, 'dificil', 'agresion')).toMatchObject({ type: 'PLAY_CARD' })
     g.players.player1.tactics.hand = [card('Full System Burn')]   // exige una unidad Londo Bell
     expect(chooseBotAction(g, 'player1', () => 0.1, 'dificil', 'agresion').type).not.toBe('PLAY_CARD')
+  })
+})
+
+describe('Planificador (bot experto y consejero)', () => {
+  it('concentra el fuego: con dos enemigos a tiro, ataca al que está tocado', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 2, r: 4 }, { weapons: [weapon({ range: 4, strength: 5, tlCost: 3 })] }),
+      makeUnit('sano', 'player2', { q: 5, r: 4 }),
+      makeUnit('tocado', 'player2', { q: 5, r: 3 }, { currentHp: 3 }),
+    ])
+    const best = planActivation(g, 'player1')[0]
+    expect(best.steps.some(a => a.type === 'ATTACK' && a.targetId === 'tocado')).toBe(true)
+    expect(chooseBotAction(g, 'player1', () => 0.9, 'experto')).toEqual(best.steps[0])
+  })
+  it('se aleja de un enemigo que puede derribarla antes de que vuelva a activar', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 4, r: 4 }, { currentHp: 4, weapons: [weapon({ name: 'Saber', range: 1, strength: 3, tlCost: 2 })] }),
+      makeUnit('e', 'player2', { q: 7, r: 4 }, { weapons: [weapon({ name: 'Cañón', range: 2, strength: 10, tlCost: 3 })] }),
+    ])
+    const plans = planActivation(g, 'player1')
+    expect(plans.some(p => p.parts.some(x => x.label.startsWith('Expuesta')))).toBe(true)
+    // La mejor jugada termina donde ese enemigo ya no llega (moviéndose y disparando)
+    expect(plans[0].parts.some(x => x.label.startsWith('Expuesta'))).toBe(false)
+    expect(gridDistance(keyToHex(plans[0].end), { q: 7, r: 4 })).toBeGreaterThan(3)
+  })
+  it('va a capturar un Objetivo libre que tiene al alcance', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 1, r: 4 }, { weapons: [weapon({ name: 'Saber', range: 1, strength: 3, tlCost: 2 })] }),
+      makeUnit('e', 'player2', { q: 7, r: 0 }, { weapons: [weapon({ name: 'Saber', range: 1, strength: 3, tlCost: 2 })] }),
+    ])
+    g.board['4,4'].objectiveToken = { id: 'obj_3', vpValue: 8, controlledBy: null }
+    const best = planActivation(g, 'player1')[0]
+    expect(gridDistance(keyToHex(best.end), { q: 4, r: 4 })).toBeLessThanOrEqual(1)
+    expect(best.parts.some(x => x.label.includes('Captura el Objetivo 3'))).toBe(true)
+  })
+  it('el consejero da hasta 3 jugadas distintas, con sus pasos en texto, y nada si no es tu unidad', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 2, r: 4 }, { weapons: [weapon({ range: 4, strength: 5, tlCost: 3 })] }),
+      makeUnit('e', 'player2', { q: 5, r: 4 }),
+    ])
+    const plays = suggestPlays(g, 'player1').map(p => toSuggestion(g, p))
+    expect(plays.length).toBeGreaterThan(1)
+    expect(plays.length).toBeLessThanOrEqual(3)
+    expect(new Set(plays.map(p => JSON.stringify(p.actions[0]) + p.end)).size).toBe(plays.length)
+    expect(plays[0].steps.every(t => typeof t === 'string' && t.length > 0)).toBe(true)
+    expect(suggestPlays(g, 'player2')).toEqual([])
+    // No toca el estado (mueve la unidad de forma virtual y la devuelve)
+    expect(g.units.a.position).toEqual({ q: 2, r: 4 })
+    expect(g.board['2,4'].occupiedBy).toBe('a')
+  })
+  it('nunca propone terminar sobre la Base', () => {
+    const g = makeGame([
+      makeUnit('a', 'player1', { q: 0, r: 6 }, { weapons: [weapon({ name: 'Saber', range: 1, strength: 3, tlCost: 2 })] }),
+      makeUnit('e', 'player2', { q: 7, r: 0 }),
+    ])
+    for (const p of planActivation(g, 'player1')) expect(baseOwnerAt(g, p.end)).toBeNull()
   })
 })

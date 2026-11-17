@@ -28,7 +28,7 @@ interface LobbyScreenProps {
   onCancelMatch: () => void
   onCreateRoom: () => void
   onJoinRoom: () => void
-  onPlayBot: (level: 'facil' | 'normal' | 'dificil') => void
+  onPlayBot: (level: 'facil' | 'normal' | 'dificil' | 'experto') => void
   maps: { id: string; name: string; description?: string }[]
   mapId: string
   onMapIdChange: (id: string) => void
@@ -55,7 +55,7 @@ export function LobbyScreen({
   const mobile = useIsMobile()
   // Contra la máquina también deja elegir mapa y tamaño antes de empezar
   const [botSetup, setBotSetup] = useState(false)
-  const [botLevel, setBotLevel] = useState<'facil' | 'normal' | 'dificil'>('normal')
+  const [botLevel, setBotLevel] = useState<'facil' | 'normal' | 'dificil' | 'experto'>('normal')
   const canPlay = playerName.trim().length > 0 && connected
   const [replays, setReplays] = useState<ReplaySummary[] | null>(null)
   const [loadingReplays, setLoadingReplays] = useState(false)
@@ -152,11 +152,15 @@ export function LobbyScreen({
             </div>
                 <span style={eyebrow}>Dificultad</span>
                 <div style={{ display: 'flex', gap: 6 }} role="radiogroup" aria-label="Dificultad de la máquina">
-                  {([['facil', 'Fácil'], ['normal', 'Normal'], ['dificil', 'Difícil']] as const).map(([v, label]) => (
+                  {([['facil', 'Fácil'], ['normal', 'Normal'], ['dificil', 'Difícil'], ['experto', 'Experto']] as const).map(([v, label]) => (
                     <button key={v} type="button" role="radio" aria-checked={botLevel === v} onClick={() => setBotLevel(v)}
                       style={{ ...button(botLevel === v ? 'primary' : 'subtle'), flex: 1 }}>{label}</button>
                   ))}
                 </div>
+                <span style={{ fontSize: 12, color: C.textDim }}>
+                  {botLevel === 'experto' ? 'Planifica cada activación completa: concentra el fuego, se cubre y pelea los Objetivos.' : botLevel === 'dificil' ? 'Elige el mejor ataque y la mejor casilla, paso a paso.' : botLevel === 'normal' ? 'Juega con sentido, pero se equivoca a veces.' : 'Ataca lo que tiene a mano y avanza hacia ti.'}
+                  {' '}En las partidas contra la máquina tienes un consejero que te propone jugadas.
+                </span>
                 <button disabled={!canPlay} onClick={() => onPlayBot(botLevel)} style={{ ...button('amber', !canPlay), padding: 12, fontWeight: 600 }}>Empezar</button>
                 <button onClick={() => setBotSetup(false)} style={button('ghost')}>Volver</button>
               </div>

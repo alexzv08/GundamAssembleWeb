@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { GameScene } from './three/GameScene'
-import type { GameState, AttackPreview, ReplaySummary } from './types/gameState'
+import type { GameState, AttackPreview, ReplaySummary, PlaySuggestion } from './types/gameState'
 import type { Unit, Weapon } from './types/units'
 import type { AreaAim } from './types/gameState'
 import { aimToward, aimTargets, rotateAim, aimKey } from './game/areaAim'
@@ -20,6 +20,7 @@ import type { ChatMessage } from './components/ui/ChatPanel'
 import { SideRail } from './components/ui/SideRail'
 import { DiceTray } from './components/ui/DiceTray'
 import { AttackPreviewBox } from './components/ui/AttackPreviewBox'
+import { AdvisorPanel } from './components/ui/AdvisorPanel'
 import { useIsMobile } from './game/useIsMobile'
 import { myFollowUp, followUpMoveHexes, followUpAttackHexes } from './game/followUp'
 import { C, button } from './theme'
@@ -97,6 +98,13 @@ export default function App() {
   const [bitAssault, setBitAssault] = useState<{ unitId: string; cardId: string; queue: string[]; picks: string[] } | null>(null)
   const [tokenTooltip, setTokenTooltip] = useState<string | null>(null)
   const [logHoveredHexes, setLogHoveredHexes] = useState<Set<string>>(new Set())
+  // Consejero (solo contra la máquina): jugadas propuestas y la que se está mirando
+  // Las jugadas propuestas dejan de valer en cuanto cambia la partida (sig distinta)
+  const [advisorState, setAdvisor] = useState<{ sig: string; plays: PlaySuggestion[] | null; error: string | null } | null>(null)
+  const [advisorHoverState, setAdvisorHover] = useState<PlaySuggestion | null>(null)
+  const advisorSig = gameState ? `${gameState.activeUnitId}|${gameState.log.length}|${gameState.hasUsedPrimaryAction}|${gameState.activation?.advanced}` : ''
+  const advisor = advisorState?.sig === advisorSig ? advisorState : null
+  const advisorHover = advisor ? advisorHoverState : null
   const [selectedSquad, setSelectedSquad] = useState<string[]>([])
   const [selectedDeck, setSelectedDeck] = useState<string[]>([])
   const [squadStep, setSquadStep] = useState<'units' | 'deck'>('units')
@@ -1277,7 +1285,7 @@ export default function App() {
             onHexClick={handleHexClick}
             onUnitClick={handleUnitClick}
             onTokenHover={setTokenTooltip}
-            logHighlightedHexes={logHoveredHexes}
+            logHighlightedHexes={advisorHover ? new Set([advisorHover.end, ...(advisorHover.target ? [advisorHover.target] : [])]) : logHoveredHexes}
             focusKey={activeUnit?.position ? hexKey(activeUnit.position) : null}
             onHexHover={setHoverKey}
             compact={isMobile}
@@ -1324,6 +1332,22 @@ export default function App() {
           </div>
         )}
         <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
+
+        {gameState.vsBot && myPlayerId && isMyTurn && !replay && !isFinished && activeUnit?.playerId === myPlayerId && !myFU && !areaWeapon
+          && !gameState.pendingAttack && !gameState.pendingResponse && !gameState.pendingForcedMove && (
+          advisor
+            ? <AdvisorPanel plays={advisor.plays} error={advisor.error} compact={isMobile}
+                onHover={setAdvisorHover} onClose={() => { setAdvisor(null); setAdvisorHover(null) }} />
+            : <button type="button" title="Las mejores jugadas para esta unidad, según el bot experto"
+                onClick={() => {
+                  const sig = advisorSig
+                  setAdvisor({ sig, plays: null, error: null })
+                  socket.emit('SUGGEST_PLAYS', {}, (r: { plays: PlaySuggestion[]; error?: string }) => setAdvisor({ sig, plays: r.plays, error: r.error ?? null }))
+                }}
+                style={{ ...button('amber'), position: 'absolute', top: 12, zIndex: 31, ...(isMobile ? { left: '50%', transform: 'translateX(-50%)' } : { left: 324 }) }}>
+                ¿Qué haría el experto?
+              </button>
+        )}
 
         {myFU && (
           <div role="dialog" aria-label={myFU.source} style={{
