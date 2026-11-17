@@ -7,12 +7,14 @@ interface MesaBarProps {
   acting: PlayerId
   onUndo: () => void
   onNobodyResponds?: () => void
+  toPick?: number               // cartas robadas en la mesa sin decir aún cuáles
+  onPick?: () => void
   compact?: boolean
 }
 
 // Modo mesa: quién debe decidir ahora en la mesa real, y los atajos para apuntarlo
 // (Deshacer y "Nadie responde", que pasa todas las ventanas de Response del ataque).
-export function MesaBar({ gameState, seatId, acting, onUndo, onNobodyResponds, compact = false }: MesaBarProps) {
+export function MesaBar({ gameState, seatId, acting, onUndo, onNobodyResponds, toPick = 0, onPick, compact = false }: MesaBarProps) {
   const mine = acting === seatId
   const rival = gameState.players[acting].name
   const color = mine ? C.ally : C.enemy
@@ -33,6 +35,9 @@ export function MesaBar({ gameState, seatId, acting, onUndo, onNobodyResponds, c
       {onNobodyResponds && gameState.pendingResponse && !gameState.pendingDice && (
         <button type="button" onClick={onNobodyResponds} style={{ ...button('subtle'), padding: '6px 10px' }}
           title="Pasa todas las ventanas de Response de esta acción, de los dos jugadores">Nadie responde</button>
+      )}
+      {toPick > 0 && onPick && (
+        <button type="button" onClick={onPick} style={{ ...button('primary'), padding: '6px 10px' }}>Elegir {toPick} {toPick === 1 ? 'carta robada' : 'cartas robadas'}</button>
       )}
       <button type="button" onClick={onUndo} style={{ ...button('ghost'), padding: '6px 10px' }} title="Vuelve al estado anterior a la última acción apuntada">Deshacer</button>
     </div>

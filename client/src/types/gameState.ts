@@ -191,6 +191,7 @@ export type GameAction =
   | { type: 'PASS_RESPONSE' }
   | { type: 'CHOOSE_FORCED_MOVE'; to: HexCoord | null }
   | { type: 'SUBMIT_DICE'; values: number[] }
+  | { type: 'MESA_DRAW'; cardIds: string[] }
   | { type: 'SURRENDER' }
   | { type: 'FOLLOW_UP'; to: HexCoord | null; targetId: string | null }
 

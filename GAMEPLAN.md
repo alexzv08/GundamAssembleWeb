@@ -128,7 +128,8 @@ Fuentes oficiales:
 - ✅ **Bot experto** (`planner.ts`): planifica la activación completa (atacar y moverse, moverse y atacar, rescatar, Dash + Advance, Energize) y la puntúa en VP: daño con fuego concentrado, derribos, Garrisons, mayoría en Objetivos, peligro real de los enemigos que activan antes (movimiento, alcance y línea de visión), no agruparse ante armas de área y Timeline gastado. Gana al difícil el 73,5 % de 400 partidas (`npm run duelo`)
 - ✅ **Consejero** en las partidas contra la máquina: las 3 mejores jugadas para la unidad activa, con de dónde sale su valor y las casillas marcadas en el tablero (`SUGGEST_PLAYS`, `AdvisorPanel`)
 - ✅ **Modo mesa**: partida real apuntada en la app con los dados de la mesa (`pendingDice` / `SUBMIT_DICE`), mazo del rival oculto, Deshacer, "Nadie responde" y consejero para los dos bandos
-- ⚠️ Modo mesa: no se sabe qué cartas tienes en la mano real, así que la app deja jugar cualquiera del mazo; tampoco hay forma de corregir a mano HP, Upgrades o posiciones (solo Deshacer)
+- ✅ Modo mesa: dices qué cartas robas (mano inicial, Fase 2 y efectos) con `MESA_DRAW`
+- ⚠️ Modo mesa: no hay forma de corregir a mano HP, Upgrades o posiciones (solo Deshacer); el consejero no tiene en cuenta las cartas
 - ✅ **Reloj de turno** (`TURN_SECONDS`, 120 s) y de Response / elecciones (`RESPONSE_SECONDS`, 30 s): al agotarse se juega lo mínimo por el jugador; 3 veces seguidas = derrota. **Rendirse** en cualquier momento; abandono = derrota si no vuelve en 5 min
 - ✅ **Partidas guardadas** fuera de memoria (`GAME_STORE=file|supabase|none`): sobreviven a un reinicio del servidor
 - ✅ **Revancha** (los dos jugadores, o uno contra la máquina), **enlaces** para unirse (`?sala=`), ver como **espectador** (`?ver=`) y abrir una **repetición** (`?repeticion=`)

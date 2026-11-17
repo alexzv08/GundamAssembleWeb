@@ -94,6 +94,8 @@ export interface TacticsState {
     hand: TacticsCard[]
     discarded: TacticsCard[]
     usedResponseThisTurn: boolean
+    /** Modo mesa: cartas robadas en la mesa real que el jugador aún tiene que decir cuáles son */
+    toPick?: number
 }
 
 // ─── ATAQUE EN CURSO ──────────────────────────────────────────────────────────

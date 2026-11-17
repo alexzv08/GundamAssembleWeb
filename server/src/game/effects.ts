@@ -6,7 +6,7 @@ import { rollMany, type Rng } from './dice'
 import type { CardEffect, PendingResponse } from '../types/tactics'
 import { hexKey, keyToHex, getNeighbors, gridDistance, checkLineOfSight, findPath } from './hexGrid'
 import { upgradeCount, enemyHexes, moveOptionsFor, rwsDeployHexes, alliedRws, rwsAdjacentTo, isEmptyHex, targetAt } from './queries'
-import { damageUnit, damageAt, destroyGarrison, forceMove, pushLog } from './damage'
+import { damageUnit, damageAt, destroyGarrison, forceMove, pushLog, drawTactics } from './damage'
 import { advanceToken, retreatToken } from './timeline'
 import { captureObjective } from './victory'
 
@@ -823,8 +823,7 @@ export function applyResponseCardEffect(
 
 export function drawCards(state: GameState, playerId: PlayerId, count: number): GameState {
     const newState = structuredClone(state)
-    const tactics = newState.players[playerId].tactics
-    tactics.hand.push(...tactics.deck.splice(0, Math.min(count, tactics.deck.length)))
+    drawTactics(newState, playerId, count)
     return newState
 }
 

@@ -15,7 +15,7 @@ import { rollD10 } from '../game/combat'
 
 const ACTION_TYPES = new Set<GameAction['type']>([
     'ADVANCE', 'ATTACK', 'DASH', 'ENERGIZE', 'RESCUE', 'ATTACK_GARRISON', 'ATTACK_RWS',
-    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY', 'SURRENDER', 'FOLLOW_UP', 'SUBMIT_DICE',
+    'PLAY_CARD', 'USE_ABILITY', 'END_ACTIVATION', 'PLAY_RESPONSE', 'PASS_RESPONSE', 'CHOOSE_FORCED_MOVE', 'SET_AUTO_RESPONSES', 'USE_RESPONSE_ABILITY', 'SURRENDER', 'FOLLOW_UP', 'SUBMIT_DICE', 'MESA_DRAW',
 ])
 
 // Modo mesa: estados anteriores para Deshacer (en memoria, no se guardan con la sala)
@@ -327,7 +327,7 @@ export function registerGameEvents(io: Server, socket: Socket, roomManager: Room
 
         // Modo mesa: el jugador lleva los dos bandos (actúa quien deba decidir ahora)
         // y los dados son los de la mesa real
-        const actor = room.mesa ? (action.type === 'SURRENDER' ? playerId : actingPlayer(room.gameState)) : playerId
+        const actor = room.mesa ? (action.type === 'SURRENDER' || action.type === 'MESA_DRAW' ? playerId : actingPlayer(room.gameState)) : playerId
         const before = room.gameState
         const result = room.mesa
             ? recordedAction(room.record, before, action, actor, rollD10, { ...REPLAY_OPTS, manualDice: true })

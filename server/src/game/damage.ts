@@ -239,3 +239,14 @@ export function forceMove(
         return
     }
 }
+
+// ─── ROBAR CARTAS ─────────────────────────────────────────────────────────────
+// Roba n cartas del mazo. En el modo mesa el mazo real está barajado en la mesa:
+// no se roba nada, solo se apunta cuántas ha robado y el jugador dice cuáles (MESA_DRAW).
+export function drawTactics(state: GameState, player: PlayerId, n: number): void {
+    const t = state.players[player].tactics
+    const k = Math.min(n, t.deck.length - (state.mesa ? t.toPick ?? 0 : 0))
+    if (k <= 0) return
+    if (state.mesa) { t.toPick = (t.toPick ?? 0) + k; return }
+    t.hand.push(...t.deck.splice(0, k))
+}

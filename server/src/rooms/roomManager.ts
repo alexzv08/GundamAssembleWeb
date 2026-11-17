@@ -161,12 +161,15 @@ export class RoomManager {
                 // La tirada de iniciativa (si hubo empate) se hizo en la mesa: no inventar números
                 const g = room.gameState
                 for (const l of g.log) if (l.message.startsWith('Iniciativa:')) l.message = `Iniciativa: empate en TL; empieza ${g.players[room.mesaFirst ?? 'player1'].name} (tirada de la mesa)`
-                // La mano real de cada uno no se conoce: se puede jugar cualquier carta del mazo
-                for (const p of ['player1', 'player2'] as const) {
-                    const t = room.gameState.players[p].tactics
-                    t.hand = [...t.hand, ...t.deck]
-                    t.deck = []
-                }
+                // Tu mano: dices qué cartas robas en la mesa (las 3 iniciales y las que vengan).
+                // La del rival no se conoce: puede jugar cualquier carta de las que podría llevar.
+                const mine = room.gameState.players.player1.tactics
+                mine.deck = [...mine.hand, ...mine.deck]
+                mine.hand = []
+                mine.toPick = Math.min(3, mine.deck.length)
+                const rival = room.gameState.players.player2.tactics
+                rival.hand = [...rival.hand, ...rival.deck]
+                rival.deck = []
             }
             room.status = 'playing'
         }

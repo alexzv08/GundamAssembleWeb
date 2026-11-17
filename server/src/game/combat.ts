@@ -23,7 +23,7 @@ import {
     terrainAccuracy, targetAt, enemiesAdjacentTo, upgradeCount, moveOptionsFor, attackTargets, otherPlayer, resolveAim,
     attackDefenders, canPlayResponseCard, checkAttackTargetWith, rwsAdjacentTo, alliedRws, challengeOptions, protectiveShooters, type TargetRef,
 } from './queries'
-import { damageUnit, destroyGarrison, destroyRws, damageAt, forceMove, pushLog } from './damage'
+import { damageUnit, destroyGarrison, destroyRws, damageAt, forceMove, pushLog, drawTactics } from './damage'
 import { getAttackModifiers, addStatus, destroyUpgrade, gainUpgrade, useResponseAbility, hasAbilityType } from './effects'
 import { advanceToken } from './timeline'
 import { captureObjective } from './victory'
@@ -393,8 +393,7 @@ function logAttack(state: GameState, report: AttackReport, attackerName: string,
 }
 
 function drawCards(state: GameState, player: PlayerId, n: number): void {
-    const t = state.players[player].tactics
-    t.hand.push(...t.deck.splice(0, n))
+    drawTactics(state, player, n)
 }
 
 function isStatusEffect(e: WeaponEffect): boolean {

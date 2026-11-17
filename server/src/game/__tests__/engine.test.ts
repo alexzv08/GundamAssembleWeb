@@ -11,7 +11,7 @@ import { applyAction, applyAdvance, applyAttack, applyAttackGarrison, applyEndAc
 import { processAction } from '../engine'
 import { beginActivation, newActivation, startGame } from '../activation'
 import { contestObjectives, scoreObjectives, decideWinner } from '../victory'
-import { forceMove } from '../damage'
+import { forceMove , drawTactics } from '../damage'
 import { previewAttack } from '../combat'
 import { validateSquad, validateDeck, loadUnitCatalog, loadTacticsCatalog, requiredDeckSize, eligibleCards } from '../catalog'
 import { createServerGame } from '../createServerGame'
@@ -1672,5 +1672,39 @@ describe('Modo mesa: dados introducidos a mano', () => {
     expect(r.state!.pendingDice).toBeFalsy()
     expect(r.state!.units.e.currentHp).toBe(6)
     expect(processAction(r.state!, { type: 'SUBMIT_DICE', values: [1] }, 'player1').error).toBe('No hay ninguna tirada pendiente')
+  })
+})
+
+describe('Modo mesa: cartas robadas', () => {
+  const card = (name: string) => structuredClone(loadTacticsCatalog().find(c => c.name === name)!)
+  const setup = () => {
+    const g = makeGame([makeUnit('a', 'player1', A), makeUnit('e', 'player2', { q: 6, r: 2 })])
+    g.mesa = true
+    g.players.player1.tactics.deck = [card('Interference'), card('Neutralize'), card('Limiter Release')]
+    return g
+  }
+  it('al robar no se coge la carta de arriba: se apunta cuántas y el jugador dice cuáles', () => {
+    const g = setup()
+    drawTactics(g, 'player1', 2)
+    expect(g.players.player1.tactics.hand).toEqual([])
+    expect(g.players.player1.tactics.toPick).toBe(2)
+    drawTactics(g, 'player1', 5)   // no se pueden robar más de las que quedan en el mazo
+    expect(g.players.player1.tactics.toPick).toBe(3)
+    const r = processAction(g, { type: 'MESA_DRAW', cardIds: [g.players.player1.tactics.deck[2].id] }, 'player1')
+    expect(r.success).toBe(true)
+    expect(r.state!.players.player1.tactics.hand.map(c => c.name)).toEqual(['Limiter Release'])
+    expect(r.state!.players.player1.tactics.deck).toHaveLength(2)
+    expect(r.state!.players.player1.tactics.toPick).toBe(2)
+  })
+  it('rechaza elegir sin robo pendiente, más de las robadas o cartas que no están en el mazo', () => {
+    const g = setup()
+    const id = g.players.player1.tactics.deck[0].id
+    expect(processAction(g, { type: 'MESA_DRAW', cardIds: [id] }, 'player1').success).toBe(false)
+    g.players.player1.tactics.toPick = 1
+    expect(processAction(g, { type: 'MESA_DRAW', cardIds: [id, g.players.player1.tactics.deck[1].id] }, 'player1').success).toBe(false)
+    expect(processAction(g, { type: 'MESA_DRAW', cardIds: ['no-existe'] }, 'player1').success).toBe(false)
+    g.mesa = false
+    drawTactics(g, 'player1', 1)    // fuera del modo mesa se roba como siempre
+    expect(g.players.player1.tactics.hand).toHaveLength(1)
   })
 })

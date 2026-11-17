@@ -4,7 +4,7 @@
 import type { GameState, ActivationState, PlayerId } from '../types'
 import { hexKey, getNeighbors } from './hexGrid'
 import { advanceToken, getNextActivation, getCurrentRound, reorderSlotForTie } from './timeline'
-import { reactivateShields, pushLog } from './damage'
+import { reactivateShields, pushLog, drawTactics } from './damage'
 import { collectTokens, applySetupAbilities } from './effects'
 import { scoreObjectives, decideWinner } from './victory'
 
@@ -18,8 +18,7 @@ export function newActivation(unitId: string): ActivationState {
 }
 
 function drawInPlace(state: GameState, playerId: PlayerId, count: number): void {
-    const t = state.players[playerId].tactics
-    t.hand.push(...t.deck.splice(0, Math.min(count, t.deck.length)))
+    drawTactics(state, playerId, count)
 }
 
 // Despliegue: la primera vez que se activa (o tras ser derrotada) la unidad

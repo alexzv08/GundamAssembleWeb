@@ -56,6 +56,21 @@ export function processAction(
         return no(`Esperando a que se resuelva ${fu.source}`)
     }
 
+    // Modo mesa: el jugador dice qué cartas ha robado en la mesa real (en cualquier momento)
+    if (action.type === 'MESA_DRAW') {
+        const t = state.players[playerId].tactics
+        const ids = Array.isArray(action.cardIds) ? action.cardIds : []
+        if (!state.mesa || !t.toPick) return no('No hay cartas robadas pendientes de elegir')
+        if (!ids.length || ids.length > t.toPick || new Set(ids).size !== ids.length) return no(`Elige hasta ${t.toPick} cartas distintas`)
+        if (ids.some(id => !t.deck.some(c => c.id === id))) return no('Esa carta no está en tu mazo')
+        const s = cloneState(state)
+        const ts = s.players[playerId].tactics
+        for (const id of ids) ts.hand.push(...ts.deck.splice(ts.deck.findIndex(c => c.id === id), 1))
+        ts.toPick = (ts.toPick ?? 0) - ids.length
+        pushLog(s, playerId, `${s.players[playerId].name} roba ${ids.length} ${ids.length === 1 ? 'carta' : 'cartas'}`, 'end')
+        return { success: true, state: s, phaseChanged: false, gameOver: false }
+    }
+
     const pd = state.pendingDice
     if (action.type === 'SUBMIT_DICE') {
         if (!pd) return no('No hay ninguna tirada pendiente')

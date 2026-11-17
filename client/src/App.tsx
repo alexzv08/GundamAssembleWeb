@@ -24,6 +24,7 @@ import { AdvisorPanel } from './components/ui/AdvisorPanel'
 import { DiceEntry } from './components/ui/DiceEntry'
 import { MesaBar } from './components/ui/MesaBar'
 import { mesaHand } from './game/mesa'
+import { DrawPicker } from './components/ui/DrawPicker'
 import { useIsMobile } from './game/useIsMobile'
 import { myFollowUp, followUpMoveHexes, followUpAttackHexes } from './game/followUp'
 import { C, button } from './theme'
@@ -83,6 +84,8 @@ export default function App() {
   const [mesaPhase, setMesaPhase] = useState<'rival' | 'mine' | null>(null)
   const [rivalFirst, setRivalFirst] = useState<'player1' | 'player2'>('player1')
   const [mesaRivalName, setMesaRivalName] = useState('Rival')
+  // Modo mesa: selector de cartas robadas abierto (se abre solo cuando hay robos pendientes)
+  const [drawLater, setDrawLater] = useState<number | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [panelUnitId, setPanelUnitId] = useState<string | null>(null)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('none')
@@ -1309,6 +1312,8 @@ export default function App() {
       {gameState.mesa && seatId && myPlayerId && !isFinished && (
         <MesaBar gameState={gameState} seatId={seatId} acting={myPlayerId} compact={isMobile}
           onUndo={() => socket.emit('MESA_UNDO')}
+          toPick={gameState.players[seatId].tactics.toPick ?? 0}
+          onPick={() => setDrawLater(null)}
           onNobodyResponds={() => setAutoPassSig(passSig)} />
       )}
 
@@ -1370,6 +1375,14 @@ export default function App() {
           </div>
         )}
         <ToastContainer toasts={toasts} tooltip={tokenTooltip} />
+
+        {gameState.mesa && seatId && !isFinished && !gameState.pendingDice && (gameState.players[seatId].tactics.toPick ?? 0) > 0
+          && drawLater !== gameState.players[seatId].tactics.toPick && (
+          <DrawPicker key={gameState.players[seatId].tactics.toPick} compact={isMobile}
+            deck={gameState.players[seatId].tactics.deck} count={gameState.players[seatId].tactics.toPick ?? 0}
+            onLater={() => setDrawLater(gameState.players[seatId].tactics.toPick ?? 0)}
+            onConfirm={cardIds => socket.emit('GAME_ACTION', { action: { type: 'MESA_DRAW', cardIds } })} />
+        )}
 
         {gameState.mesa && gameState.pendingDice && seatId && (
           <DiceEntry key={`${gameState.pendingDice.reason}|${gameState.pendingDice.rolls.length}|${gameState.log.length}`}
